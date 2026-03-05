@@ -1,0 +1,139 @@
+"""
+Telegram Webhook 處理器
+- 解析 /nlm, /help, /status 指令
+- 觸發 GitHub Actions workflow_dispatch
+- 立即回 Telegram「處理中」訊息
+"""
+import os
+import logging
+import httpx
+
+from api.utils.github_dispatch import dispatch_nlm_workflow
+from api.utils.telegram import send_telegram_message
+
+logger = logging.getLogger(__name__)
+
+# 預設 Prompt（若用戶未提供）
+DEFAULT_PROMPT = "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
+
+
+
+
+async def handle_telegram_update(update: dict):
+    """解析並路由 Telegram Update"""
+    message = update.get("message") or update.get("edited_message")
+    if not message:
+        logger.info("收到非 message 類型的 update，略過")
+        return
+
+    chat_id = str(message.get("chat", {}).get("id", ""))
+    text = (message.get("text") or "").strip()
+
+    if not chat_id or not text:
+        return
+
+
+
+    # --- 指令路由 ---
+    if text.startswith("/help"):
+        await _handle_help(chat_id)
+
+    elif text.startswith("/status"):
+        await _handle_status(chat_id)
+
+    elif text.startswith("/nlm"):
+        await _handle_nlm(chat_id, text)
+
+    else:
+        # 非指令訊息，忽略
+        logger.info(f"收到非指令訊息，略過: {text[:50]}")
+
+
+async def _handle_help(chat_id: str):
+    """回傳使用說明"""
+    help_text = (
+        "🤖 <b>LazyTube NotebookLM 查詢機器人</b>\n\n"
+        "<b>指令說明：</b>\n"
+        "📌 <code>/nlm &lt;url&gt;</code>\n"
+        "  → 使用預設 Prompt 生成摘要\n\n"
+        "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt&gt;</code>\n"
+        "  → 使用自訂 Prompt 查詢\n\n"
+        "📌 <code>/status</code>\n"
+        "  → 查看服務狀態\n\n"
+        "<b>範例：</b>\n"
+        "<code>/nlm https://youtu.be/xxxxx</code>\n"
+        "<code>/nlm https://youtu.be/xxxxx 列出所有技術術語和定義</code>"
+    )
+    await send_telegram_message(chat_id, help_text)
+
+
+async def _handle_status(chat_id: str):
+    """回傳服務狀態"""
+    await send_telegram_message(
+        chat_id,
+        "✅ <b>LazyTube-Assistant 服務正常運行中</b>\n"
+        "使用 /help 查看可用指令。"
+    )
+
+
+async def _handle_nlm(chat_id: str, text: str):
+    """
+    解析 /nlm 指令並觸發 GitHub Actions
+    格式: /nlm <url> [自訂prompt]
+    """
+    parts = text.split(maxsplit=2)  # ['/nlm', '<url>', '<prompt(可選)>']
+
+    # 驗證 URL
+    if len(parts) < 2:
+        await send_telegram_message(
+            chat_id,
+            "❌ <b>格式錯誤</b>\n使用方法：<code>/nlm &lt;url&gt; [自訂Prompt]</code>"
+        )
+        return
+
+    url = parts[1]
+    if not url.startswith("http"):
+        await send_telegram_message(
+            chat_id,
+            f"❌ <b>無效的 URL</b>：<code>{url[:100]}</code>\n請提供完整的 http/https 網址。"
+        )
+        return
+
+    # URL 長度限制
+    if len(url) > 2048:
+        await send_telegram_message(chat_id, "❌ URL 過長（上限 2048 字元）。")
+        return
+
+    # 自訂 Prompt（選填，最多 500 字）
+    custom_prompt = parts[2] if len(parts) >= 3 else DEFAULT_PROMPT
+    if len(custom_prompt) > 500:
+        custom_prompt = custom_prompt[:500]
+        logger.info("自訂 Prompt 超過 500 字元，已截斷")
+
+    # 立即回應「處理中」
+    await send_telegram_message(
+        chat_id,
+        f"⏳ <b>已收到任務，處理中...</b>\n\n"
+        f"🔗 URL：<code>{url[:100]}</code>\n"
+        f"📝 Prompt：{custom_prompt[:80]}{'...' if len(custom_prompt) > 80 else ''}\n\n"
+        f"<i>NotebookLM 正在分析，完成後將自動回傳結果（約 1-3 分鐘）。</i>"
+    )
+
+    # 觸發 GitHub Actions（火後不管，Actions 完成後直接 call Telegram）
+    try:
+        success = await dispatch_nlm_workflow(
+            url=url,
+            prompt=custom_prompt,
+            chat_id=chat_id
+        )
+        if not success:
+            await send_telegram_message(
+                chat_id,
+                "❌ <b>觸發任務失敗</b>：無法啟動 GitHub Actions，請稍後再試。"
+            )
+    except Exception as e:
+        logger.error(f"dispatch_nlm_workflow 發生錯誤: {e}")
+        await send_telegram_message(
+            chat_id,
+            "❌ <b>系統錯誤</b>：觸發任務時發生異常，請聯繫管理員。"
+        )

@@ -1,0 +1,29 @@
+# Python 虛擬環境與快取
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# 敏感資訊 (絕對不可上傳)
+auth.json
+cookies.json
+metadata.json
+NLM_COOKIE_BASE64.txt
+.notebooklm-mcp-cli/
+.config/
+
+# 狀態管理檔案 (狀態會由 GitHub Actions commit 回 repo)
+# 注意：last_check.txt 必須被追蹤，不可被 Ignore。
+
+# 系統檔案
+.DS_Store
+Thumbs.db
+
+# 移除不必要的本地專案檔案
+notebooklm-mcp-cli/
