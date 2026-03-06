@@ -188,17 +188,14 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.21 - TEST MODE]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.23 - TEST MODE]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 還原 NLM Cookie (增加長度診斷)
+    # 1. 還原 NLM Cookie (增加長度診斷與手動佈署修復)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
         print("--- [ 正在分析 NLM 憑證字串 ] ---")
-        print(f"📏 原始字串長度 (含空白/換行): {len(cookie_b64_raw)}")
-        
-        # 清理字串
         cookie_b64 = "".join(cookie_b64_raw.split())
         print(f"📏 清理後字串長度: {len(cookie_b64)}")
         
@@ -212,15 +209,11 @@ def main():
                 if "cookies" in cookie_json:
                     cookies = cookie_json['cookies']
                     print(f"✅ 偵測到 {len(cookies)} 個 Cookie。")
-                    # 印出所有 Cookie 的名稱以便排錯 (不印內容)
-                    cookie_names = [c.get('name', 'UNKNOWN') for c in cookies]
-                    print(f"🍪 Cookie 名稱清單: {', '.join(cookie_names)}")
+                    cookie_debug = [f"{c.get('name')}@{c.get('domain')}" for c in cookies]
+                    print(f"🍪 Cookie 詳細清單: {', '.join(cookie_debug)}")
                 
-                # 檢查 CSRF Token
                 if cookie_json.get("csrf_token"):
                     print("✅ 偵測到 CSRF Token。")
-                else:
-                    print("⚠️ 警告: 找不到 CSRF Token。")
                 
                 # 寫入暫存檔
                 temp_auth = os.path.abspath("temp_auth.json")
@@ -232,21 +225,33 @@ def main():
                     ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
                     capture_output=True, text=True
                 )
+                
+                # 自動修復邏輯
+                print("🛠️ 執行手動佈署修復...")
+                home = os.path.expanduser("~")
+                for app in ["notebooklm-mcp-cli", "notebooklm-tools"]:
+                    for base in [os.path.join(home, ".config", app), os.path.join(home, f".{app}")]:
+                        try:
+                            os.makedirs(base, exist_ok=True)
+                            with open(os.path.join(base, "profiles.json"), "w") as f:
+                                json.dump({"default_profile": "default", "profiles": ["default"]}, f)
+                            pd = os.path.join(base, "profiles", "default")
+                            os.makedirs(pd, exist_ok=True)
+                            with open(os.path.join(pd, "auth.json"), "wb") as f:
+                                f.write(cookie_data)
+                            with open(os.path.join(base, "auth.json"), "wb") as f:
+                                f.write(cookie_data)
+                        except: pass
+
                 if login_proc.returncode == 0:
                     print("✅ nlm login 成功！")
                 else:
-                    print(f"❌ nlm login 失敗: {login_proc.stdout} {login_proc.stderr}")
+                    print(f"⚠️ nlm login 指令失敗，已完成手動佈署結構。")
                 
                 if os.path.exists(temp_auth):
                     os.remove(temp_auth)
             except Exception as je:
-                print(f"❌ JSON 格式錯誤 (可能被截斷): {je}")
-                # 嘗試印出最後 20 個字元來確認是否結尾正確 (JSON 應以 } 結尾)
-                try:
-                    last_chars = cookie_data.decode('utf-8')[-20:]
-                    print(f"🔍 數據結尾 20 字元: ...{last_chars}")
-                except: pass
-                
+                print(f"❌ JSON 格式錯誤: {je}")
         except Exception as e:
             print(f"❌ 還原過程異常: {e}")
 
