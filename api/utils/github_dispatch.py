@@ -16,7 +16,7 @@ GH_WORKFLOW_FILE = "nlm-on-demand.yml"
 GH_BRANCH = os.environ.get("GH_BRANCH", "main")
 
 
-async def dispatch_nlm_workflow(url: str, prompt: str, chat_id: str) -> bool:
+async def dispatch_nlm_workflow(url: str, prompt: str, chat_id: str, message_id: str = "") -> bool:
     """
     觸發 GitHub Actions nlm-on-demand.yml
     回傳 True 表示觸發成功（202 Accepted）
@@ -35,7 +35,8 @@ async def dispatch_nlm_workflow(url: str, prompt: str, chat_id: str) -> bool:
         "inputs": {
             "url": url,
             "prompt": prompt,
-            "chat_id": chat_id
+            "chat_id": chat_id,
+            "message_id": message_id
         }
     }
 

@@ -125,21 +125,26 @@ async def _handle_nlm(chat_id: str, text: str):
         custom_prompt = custom_prompt[:500]
         logger.info("自訂 Prompt 超過 500 字元，已截斷")
 
-    # 立即回應「處理中」
-    await send_telegram_message(
+    # 立即回應「處理中」並取得 message_id
+    resp_data = await send_telegram_message(
         chat_id,
         f"⏳ <b>已收到任務，處理中...</b>\n\n"
         f"🔗 URL：<code>{url[:100]}</code>\n"
         f"📝 Prompt：{custom_prompt[:80]}{'...' if len(custom_prompt) > 80 else ''}\n\n"
         f"<i>NotebookLM 正在分析，完成後將自動回傳結果（約 1-3 分鐘）。</i>"
     )
+    
+    msg_id = ""
+    if resp_data and resp_data.get("ok"):
+        msg_id = str(resp_data.get("result", {}).get("message_id", ""))
 
-    # 觸發 GitHub Actions（火後不管，Actions 完成後直接 call Telegram）
+    # 觸發 GitHub Actions
     try:
         success = await dispatch_nlm_workflow(
             url=url,
             prompt=custom_prompt,
-            chat_id=chat_id
+            chat_id=chat_id,
+            message_id=msg_id
         )
         if not success:
             debug_info = f"Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'} | Repo:{os.environ.get('GH_REPO_NAME')}"

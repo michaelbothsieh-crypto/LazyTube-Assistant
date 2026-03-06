@@ -16,6 +16,10 @@ on:
         description: '回傳結果的 Telegram Chat ID'
         required: true
         type: string
+      message_id:
+        description: '要刪除的「處理中」訊息 ID'
+        required: false
+        type: string
 
 jobs:
   nlm-query:
@@ -42,6 +46,7 @@ jobs:
         INPUT_URL: ${{ inputs.url }}
         INPUT_PROMPT: ${{ inputs.prompt }}
         INPUT_CHAT_ID: ${{ inputs.chat_id }}
+        INPUT_MSG_ID: ${{ inputs.message_id }}
       run: |
         python - <<'PYTHON_SCRIPT'
         import os
@@ -57,6 +62,7 @@ jobs:
         # 配置環境
         BOT_TOKEN      = os.environ["TELEGRAM_BOT_TOKEN"]
         CHAT_ID        = os.environ["INPUT_CHAT_ID"]
+        MSG_ID         = os.environ.get("INPUT_MSG_ID")
         URL            = os.environ["INPUT_URL"]
         PROMPT         = os.environ.get("INPUT_PROMPT") or "請用繁體中文列出 5 個核心重點，並加上影片或來源標題。"
         
@@ -67,6 +73,16 @@ jobs:
         def send_tg(text: str):
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             requests.post(url, json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=10)
+
+        def delete_tg_msg(msg_id: str):
+            if not msg_id: return
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
+            try:
+                # 呼叫 deleteMessage API
+                requests.post(url, json={"chat_id": CHAT_ID, "message_id": msg_id}, timeout=5)
+                print(f"✅ 已刪除處理中訊息 (ID: {msg_id})")
+            except Exception as e:
+                print(f"⚠️ 刪除訊息失敗: {e}")
 
         def run_nlm(*args):
             cmd = ["nlm", *args]
@@ -113,6 +129,7 @@ jobs:
                 raise RuntimeError(f"新增來源失敗: {add_res.stdout} {add_res.stderr}")
 
             print("🤖 執行 AI 查詢...")
+            # 使用驗證成功的 0.4.0 語法
             query_res = run_nlm("query", "notebook", nb_id, PROMPT)
             if query_res.returncode == 0:
                 summary = query_res.stdout.strip()
@@ -126,11 +143,16 @@ jobs:
                        f"🔗 來源：{URL}\n\n"
                        f"📝 <b>AI 分析</b>\n{summary}")
                 send_tg(msg)
+                
+                # 任務完成後，刪除「處理中」訊息
+                delete_tg_msg(MSG_ID)
             else:
                 raise RuntimeError(f"查詢失敗: {query_res.stderr}")
 
         except Exception as e:
             send_tg(f"❌ <b>任務失敗</b>\n來源：{URL}\n錯誤：{e}")
+            # 即使失敗也嘗試刪除「處理中」訊息
+            delete_tg_msg(MSG_ID)
         finally:
             if nb_id:
                 print("🗑️ 清理 Notebook")
