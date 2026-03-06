@@ -188,7 +188,7 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.08]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.09]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
@@ -198,38 +198,32 @@ def main():
         print("--- [ 正在還原 NotebookLM 憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
         
-        # 使用 platformdirs 定位標準配置目錄
+        # 1. 使用 platformdirs 定位標準配置目錄
         base_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
-        os.makedirs(base_dir, exist_ok=True)
         
-        auth_path = os.path.join(base_dir, "auth.json")
-        profiles_path = os.path.join(base_dir, "profiles.json")
+        # 2. 在新版本中，Profile 資訊通常存在 profiles/<name>/auth.json
+        default_profile_dir = os.path.join(base_dir, "profiles", "default")
+        os.makedirs(default_profile_dir, exist_ok=True)
         
-        # 1. 寫入 auth.json
+        auth_path = os.path.join(default_profile_dir, "auth.json")
         with open(auth_path, "wb") as f:
             f.write(cookie_data)
-        print(f"✅ 已還原憑證至: {auth_path}")
+        print(f"✅ 已還原憑證至 Profile 目錄: {auth_path}")
         
-        # 2. 寫入 profiles.json (宣告 default profile)
+        # 3. 寫入 profiles.json (僅宣告預設設定檔名稱)
+        profiles_path = os.path.join(base_dir, "profiles.json")
         profiles_data = {
-            "default_profile": "default",
-            "profiles": {
-                "default": {
-                    "auth_path": auth_path
-                }
-            }
+            "default_profile": "default"
         }
         with open(profiles_path, "w") as f:
             json.dump(profiles_data, f)
-        print(f"✅ 已建立 profiles.json 並宣告 'default' 設定檔")
+        print(f"✅ 已更新 profiles.json 宣告預設為 'default'")
 
-        # 3. 備案：同時寫入 ~/.notebooklm-mcp-cli (舊版慣例)
-        legacy_dir = os.path.expanduser("~/.notebooklm-mcp-cli")
-        os.makedirs(legacy_dir, exist_ok=True)
-        with open(os.path.join(legacy_dir, "auth.json"), "wb") as f:
+        # 4. 為了絕對相容，也放一份在根目錄
+        with open(os.path.join(base_dir, "auth.json"), "wb") as f:
             f.write(cookie_data)
 
-        # 4. 診斷：執行 nlm doctor 查看 CLI 的看法
+        # 5. 診斷：再次執行 nlm doctor 查看是否認出 Profile
         print("--- [ NLM Doctor 診斷報告 ] ---")
         subprocess.run(["nlm", "doctor"], check=False)
         print("="*50)
