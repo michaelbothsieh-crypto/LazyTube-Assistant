@@ -15,6 +15,12 @@ from google.auth.transport.requests import Request
 # 配置區域
 LAST_CHECK_FILE = "last_check.txt"
 
+# 遊戲相關過濾關鍵字 (可根據需求增減)
+GAME_KEYWORDS = [
+    "poe", "path of exile", "流亡黯道", "build", "guide", "攻略", "開荒", 
+    "賽季", "league", "atlas", "輿圖", "天賦", "機制", "拓荒", "暗黑", "diablo"
+]
+
 def get_yt_service():
     """取得 YouTube API 服務"""
     client_id = os.environ.get("YT_CLIENT_ID")
@@ -39,26 +45,60 @@ def save_last_check_time(dt):
     with open(LAST_CHECK_FILE, "w") as f:
         f.write(dt.isoformat())
 
+def is_game_related(title):
+    """檢查標題是否包含遊戲相關關鍵字"""
+    title_lower = title.lower()
+    return any(keyword in title_lower for keyword in GAME_KEYWORDS)
+
 def fetch_new_videos(youtube, last_check_time):
     print(f"正在檢查 {last_check_time.isoformat()} 之後的新影片...")
     new_videos = []
     try:
-        subs_request = youtube.subscriptions().list(part="snippet,contentDetails", mine=True, maxResults=20, order="relevance")
+        # 1. 取得訂閱頻道清單 (最多 50 個頻道以增加覆蓋率)
+        subs_request = youtube.subscriptions().list(
+            part="snippet,contentDetails", 
+            mine=True, 
+            maxResults=50, 
+            order="relevance"
+        )
         subs_response = subs_request.execute()
+        
         for sub in subs_response.get("items", []):
             channel_id = sub["snippet"]["resourceId"]["channelId"]
             channel_title = sub["snippet"]["title"]
-            activities_request = youtube.activities().list(part="snippet,contentDetails", channelId=channel_id, maxResults=5)
+            
+            # 2. 取得該頻道的最新動態
+            activities_request = youtube.activities().list(
+                part="snippet,contentDetails", 
+                channelId=channel_id, 
+                maxResults=5
+            )
             activities_response = activities_request.execute()
+            
             for item in activities_response.get("items", []):
                 if item["snippet"]["type"] == "upload":
                     publish_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
+                    
                     if publish_time > last_check_time:
-                        video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
-                        if video_id:
-                            new_videos.append({"url": f"https://www.youtube.com/watch?v={video_id}", "title": item.get("snippet", {}).get("title", "Unknown"), "time": publish_time, "channel": channel_title})
-                            print(f"發現新影片: {item.get('snippet', {}).get('title')} (來自 {channel_title})")
-    except Exception as e: print(f"抓取影片錯誤: {e}")
+                        title = item.get("snippet", {}).get("title", "Unknown")
+                        
+                        # --- [ 核心優化：過濾遊戲相關內容 ] ---
+                        if is_game_related(title):
+                            video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
+                            if video_id:
+                                new_videos.append({
+                                    "url": f"https://www.youtube.com/watch?v={video_id}", 
+                                    "title": title, 
+                                    "time": publish_time, 
+                                    "channel": channel_title
+                                })
+                                print(f"🎯 發現相關影片: {title} (來自 {channel_title})")
+                        else:
+                            print(f"⏭️ 略過非相關影片: {title}")
+                            
+    except Exception as e: 
+        print(f"抓取影片錯誤: {e}")
+        
     return sorted(new_videos, key=lambda x: x["time"])
 
 def run_nlm(*args):
@@ -86,12 +126,11 @@ def process_with_notebooklm(video_url, title):
         # 2. 新增來源
         run_nlm("source", "add", notebook_id, "--url", video_url)
         
-        # 3. 執行摘要 (使用驗證成功的語法)
+        # 3. 執行摘要
         query = "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
         res = run_nlm("query", "notebook", notebook_id, query)
         
         if res.returncode == 0:
-            # 處理可能含有的 JSON 格式
             try:
                 data = json.loads(res.stdout)
                 summary_text = data.get("value", {}).get("answer", res.stdout)
@@ -112,7 +151,7 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [FINAL PRODUCTION VERSION]")
+    print(f"🚀 LazyTube-Assistant [SMART FILTER VERSION]")
     print("="*50)
 
     # 1. 憑證精確注入
@@ -132,16 +171,17 @@ def main():
             print("✅ 憑證環境佈署成功。")
         except Exception as e: print(f"❌ 佈署失敗: {e}")
 
-    # 2. 正式業務邏輯
+    # 2. 正式業務邏輯 (含過濾)
     youtube = get_yt_service()
     last_check_time = get_last_check_time()
     new_videos = fetch_new_videos(youtube, last_check_time)
     
     if not new_videos:
-        print("沒有發現新影片。")
+        print("沒有發現感興趣的遊戲影片。")
         save_last_check_time(datetime.now(timezone.utc))
         return
 
+    # 限制每次處理的數量 (預設 5)
     MAX_PER_RUN = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
     for video in new_videos[:MAX_PER_RUN]:
         summary = process_with_notebooklm(video["url"], video["title"])
