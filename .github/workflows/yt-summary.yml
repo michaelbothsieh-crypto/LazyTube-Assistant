@@ -44,5 +44,5 @@ jobs:
       with:
         commit_message: "Update last_check.txt [skip ci]"
         file_pattern: 'last_check.txt'
-        commit_user_name: "Michael"
-        commit_user_email: "michael@example.com"
+        commit_user_name: "michael"
+        commit_user_email: "michaelbothsieh@gmail.com"
