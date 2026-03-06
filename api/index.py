@@ -68,9 +68,9 @@ async def external_dispatch(
 ):
     """
     接收來自外部（如 LINE 機器人）的摘要請求
-    payload: { "url": "...", "prompt": "...", "chat_id": "..." }
+    也實施 ALLOWED_USERS 白名單檢查
     """
-    # 驗證 Secret (借用 TG_WEBHOOK_SECRET 作為 API Key)
+    # 1. 驗證 Webhook Secret
     expected_secret = os.environ.get("TG_WEBHOOK_SECRET", "")
     if expected_secret and authorization != expected_secret:
         raise HTTPException(status_code=403, detail="Unauthorized")
@@ -84,7 +84,15 @@ async def external_dispatch(
         if not url or not chat_id:
             return JSONResponse(content={"ok": False, "error": "Missing params"}, status_code=400)
 
-        # 觸發 GitHub Actions
+        # 2. 實施白名單檢查 (與 Telegram 共用同一個變數)
+        allowed_users_raw = os.environ.get("ALLOWED_USERS", "")
+        if allowed_users_raw:
+            allowed_list = [u.strip() for u in allowed_users_raw.split(",") if u.strip()]
+            if chat_id not in allowed_list:
+                logger.warning(f"拒絕未授權的外部請求: {chat_id}")
+                return JSONResponse(content={"ok": False, "error": "Permission denied"}, status_code=403)
+
+        # 3. 觸發 GitHub Actions
         from api.utils.github_dispatch import dispatch_nlm_workflow
         await dispatch_nlm_workflow(url=url, prompt=prompt, chat_id=chat_id)
         
