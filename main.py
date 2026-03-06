@@ -245,7 +245,7 @@ def main():
         print("="*50)
 
     # --- [ 測試模式 ] ---
-...    print("🧪 測試模式啟動：跳過 YouTube API，使用固定測試 URL。")
+    print("🧪 測試模式啟動：跳過 YouTube API，使用固定測試 URL。")
     videos_to_process = [{
         "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         "title": "TEST_VIDEO_SUMMARY",
