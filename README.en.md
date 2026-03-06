@@ -1,46 +1,44 @@
 # 🤖 LAZYTUBE-ASSISTANT
 
-> 🎉 **Vibe Coding Alert!** A zero-cost, 24/7 automated video summarizer powered by **Google NotebookLM**.
+> 🎉 **Developer Note!** A zero-cost, 24/7 automated video summarizer powered by **Google NotebookLM**.
 
 **LazyTube-Assistant** eliminates information overload. Leveraging GitHub Actions free tier, it monitors, analyzes, and pushes key insights from your favorite content around the clock.
 
 ---
 
-## 🌐 LANGUAGE
-- [繁體中文](README.md)
-- [简体中文](README.zh-cn.md)
-- [English](README.en.md)
+## 🌐 Language
+[繁體中文](README.md) | [简体中文](README.zh-cn.md) | [English](README.en.md)
 
 ---
 
-## ✨ FEATURES
+## ✨ Features
 
-- **💸 ZERO OPERATING COST**: Fully powered by GitHub Actions free tier. No server required.
-- **📦 SERVERLESS ARCHITECTURE**: No databases, no complex setups. Just Fork and Run.
-- **🧠 DEEP AI INSIGHTS**: Leveraging Google NotebookLM for logic-driven, context-aware summaries.
-- **🎯 SMART FILTERING**: Automatically identifies relevant content (e.g., PoE Builds, League Guides) to save your time.
-- **🛡️ SECURE BY DESIGN**: Your data stays in the cloud. All credentials are masked and secure.
+- **💸 Zero Operating Cost**: Fully powered by GitHub Actions free tier. No server required.
+- **📦 Serverless Architecture**: No databases, no complex setups. Just Fork and Run.
+- **🧠 Deep AI Insights**: Leveraging Google NotebookLM for logic-driven, context-aware summaries.
+- **🎯 Smart Filtering**: Automatically identifies relevant content (e.g., PoE Builds, League Guides) based on your interests.
+- **🛡️ Privacy by Design**: Credentials stay in isolated containers. Data is sent directly to Google.
 
 ---
 
-## 🚀 TWO WAYS TO USE
+## 🚀 Two Ways to Use
 
-### 1. 🤖 AUTOMATED MODE (DEFAULT)
-Wakes up every hour to scan your YouTube subscriptions. When a keyword-matching video is found, it generates a summary and pushes it instantly.
+### 1. 🤖 Automated Mode (Default)
+Wakes up every hour to scan your YouTube subscriptions. When a keyword-matching video is found, it generates a summary instantly.
 > **Best for:** Tracking seasonal game updates, technical tutorials, or any regular content you don't want to miss.
 
-### 2. ON-DEMAND MODE (ADVANCED)
+### 2. 📱 On-Demand Mode (Advanced)
 Via Telegram Webhook, simply paste any video or web URL to the bot, and the AI will begin analysis immediately.
 > **Best for:** When you need a quick deep dive into a specific video but don't have time to watch the whole thing.
 
 ---
 
-## 📦 QUICK START
+## 📦 Quick Start
 
-### 1. CLICK FORK
+### 1. Click Fork
 Click the **Fork** button at the top right of this repository to copy it to your account.
 
-### 2. GET CREDENTIALS (THE EASY WAY)
+### 2. Get Credentials (Setup Helper)
 We provide a cross-platform helper to solve the trickiest auth steps:
 1. Install [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) locally and run `nlm login --force`.
 2. Run the setup helper:
@@ -51,12 +49,12 @@ We provide a cross-platform helper to solve the trickiest auth steps:
    *(Windows user? See [Windows Guide](WINDOWS_GUIDE.md))*
 3. The script will complete the OAuth flow and generate a **`.env`** file.
 
-### 3. SET SECRETS
+### 3. Set Secrets
 Go to GitHub `Settings > Secrets and variables > Actions`, and fill in the secrets based on the **`.env`** file.
 
 ---
 
-## 🛠️ HOW IT WORKS
+## 🛠️ How It Works
 
 | Component | Role |
 | :--- | :--- |
@@ -67,7 +65,7 @@ Go to GitHub `Settings > Secrets and variables > Actions`, and fill in the secre
 
 ---
 
-## ⚠️ RISK & LIMITATIONS
+## ⚠️ Risk & Limitations
 
 - **Non-official Protocol**: This project relies on simulated browser behavior. If Google changes NotebookLM's structure, an update may be required.
 - **Credential TTL**: Cookies typically last **2-4 weeks**. Re-run `setup_helper.py` when auth fails.
@@ -75,7 +73,7 @@ Go to GitHub `Settings > Secrets and variables > Actions`, and fill in the secre
 
 ---
 
-## ❤️ ACKNOWLEDGEMENTS
+## ❤️ Acknowledgements
 
 The core authentication and operation logic of this project are deeply inspired by and supported by **[notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli)**.
 
@@ -83,5 +81,5 @@ Special thanks to the author **[Jacob Ben-David](https://github.com/jacob-bd)** 
 
 ---
 
-## 📜 LICENSE
+## 📜 License
 MIT License. Developed by Michael.
