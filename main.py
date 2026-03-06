@@ -191,40 +191,57 @@ def main():
     # 還原 NLM Cookie (用於 GitHub Actions 環境)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
-        # 1. 使用 platformdirs 定位正確的設定檔目錄 (Ubuntu 上應為 ~/.config/notebooklm-mcp-cli)
-        base_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
-        os.makedirs(base_dir, exist_ok=True)
+        print("--- [ 正在還原 NotebookLM 憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
+        
+        # 定義多個可能的配置目錄
+        home = os.path.expanduser("~")
+        possible_dirs = [
+            os.path.join(home, ".config", "notebooklm-mcp-cli"),
+            os.path.join(home, ".notebooklm-mcp-cli"),
+            # 針對 GitHub Actions 的特定路徑
+            "/home/runner/.config/notebooklm-mcp-cli"
+        ]
+        
+        # 確保 platformdirs 提供的路徑也在其中
+        try:
+            p_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
+            if p_dir not in possible_dirs:
+                possible_dirs.append(p_dir)
+        except Exception:
+            pass
 
-        # 2. 定義檔案路徑
-        auth_path = os.path.join(base_dir, "auth.json")
-        profiles_path = os.path.join(base_dir, "profiles.json")
+        for base_dir in possible_dirs:
+            try:
+                os.makedirs(base_dir, exist_ok=True)
+                auth_path = os.path.join(base_dir, "auth.json")
+                profiles_path = os.path.join(base_dir, "profiles.json")
 
-        # 3. 寫入 auth.json (這是最重要的檔案)
-        with open(auth_path, "wb") as f:
-            f.write(cookie_data)
-        print(f"✅ 已還原憑證至: {auth_path}")
-
-        # 4. 寫入 profiles.json (包含 default 宣告)
-        profiles_data = {
-            "default_profile": "default",
-            "profiles": {
-                "default": {
-                    "auth_path": auth_path
+                # 寫入 auth.json
+                with open(auth_path, "wb") as f:
+                    f.write(cookie_data)
+                
+                # 寫入 profiles.json
+                profiles_data = {
+                    "default_profile": "default",
+                    "profiles": {
+                        "default": {
+                            "auth_path": auth_path
+                        }
+                    }
                 }
-            }
-        }
-        with open(profiles_path, "w") as f:
-            json.dump(profiles_data, f)
-        print(f"✅ 已建立並宣告 'default' 設定檔於: {profiles_path}")
+                with open(profiles_path, "w") as f:
+                    json.dump(profiles_data, f)
+                
+                print(f"✅ 成功寫入配置至: {base_dir}")
+            except Exception as e:
+                print(f"⚠️ 無法寫入 {base_dir}: {e}")
 
-        # 5. 為了絕對相容，也將 auth.json 複製一份到舊路徑
-        legacy_dir = os.path.expanduser("~/.notebooklm-mcp-cli")
-        if legacy_dir != base_dir:
-            os.makedirs(legacy_dir, exist_ok=True)
-            with open(os.path.join(legacy_dir, "auth.json"), "wb") as f:
-                f.write(cookie_data)
-            print(f"✅ 已同步憑證至舊路徑: {legacy_dir}")
+        # 嘗試使用 CLI 自身指令來加固 Profile 設定 (若指令支援)
+        try:
+            subprocess.run(["nlm", "profile", "create", "default", "--confirm"], capture_output=True)
+        except Exception:
+            pass
 
     youtube = get_yt_service()
 
