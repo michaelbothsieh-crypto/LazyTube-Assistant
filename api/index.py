@@ -2,17 +2,24 @@
 LazyTube-Assistant - Vercel FastAPI 入口
 負責接收 Telegram Webhook 並轉發至 GitHub Actions
 """
+import os
+import sys
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
-import os
 import httpx
 import logging
 
-# 子模組（handlers）
+# 修正匯入路徑，確保 Vercel 能找到 app 模組
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from api.handlers.tg_webhook import handle_telegram_update
 
+# 初始化日誌
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+...
 
 app = FastAPI(title="LazyTube-Assistant API", version="1.0.0")
 
