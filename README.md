@@ -1,76 +1,87 @@
-# 🤖 LazyTube-Assistant
+# 🤖 LAZYTUBE-ASSISTANT
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Zero Cost](https://img.shields.io/badge/Cost-0_Server_Required-brightgreen)](https://github.com/features/actions)
-[![Actions Status](https://img.shields.io/badge/Actions-24/7_Ready-success)](https://github.com/michaelbothsieh-crypto/LazyTube-Assistant/actions)
+> 🎉 **Vibe Coding Alert!** 這是一個基於 **Google NotebookLM** 實現「完全零成本」營運的智慧影片摘要助理。
 
-**LazyTube-Assistant** 是一個實現「完全零成本」營運的智慧影片摘要助理。利用 **GitHub Actions** 的免費運算資源，自動監控、分析並即時推播您感興趣的內容。
-
-> **🚀 專案主打：** 無需租用伺服器、無需管理資料庫、無需持續開機。只要 Fork 即可擁有 24/7 的 AI 摘要機器人。
+**LazyTube-Assistant** 讓你從此告別資訊焦慮。利用 GitHub Actions 的免費資源，24/7 自動監控、分析並推播您感興趣的內容精華。
 
 ---
 
-## 🌐 Language
+## 🌐 LANGUAGE
 - [繁體中文](README.md)
 - [简体中文](README.zh-cn.md)
 - [English](README.en.md)
 
 ---
 
-## 🚀 運作流程與 Actions 說明
+## ✨ FEATURES
 
-當您在 GitHub 的 **Actions** 分頁中查看時，會看到以下兩個工作流：
-
-### 1. YouTube 自動摘要 (`YouTube NotebookLM Summarizer`)
-- **何時執行**：每小時自動執行一次，或您手動點擊 `Run workflow`。
-- **運作邏輯**：
-    1. **認證環境佈署**：自動將您的 `NLM_COOKIE_BASE64` 注入雲端容器。
-    2. **影片監控**：使用 YouTube API 掃描您訂閱的頻道。
-    3. **智慧過濾**：根據 `FILTER_KEYWORDS` 挑選出遊戲或相關內容。
-    4. **AI 摘要**：驅動 NotebookLM 產出繁體中文摘要。
-    5. **即時推播**：將結果發送至您的 Telegram。
-
-### 2. 隨選查詢 (`NLM On-Demand Query`)
-- **何時執行**：由您手動觸發（或透過 Telegram Webhook 觸發）。
-- **運作邏輯**：接受自定義網址與指令，即時產出單篇摘要並回傳。
+- **💸 ZERO OPERATING COST**: Fully powered by GitHub Actions free tier. No server required.
+- **📦 SERVERLESS ARCHITECTURE**: No databases, no complex setups. Just Fork and Run.
+- **🧠 DEEP AI INSIGHTS**: Leveraging Google NotebookLM for logic-driven, context-aware summaries.
+- **🎯 SMART FILTERING**: Automatically identifies relevant content (e.g., PoE Builds, League Guides) to save your time.
+- **🛡️ SECURE BY DESIGN**: Your data stays in the cloud. All credentials are masked and secure.
 
 ---
 
-## 🛠️ 快速上手 (只需三步驟)
+## 🚀 TWO WAYS TO USE
 
-### 1. 點擊 Fork
-將本儲存庫 Fork 到您的個人帳號下。
+### 1. 🤖 AUTOMATED MODE (DEFAULT)
+每小時自動甦醒，掃描您的 YouTube 訂閱清單，發現匹配關鍵字的影片後立即產出摘要並推播。
+> **Best for:** 追蹤遊戲賽季更新、技術教學、或任何您不想錯過的定期動態。
 
-### 2. 取得憑證 (本地執行助手)
-我們提供了一個全自動工具協助您完成認證：
-1. 本地執行 `nlm login --force` 確保登入。
+### 2. 隨選模式 (ADVANCED)
+透過 Telegram Webhook 連結，直接將任何影片或網頁網址傳給機器人，AI 會立即開始分析。
+> **Best for:** 臨時需要深入了解特定影片，但沒時間看完。
+
+---
+
+## 📦 QUICK START
+
+### 1. CLICK FORK
+點擊本儲存庫右上角的 **Fork** 按鈕，複製到您的個人帳號。
+
+### 2. GET CREDENTIALS (THE EASY WAY)
+我們提供了一個全自動助手解決最麻煩的認證步驟：
+1. 本地執行 `nlm login --force`。
 2. 執行設定助手：
    ```bash
    pip install google-auth-oauthlib requests
    python setup_helper.py
    ```
-   腳本會自動完成 YouTube 授權並產出 **`.env`** 檔案。*(Windows 使用者請參閱 [Windows 指南](WINDOWS_GUIDE.md))*
+   *(Windows 使用者？請參閱 [Windows 指南](WINDOWS_GUIDE.md))*
+3. 腳本會自動完成授權並產出 **`.env`** 檔案。
 
-### 3. 設定 GitHub Secrets
-前往 GitHub `Settings > Secrets and variables > Actions`，對照 **`.env`** 檔案內容填入：
+### 3. SET SECRETS
+前往 GitHub `Settings > Secrets and variables > Actions`，對照 **`.env`** 填入內容。
 
-| Secret 名稱 | 用途說明 |
+---
+
+## 🛠️ HOW IT WORKS
+
+| 組件 | 角色 |
 | :--- | :--- |
-| `YT_CLIENT_ID` | YouTube API 用戶端 ID |
-| `YT_CLIENT_SECRET` | YouTube API 用戶端金鑰 |
-| `YT_REFRESH_TOKEN` | 用於長效存取您訂閱清單的權杖 |
-| `TELEGRAM_BOT_TOKEN` | Telegram 機器人金鑰 (@BotFather) |
-| `TELEGRAM_CHAT_ID` | 接收摘要的個人或群組 ID |
-| `NLM_COOKIE_BASE64` | 核心憑證 (由 setup_helper.py 產生) |
-| `FILTER_KEYWORDS` | (選填) 感興趣的關鍵字，以逗號分隔 |
+| **GitHub Actions** | 運算核心與自動化排程器 |
+| **YouTube API** | 內容偵測與資訊檢索 |
+| **NotebookLM** | 核心 AI 引擎（提供深度理解） |
+| **Telegram Bot** | 您的私人互動入口 |
 
 ---
 
-## 🏗️ 核心技術與風險說明
+## ⚠️ RISK & LIMITATIONS
 
-- **非官方通訊協議**：本專案基於 [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) 模擬瀏覽器行為。若 Google 修改網頁結構，本工具可能需更新。
-- **憑證時效**：Cookie 通常維持 2-4 週，失效時請重新執行助手腳本。
-- **隱私承諾**：所有數據僅在 GitHub 的隔離環境處理，不經過第三方伺服器。
+- **Non-official Protocol**: This project relies on simulated browser behavior. If Google changes NotebookLM's structure, an update may be required.
+- **Credential TTL**: Cookies typically last **2-4 weeks**. Re-run `setup_helper.py` when auth fails.
+- **100% Privacy**: Data is processed in isolated containers and sent directly to Google.
 
 ---
-*Developed by Michael*
+
+## ❤️ ACKNOWLEDGEMENTS
+
+本專案的核心認證與操作邏輯深受 **[notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli)** 的啟發與支持。
+
+特別感謝作者 **[Jacob Ben-David](https://github.com/jacob-bd)** 開發了如此強大的 MCP 協議工具，讓 AI 代理能以程式化方式操作 NotebookLM。
+
+---
+
+## 📜 LICENSE
+MIT License. Developed by Michael.
