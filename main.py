@@ -188,17 +188,16 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.10]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.11]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 深度偵錯：找出 nlm 到底在看哪裡
+    # 深度偵錯：找出 nlm 原始碼邏輯
     try:
-        import notebooklm_mcp
-        print(f"📦 notebooklm-mcp 路徑: {notebooklm_mcp.__file__}")
-        # 嘗試搜尋原始碼中的路徑邏輯
-        pkg_dir = os.path.dirname(notebooklm_mcp.__file__)
-        subprocess.run(["grep", "-r", "auth.json", pkg_dir], check=False)
+        import notebooklm_mcp_cli
+        pkg_dir = os.path.dirname(notebooklm_mcp_cli.__file__)
+        print(f"📦 notebooklm-mcp-cli 路徑: {pkg_dir}")
+        subprocess.run(["grep", "-r", "auth", pkg_dir], check=False)
     except Exception as e:
         print(f"⚠️ 無法執行深度偵錯: {e}")
 
@@ -208,25 +207,40 @@ def main():
         print("--- [ 正在還原 NotebookLM 憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
         
-        home = os.path.expanduser("~")
-        # 嘗試所有可能的路徑
-        target_dirs = [
-            os.path.join(home, ".notebooklm-mcp-cli"),
-            os.path.join(home, ".config", "notebooklm-mcp-cli"),
-            os.path.join(home, "Library", "Application Support", "notebooklm-mcp-cli"),
-        ]
+        # 1. 定義標準路徑
+        base_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
+        os.makedirs(base_dir, exist_ok=True)
+        auth_path = os.path.join(base_dir, "auth.json")
+        
+        # 寫入暫存檔用於指令匯入
+        temp_auth = os.path.abspath("temp_auth.json")
+        with open(temp_auth, "wb") as f:
+            f.write(cookie_data)
 
-        for base_dir in target_dirs:
-            os.makedirs(base_dir, exist_ok=True)
-            # 寫入根目錄的 auth.json
-            with open(os.path.join(base_dir, "auth.json"), "wb") as f:
-                f.write(cookie_data)
-            # 也寫入 profiles/default/auth.json
-            d_dir = os.path.join(base_dir, "profiles", "default")
-            os.makedirs(d_dir, exist_ok=True)
-            with open(os.path.join(d_dir, "auth.json"), "wb") as f:
-                f.write(cookie_data)
-            print(f"✅ 已還原憑證至: {base_dir}")
+        # 2. 嘗試使用官方 login 指令匯入憑證
+        print(f"🔄 正在透過 nlm login 連結憑證...")
+        subprocess.run(["nlm", "login", "--profile", "default", "--auth-file", temp_auth], capture_output=True)
+        
+        # 3. 手動加固：寫入 profiles.json (包含多種可能的欄位名稱)
+        profiles_path = os.path.join(base_dir, "profiles.json")
+        profiles_data = {
+            "default_profile": "default",
+            "profiles": {
+                "default": {
+                    "auth_path": auth_path,
+                    "auth_file": auth_path
+                }
+            }
+        }
+        with open(profiles_path, "w") as f:
+            json.dump(profiles_data, f)
+        
+        # 也確保 auth.json 本身存在
+        with open(auth_path, "wb") as f:
+            f.write(cookie_data)
+
+        if os.path.exists(temp_auth):
+            os.remove(temp_auth)
 
         # 診斷：執行 nlm doctor
         print("--- [ NLM Doctor 診斷報告 ] ---")
