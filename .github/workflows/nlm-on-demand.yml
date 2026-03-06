@@ -13,7 +13,7 @@ on:
         default: '請用繁體中文列出 5 個核心重點，並加上影片或來源標題。'
         type: string
       chat_id:
-        description: '回傳結果的 Telegram Chat ID'
+        description: '回傳結果的 Telegram/LINE ID'
         required: true
         type: string
       message_id:
@@ -37,125 +37,19 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install notebooklm-mcp-cli requests
+        pip install -r requirements.txt
+        pip install notebooklm-mcp-cli
 
     - name: Run NLM On-Demand Query
       env:
         NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        INPUT_URL: ${{ inputs.url }}
-        INPUT_PROMPT: ${{ inputs.prompt }}
-        INPUT_CHAT_ID: ${{ inputs.chat_id }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+        YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+        YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         INPUT_MSG_ID: ${{ inputs.message_id }}
       run: |
-        python - <<'PYTHON_SCRIPT'
-        import os
-        import sys
-        import base64
-        import json
-        import uuid
-        import subprocess
-        import re
-        import requests
-        import time
-
-        # 配置環境
-        BOT_TOKEN      = os.environ["TELEGRAM_BOT_TOKEN"]
-        CHAT_ID        = os.environ["INPUT_CHAT_ID"]
-        MSG_ID         = os.environ.get("INPUT_MSG_ID")
-        URL            = os.environ["INPUT_URL"]
-        PROMPT         = os.environ.get("INPUT_PROMPT") or "請用繁體中文列出 5 個核心重點，並加上影片或來源標題。"
-        
-        HOME           = os.path.expanduser("~")
-        CONFIG_DIR     = os.path.join(HOME, ".notebooklm-mcp-cli")
-        os.environ["NLM_CONFIG_DIR"] = CONFIG_DIR
-
-        def send_tg(text: str):
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            requests.post(url, json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=10)
-
-        def delete_tg_msg(msg_id: str):
-            if not msg_id: return
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
-            try:
-                # 呼叫 deleteMessage API
-                requests.post(url, json={"chat_id": CHAT_ID, "message_id": msg_id}, timeout=5)
-                print(f"✅ 已刪除處理中訊息 (ID: {msg_id})")
-            except Exception as e:
-                print(f"⚠️ 刪除訊息失敗: {e}")
-
-        def run_nlm(*args):
-            cmd = ["nlm", *args]
-            print(f"[CMD] {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, env=os.environ)
-            return result
-
-        # 1. 認證環境佈署 (同步自 VERSION 41)
-        cookie_b64 = os.environ.get("NLM_COOKIE_BASE64", "")
-        if cookie_b64:
-            try:
-                full_data = base64.b64decode("".join(cookie_b64.split()))
-                full_json = json.loads(full_data)
-                profile_dir = os.path.join(CONFIG_DIR, "profiles", "default")
-                os.makedirs(profile_dir, exist_ok=True)
-                
-                # 精確注入檔案
-                with open(os.path.join(profile_dir, "auth.json"), "wb") as f: f.write(full_data)
-                with open(os.path.join(profile_dir, "cookies.json"), "w") as f: json.dump(full_json.get("cookies", []), f)
-                with open(os.path.join(profile_dir, "metadata.json"), "w") as f: json.dump({k:v for k,v in full_json.items() if k!="cookies"}, f)
-                with open(os.path.join(CONFIG_DIR, "profiles.json"), "w") as f:
-                    json.dump({"default_profile": "default", "profiles": {"default": {}}}, f)
-                print("✅ 認證環境佈署完成")
-            except Exception as e:
-                send_tg(f"❌ 憑證還原失敗: {e}")
-                sys.exit(1)
-        else:
-            send_tg("❌ 缺少 NLM_COOKIE_BASE64 Secret")
-            sys.exit(1)
-
-        # 2. 執行摘要流程
-        nb_id = None
-        nb_name = f"Query_{uuid.uuid4().hex[:4].upper()}"
-        
-        try:
-            print(f"📁 建立 Notebook: {nb_name}")
-            res = run_nlm("notebook", "create", nb_name)
-            match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
-            nb_id = match.group(1) if match else nb_name
-            
-            print(f"🔗 新增來源: {URL}")
-            add_res = run_nlm("source", "add", nb_id, "--url", URL)
-            if add_res.returncode != 0:
-                raise RuntimeError(f"新增來源失敗: {add_res.stdout} {add_res.stderr}")
-
-            print("🤖 執行 AI 查詢...")
-            # 使用驗證成功的 0.4.0 語法
-            query_res = run_nlm("query", "notebook", nb_id, PROMPT)
-            if query_res.returncode == 0:
-                summary = query_res.stdout.strip()
-                # 處理 JSON 格式
-                try:
-                    data = json.loads(summary)
-                    summary = data.get("value", {}).get("answer", summary)
-                except: pass
-                
-                msg = (f"✅ <b>隨選摘要完成</b>\n\n"
-                       f"🔗 來源：{URL}\n\n"
-                       f"📝 <b>AI 分析</b>\n{summary}")
-                send_tg(msg)
-                
-                # 任務完成後，刪除「處理中」訊息
-                delete_tg_msg(MSG_ID)
-            else:
-                raise RuntimeError(f"查詢失敗: {query_res.stderr}")
-
-        except Exception as e:
-            send_tg(f"❌ <b>任務失敗</b>\n來源：{URL}\n錯誤：{e}")
-            # 即使失敗也嘗試刪除「處理中」訊息
-            delete_tg_msg(MSG_ID)
-        finally:
-            if nb_id:
-                print("🗑️ 清理 Notebook")
-                run_nlm("notebook", "delete", nb_id, "--confirm")
-
-        PYTHON_SCRIPT
+        # 直接執行模組化的 Python 腳本
+        python on_demand.py "${{ inputs.url }}" "${{ inputs.chat_id }}" "${{ inputs.prompt }}"
