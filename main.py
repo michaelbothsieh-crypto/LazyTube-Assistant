@@ -188,38 +188,29 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.14]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.15 - TEST MODE]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 深度探查 notebooklm_tools (修正參數錯誤)
+    # 1. 深度探查 notebooklm_tools
     print("--- [ 原始碼深度探查 ] ---")
     try:
         import notebooklm_tools
         pkg_dir = os.path.dirname(notebooklm_tools.__file__)
         print(f"📍 模組路徑: {pkg_dir}")
-        
-        # 搜尋包含關鍵字的文件內容
-        print("🔍 搜尋路徑定義邏輯:")
-        grep_proc = subprocess.run(
-            ["grep", "-r", "-l", "profiles.json", pkg_dir],
-            capture_output=True, text=True
-        )
+        grep_proc = subprocess.run(["grep", "-r", "-l", "profiles.json", pkg_dir], capture_output=True, text=True)
         for file_path in grep_proc.stdout.splitlines():
             print(f"📄 檔案: {file_path}")
-            # 印出包含關鍵字的該行及其前後 3 行
             subprocess.run(["grep", "-C", "3", "profiles.json", file_path], check=False)
     except Exception as e:
         print(f"⚠️ 探查失敗: {e}")
 
-    # 2. 還原 NLM Cookie (地毯式還原 3.0)
+    # 2. 還原 NLM Cookie (地毯式還原)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
         print("--- [ 正在還原 NotebookLM 憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
         home = os.path.expanduser("~")
-        
-        # 增加更多可能的路徑變體
         possible_app_names = ["notebooklm-mcp-cli", "notebooklm-mcp", "notebooklm_mcp_cli"]
         for app_name in possible_app_names:
             for base in [os.path.join(home, ".config"), os.path.join(home, ".local", "share"), home]:
@@ -229,17 +220,10 @@ def main():
                     auth_path = os.path.join(base_dir, "auth.json")
                     with open(auth_path, "wb") as f:
                         f.write(cookie_data)
-                    
                     profiles_path = os.path.join(base_dir, "profiles.json")
                     profiles_data = {"default_profile": "default", "profiles": {"default": {"auth_path": auth_path}}}
                     with open(profiles_path, "w") as f:
                         json.dump(profiles_data, f)
-                    
-                    # 同時建立 profiles/default/auth.json 結構
-                    d_dir = os.path.join(base_dir, "profiles", "default")
-                    os.makedirs(d_dir, exist_ok=True)
-                    with open(os.path.join(d_dir, "auth.json"), "wb") as f:
-                        f.write(cookie_data)
                 except Exception:
                     pass
 
@@ -248,28 +232,18 @@ def main():
         subprocess.run(["nlm", "doctor"], check=False)
         print("="*50)
 
-    youtube = get_yt_service()
-    last_check_time = get_last_check_time()
-    
-    new_videos = fetch_new_videos(youtube, last_check_time)
-    
-    if not new_videos:
-        print("沒有發現新影片。")
-        save_last_check_time(datetime.now(timezone.utc))
-        return
-
-    # 限制每次處理的數量，避免一次處理太多導致逾時或被封鎖
-    # 優先從環境變數讀取，若無則預設為 5
-    MAX_PER_RUN = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
-    videos_to_process = new_videos[:MAX_PER_RUN]
-    remaining_count = len(new_videos) - MAX_PER_RUN
-    
-    print(f"發現 {len(new_videos)} 部新影片，本次將處理前 {len(videos_to_process)} 部。")
+    # --- [ 測試模式：跳過 YouTube API ] ---
+    print("🧪 測試模式啟動：跳過 YouTube API，使用固定測試 URL。")
+    videos_to_process = [{
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "title": "TEST_VIDEO_SUMMARY",
+        "channel": "TestChannel",
+        "time": datetime.now(timezone.utc)
+    }]
 
     for video in videos_to_process:
         summary = process_with_notebooklm(video["url"], video["title"])
         if summary:
-            # 組合通知訊息 (Telegram 支援 HTML，用 <b> 加粗)
             msg = (
                 f"<b>🎥 {video['title']}</b>\n"
                 f"📺 頻道：{video['channel']}\n"
@@ -278,13 +252,8 @@ def main():
             )
             notify_telegram(msg)
             print(f"已完成並發送 Telegram 通知: {video['title']}")
-        
-        # 每處理完一部就更新一次時間戳記，確保進度不遺失
-        save_last_check_time(video["time"])
             
-    if remaining_count > 0:
-        print(f"還有 {remaining_count} 部影片待處理，將在下個小時的排程繼續。")
-    print("本次處理完成。")
+    print("本次測試處理完成。")
 
 if __name__ == "__main__":
     main()
