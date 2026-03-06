@@ -102,42 +102,42 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.32]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.33]")
     print("="*50)
 
-    # 1. 認證初始化 (調包計 2.0)
+    # 1. 認證初始化 (調包計 3.0)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
-        print("--- [ 正在執行終極認證調包 ] ---")
+        print("--- [ 正在執行終極認證調包 3.0 ] ---")
         try:
             cookie_data = base64.b64decode("".join(cookie_b64_raw.split()))
             temp_auth = os.path.abspath("temp_auth.json")
             with open(temp_auth, "wb") as f:
                 f.write(cookie_data)
 
-            # 步驟 A: 先執行 login 指令，這會成功建立 profiles/default 檔案
-            print("🔄 步驟 A: 執行官方指令初始化 (建立路徑與 Profile)...")
+            # 步驟 A: 執行官方指令初始化目錄
+            print("🔄 步驟 A: 執行官方指令初始化...")
             subprocess.run(
                 ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
                 capture_output=True
             )
             
-            # 步驟 B: 暴力覆蓋內容
-            # 根據 0.4.0 版 Logs，路徑在 ~/.notebooklm-mcp-cli/profiles/default
+            # 步驟 B: 針對資料夾結構進行精確調包
             home = os.path.expanduser("~")
-            final_target = os.path.join(home, ".notebooklm-mcp-cli", "profiles", "default")
+            config_dir = os.path.join(home, ".notebooklm-mcp-cli")
+            # 在 0.4.0 中，憑證檔案在 profiles/default/auth.json
+            final_auth = os.path.join(config_dir, "profiles", "default", "auth.json")
             
-            if os.path.exists(final_target):
-                with open(final_target, "wb") as f:
-                    f.write(cookie_data)
-                print(f"✅ 步驟 B: 已成功調包，覆蓋完整憑證至 {final_target}")
-            else:
-                # 如果是 .config 路徑
-                config_target = os.path.join(home, ".config", "notebooklm-mcp-cli", "profiles", "default")
-                os.makedirs(os.path.dirname(config_target), exist_ok=True)
-                with open(config_target, "wb") as f:
-                    f.write(cookie_data)
-                print(f"✅ 步驟 B: 已成功調包，覆蓋完整憑證至 {config_target}")
+            os.makedirs(os.path.dirname(final_auth), exist_ok=True)
+            with open(final_auth, "wb") as f:
+                f.write(cookie_data)
+            
+            # 同時也寫入一份名為 'default' 的檔案，以防某些版本直接把檔名當成 profile 名稱
+            alt_auth = os.path.join(config_dir, "profiles", "default", "default")
+            with open(alt_auth, "wb") as f:
+                f.write(cookie_data)
+
+            print(f"✅ 步驟 B: 已成功調包，覆蓋完整憑證至 {final_auth}")
 
             if os.path.exists(temp_auth): os.remove(temp_auth)
             
