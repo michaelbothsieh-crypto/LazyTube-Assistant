@@ -8,9 +8,9 @@ on:
         required: true
         type: string
       prompt:
-        description: '自訂查詢 Prompt'
+        description: '自訂查詢 Prompt (留空則使用預設)'
         required: false
-        default: '請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。'
+        default: '請用繁體中文列出 5 個核心重點，並加上影片或來源標題。'
         type: string
       chat_id:
         description: '回傳結果的 Telegram Chat ID'
@@ -20,7 +20,7 @@ on:
 jobs:
   nlm-query:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
     - name: Checkout code
@@ -47,106 +47,93 @@ jobs:
         import os
         import sys
         import base64
+        import json
         import uuid
         import subprocess
         import re
         import requests
+        import time
 
-        AUTH_JSON_PATH = os.path.expanduser("~/.notebooklm-mcp-cli/auth.json")
+        # 配置環境
         BOT_TOKEN      = os.environ["TELEGRAM_BOT_TOKEN"]
         CHAT_ID        = os.environ["INPUT_CHAT_ID"]
         URL            = os.environ["INPUT_URL"]
-        PROMPT         = os.environ["INPUT_PROMPT"]
-        NOTEBOOK_NAME  = f"NLM_Query_{uuid.uuid4().hex[:8].upper()}"
+        PROMPT         = os.environ.get("INPUT_PROMPT") or "請用繁體中文列出 5 個核心重點，並加上影片或來源標題。"
+        
+        HOME           = os.path.expanduser("~")
+        CONFIG_DIR     = os.path.join(HOME, ".notebooklm-mcp-cli")
+        os.environ["NLM_CONFIG_DIR"] = CONFIG_DIR
 
         def send_tg(text: str):
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            resp = requests.post(url, json={
-                "chat_id": CHAT_ID,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True
-            }, timeout=10)
-            if resp.status_code != 200:
-                print(f"[TG Error] {resp.status_code}: {resp.text}", file=sys.stderr)
+            requests.post(url, json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=10)
 
         def run_nlm(*args):
             cmd = ["nlm", *args]
             print(f"[CMD] {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.stdout:
-                print(f"[STDOUT] {result.stdout[:500]}")
-            if result.stderr:
-                print(f"[STDERR] {result.stderr[:500]}")
+            result = subprocess.run(cmd, capture_output=True, text=True, env=os.environ)
             return result
 
+        # 1. 認證環境佈署 (同步自 VERSION 41)
         cookie_b64 = os.environ.get("NLM_COOKIE_BASE64", "")
         if cookie_b64:
-            os.makedirs(os.path.dirname(AUTH_JSON_PATH), exist_ok=True)
-            with open(AUTH_JSON_PATH, "wb") as f:
-                f.write(base64.b64decode(cookie_b64))
-            print("✅ 已還原 NotebookLM 登入憑證")
+            try:
+                full_data = base64.b64decode("".join(cookie_b64.split()))
+                full_json = json.loads(full_data)
+                profile_dir = os.path.join(CONFIG_DIR, "profiles", "default")
+                os.makedirs(profile_dir, exist_ok=True)
+                
+                # 精確注入檔案
+                with open(os.path.join(profile_dir, "auth.json"), "wb") as f: f.write(full_data)
+                with open(os.path.join(profile_dir, "cookies.json"), "w") as f: json.dump(full_json.get("cookies", []), f)
+                with open(os.path.join(profile_dir, "metadata.json"), "w") as f: json.dump({k:v for k,v in full_json.items() if k!="cookies"}, f)
+                with open(os.path.join(CONFIG_DIR, "profiles.json"), "w") as f:
+                    json.dump({"default_profile": "default", "profiles": {"default": {}}}, f)
+                print("✅ 認證環境佈署完成")
+            except Exception as e:
+                send_tg(f"❌ 憑證還原失敗: {e}")
+                sys.exit(1)
         else:
-            send_tg("❌ <b>任務失敗</b>：缺少 NLM_COOKIE_BASE64。")
+            send_tg("❌ 缺少 NLM_COOKIE_BASE64 Secret")
             sys.exit(1)
 
-        source_id = None
-        notebook_created = False
-
+        # 2. 執行摘要流程
+        nb_id = None
+        nb_name = f"Query_{uuid.uuid4().hex[:4].upper()}"
+        
         try:
-            print(f"📁 建立臨時 Notebook：{NOTEBOOK_NAME}")
-            result = run_nlm("notebook", "create", NOTEBOOK_NAME)
-            if result.returncode != 0:
-                raise RuntimeError(f"建立 Notebook 失敗")
-            notebook_created = True
+            print(f"📁 建立 Notebook: {nb_name}")
+            res = run_nlm("notebook", "create", nb_name)
+            match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
+            nb_id = match.group(1) if match else nb_name
+            
+            print(f"🔗 新增來源: {URL}")
+            add_res = run_nlm("source", "add", nb_id, "--url", URL)
+            if add_res.returncode != 0:
+                raise RuntimeError(f"新增來源失敗: {add_res.stdout} {add_res.stderr}")
 
-            print(f"🔗 新增來源：{URL[:80]}")
-            add_result = run_nlm("source", "add", NOTEBOOK_NAME, "--url", URL)
-            if add_result.returncode != 0:
-                raise RuntimeError(f"新增來源失敗")
-
-            combined = add_result.stdout + add_result.stderr
-            match = re.search(r"Source ID:\s*([a-zA-Z0-9\-]+)", combined)
-            source_id = match.group(1) if match else None
-            print(f"📌 Source ID: {source_id or '(未解析到)'}")
-
-            print(f"🤖 執行查詢...")
-            query_args = ["query", NOTEBOOK_NAME, PROMPT]
-            if source_id:
-                query_args += ["-s", source_id]
-
-            query_result = run_nlm(*query_args)
-            if query_result.returncode != 0:
-                raise RuntimeError(f"查詢失敗")
-
-            summary = query_result.stdout.strip()
-            if not summary:
-                raise RuntimeError("回傳空白摘要")
-
-            msg = (
-                f"✅ <b>NotebookLM 分析完成</b>\n\n"
-                f"🔗 來源：<code>{URL[:100]}</code>\n\n"
-                f"📝 <b>摘要</b>\n{summary}"
-            )
-            send_tg(msg)
-            print("✅ 已成功回傳摘要至 Telegram")
+            print("🤖 執行 AI 查詢...")
+            query_res = run_nlm("query", "notebook", nb_id, PROMPT)
+            if query_res.returncode == 0:
+                summary = query_res.stdout.strip()
+                # 處理 JSON 格式
+                try:
+                    data = json.loads(summary)
+                    summary = data.get("value", {}).get("answer", summary)
+                except: pass
+                
+                msg = (f"✅ <b>隨選摘要完成</b>\n\n"
+                       f"🔗 來源：{URL}\n\n"
+                       f"📝 <b>AI 分析</b>\n{summary}")
+                send_tg(msg)
+            else:
+                raise RuntimeError(f"查詢失敗: {query_res.stderr}")
 
         except Exception as e:
-            print(f"❌ 任務失敗: {e}", file=sys.stderr)
-            send_tg(
-                f"❌ <b>NotebookLM 任務失敗</b>\n\n"
-                f"來源：<code>{URL[:100]}</code>\n"
-                f"錯誤：{str(e)[:300]}"
-            )
-            sys.exit(1)
-
+            send_tg(f"❌ <b>任務失敗</b>\n來源：{URL}\n錯誤：{e}")
         finally:
-            if notebook_created:
-                print(f"🗑️ 清理臨時 Notebook：{NOTEBOOK_NAME}")
-                del_result = run_nlm("notebook", "delete", NOTEBOOK_NAME, "--confirm")
-                if del_result.returncode == 0:
-                    print("✅ Notebook 已成功刪除")
-                else:
-                    print(f"⚠️ Notebook 刪除失敗（可手動清理）")
+            if nb_id:
+                print("🗑️ 清理 Notebook")
+                run_nlm("notebook", "delete", nb_id, "--confirm")
 
         PYTHON_SCRIPT
