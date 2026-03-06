@@ -43,13 +43,21 @@ async def handle_telegram_update(update: dict):
         return
 
     # 2. 安全性檢查：白名單過濾
-    # 如果設定了 ALLOWED_USERS，只有名單內的使用者可以觸發任務
-    allowed_list = os.environ.get("ALLOWED_USERS", "").split(",")
-    allowed_list = [u.strip() for u in allowed_list if u.strip()]
-    if allowed_list and user_id not in allowed_list and chat_id not in allowed_list:
-        if text.startswith("/"):
-            await send_telegram_message(chat_id, f"⚠️ <b>權限不足</b>\n您的 ID (<code>{user_id}</code>) 不在授權名單中。")
-        return
+    allowed_raw = os.environ.get("ALLOWED_USERS", "").strip()
+    if allowed_raw:
+        allowed_list = [u.strip() for u in allowed_raw.split(",") if u.strip()]
+        # 檢查發送者 (user_id) 或 聊天室 (chat_id) 是否在名單中
+        if user_id not in allowed_list and chat_id not in allowed_list:
+            # 只有當對方發送指令時才回覆權限不足，其餘閒聊不予理會
+            if text.startswith("/"):
+                await send_telegram_message(chat_id, f"⚠️ <b>權限不足</b>\n您的 ID (<code>{user_id}</code>) 不在授權名單中。")
+            return
+    else:
+        # 重要：如果完全沒設定 ALLOWED_USERS，為了安全起見，預設拒絕所有外部指令 (除了 /start)
+        # 除非您希望公開使用，否則請務必填寫 ID
+        if not text.startswith("/start"):
+            logger.warning("未設定 ALLOWED_USERS，已攔截潛在的未授權請求")
+            return
 
     # 3. 處理群組指令格式 (e.g. /nlm@LazyTubeBot -> /nlm)
     if "@" in text:
