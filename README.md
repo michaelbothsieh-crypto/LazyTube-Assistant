@@ -1,34 +1,37 @@
 # 🤖 LazyTube-Assistant
 
-結合 **Google NotebookLM** 與 **YouTube API** 的全自動 AI 摘要助理。它能監控您的訂閱頻道，利用 NotebookLM 的強大理解能力產出精確摘要，並即時推播至您的 **Telegram**。
+一個結合 **Google NotebookLM** 與 **YouTube API** 的全自動摘要工具。它能自動追蹤您訂閱的 YouTube 頻道，利用 NotebookLM 的強大理解能力產出精確摘要，並即時推播至您的 **Telegram**。
 
 ## 🌟 核心功能
 - **🔍 自動偵測**：每小時自動檢查訂閱頻道的最新上傳。
-- **🧠 獨立 AI 摘要**：每部影片建立獨立臨時 Notebook，確保分析精確且不干擾。
-- **🧹 自動清理**：摘要完成後自動刪除臨時筆記與來源，維持環境整潔。
+- **🧠 獨立 AI 摘要**：為每部影片建立獨立臨時 Notebook，確保分析精確。
+- **🧹 自動清理**：摘要完成後立即刪除臨時筆記與來源，維持環境整潔。
 - **📢 Telegram 通知**：即時推播包含影片標題、連結與 AI 摘要的訊息。
-- **🎯 多功能 Workflow**：支援每小時自動排程與手動隨選查詢 (On-Demand)。
 
 ---
 
-## 🔑 關鍵：如何正確更新憑證 (NLM_COOKIE_BASE64)
+## 🛠️ 環境變數 (Secrets) 設定指南
 
-由於 NotebookLM 沒有官方 API，本專案依賴 `notebooklm-mcp-cli` 產生的憑證檔案。請依照以下步驟確保憑證完整：
+請在 GitHub 儲存庫的 `Settings > Secrets and variables > Actions` 設定以下變數：
 
-### 1. 本地產生原始檔案
-在您的 Mac/本地電腦執行：
-```bash
-# 強制重新登入 (會開啟瀏覽器)
-nlm login --force
-```
-成功後，憑證會存在 `~/.notebooklm-mcp-cli/profiles/default/`。
+### 1. YouTube API 相關 (`YT_` 系列)
+- **取得連結**：[Google Cloud Console](https://console.cloud.google.com/)
+- **步驟**：
+    1. 建立專案並啟用 **YouTube Data API v3**。
+    2. 在「憑證」頁面建立 **OAuth 2.0 用戶端 ID**（選「桌面應用程式」）。
+    3. 取得 `YT_CLIENT_ID` 與 `YT_CLIENT_SECRET`。
+    4. 使用 [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/) 取得 `YT_REFRESH_TOKEN` (需包含 `https://www.googleapis.com/auth/youtube.readonly` 權限)。
 
-### 2. **合併檔案並轉換 (極重要)**
-`notebooklm-mcp-cli` v0.4.0+ 需要將 `metadata.json` 與 `cookies.json` 合併才是完整的憑證。請直接執行以下 Python 指令：
+### 2. Telegram 通知相關 (`TELEGRAM_` 系列)
+- **`TELEGRAM_BOT_TOKEN`**：找 [@BotFather](https://t.me/botfather) 建立機器人取得。
+- **`TELEGRAM_CHAT_ID`**：找 [@userinfobot](https://t.me/userinfobot) 取得您的個人 ID 或頻道 ID。
 
+### 3. NotebookLM 憑證 (`NLM_COOKIE_BASE64`)
+這是本專案的核心認證。請依照以下步驟合併檔案：
+1. 在本地執行 `nlm login --force` 重新登入。
+2. 執行以下指令自動合併 `metadata.json` 與 `cookies.json` 並複製 Base64：
 ```bash
 cd ~/.notebooklm-mcp-cli/profiles/default
-
 python3 -c "
 import json, base64
 with open('cookies.json', 'r') as f: cookies = json.load(f)
@@ -38,41 +41,22 @@ combined = json.dumps(meta)
 print(base64.b64encode(combined.encode()).decode())
 " | tr -d '\n' | pbcopy
 ```
-執行後，完整的 Base64 字串已複製到您的剪貼簿。**請直接貼到 GitHub Secrets 中的 `NLM_COOKIE_BASE64`。**
+3. 將剪貼簿內容貼到 GitHub Secret `NLM_COOKIE_BASE64`。
 
 ---
 
-## 🚀 GitHub Actions 使用指南
+## 🚀 GitHub Actions 使用說明
 
-本專案包含兩個主要的 Workflows，位於 `.github/workflows/`：
+本專案包含兩個 Workflows：
 
-### 1. 定期自動摘要 (`yt-summary.yml`)
-- **執行時間**：每小時第 0 分鐘執行。
-- **自動化邏輯**：抓取新影片 -> 建立臨時 Notebook -> 產生摘要 -> 發送 Telegram -> 刪除 Notebook。
-- **手動觸發**：在 GitHub 頁面點擊 `Actions` > `YouTube NotebookLM Summarizer` > `Run workflow` 即可立即執行一次。
+### 1. YouTube 自動摘要 (`yt-summary.yml`)
+- **排程**：每小時自動執行。
+- **功能**：抓取訂閱頻道的新影片並產生摘要。
+- **手動觸發**：在 Actions 頁面選擇該工作，點擊 `Run workflow`。
 
-### 2. 手動隨選查詢 (`nlm-on-demand.yml`)
-如果您想分析「非訂閱」的影片或特定網址：
-1. 點擊 `Actions` > `NLM On-Demand Query`。
-2. 點擊 `Run workflow` 並填入參數：
-   - **url**: YouTube 連結、PDF 網址或一般網頁連結。
-   - **prompt**: 您想詢問 AI 的具體問題（預設為 5 個核心重點）。
-   - **chat_id**: 接收結果的 Telegram ID。
-
----
-
-## 🛠️ 環境變數 (Secrets) 設定表
-
-請在 GitHub 儲存庫的 `Settings > Secrets and variables > Actions` 設定：
-
-| 變數名稱 | 來源 |
-| :--- | :--- |
-| `YT_CLIENT_ID` | Google Cloud Console OAuth 2.0 Client ID |
-| `YT_CLIENT_SECRET` | Google Cloud Console OAuth 2.0 Client Secret |
-| `YT_REFRESH_TOKEN` | 具備 YouTube 權限的 Refresh Token |
-| `TELEGRAM_BOT_TOKEN` | 透過 @BotFather 取得的 Token |
-| `TELEGRAM_CHAT_ID` | 您的 Telegram Chat ID |
-| `NLM_COOKIE_BASE64` | 以上述「合併檔案」步驟產生的 Base64 字串 |
+### 2. 隨選查詢 (`nlm-on-demand.yml`)
+- **功能**：輸入任意 URL (YouTube, PDF, 網頁) 進行即時摘要。
+- **參數**：支援自訂 Prompt 與目標 Chat ID。
 
 ---
 *Developed by Michael*
