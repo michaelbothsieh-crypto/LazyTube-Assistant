@@ -1,67 +1,61 @@
 # 🤖 LazyTube-Assistant
 
 [![GitHub License](https://img.shields.io/github/license/michaelbothsieh-crypto/LazyTube-Assistant)](LICENSE)
-[![Actions Status](https://img.shields.io/github/actions/workflow/status/michaelbothsieh-crypto/LazyTube-Assistant/yt-summary.yml?branch=main&label=Automated%20Summary)](https://github.com/michaelbothsieh-crypto/LazyTube-Assistant/actions)
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Zero Cost](https://img.shields.io/badge/Cost-0_Server_Required-brightgreen)](https://github.com/features/actions)
+[![Automated](https://img.shields.io/badge/Service-100%25_Automated-orange)](https://github.com/features/actions)
 
-**LazyTube-Assistant** 是一個結合 **Google NotebookLM** 與 **YouTube API** 的智慧摘要助手。它能自動過濾您感興趣的內容，產出精確的繁體中文重點，並即時推播至您的 **Telegram**。
+**LazyTube-Assistant** 是一個實現「完全零成本」營運的智慧影片摘要助理。利用 **GitHub Actions** 的免費運算資源，自動監控、分析並推播您感興趣的內容。
 
-> **懶人必備**：不再需要點開每部影片，讓 AI 幫您精煉出 5 個核心重點！
-
----
-
-## ✨ 核心亮點
-
-- **🎯 智慧關鍵字過濾**：僅針對感興趣的標題（如：PoE, Build, 賽季攻略）進行分析，節省 API 配額與時間。
-- **🧠 深度內容理解**：利用 [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) 模擬瀏覽器行為，獲得比一般 GPT 更精確的影片摘要。
-- **📱 隨傳隨到**：直接將 YouTube 網址貼給機器人，AI 會立即開始分析並自動回傳。
-- **🧹 自動清理**：摘要完成後立即銷毀臨時筆記，保護隱私且維持 NotebookLM 環境整潔。
-- **⚡ 零成本營運**：完全託管於 GitHub Actions 與 Vercel，無需自備伺服器。
+> **🚀 專案主打：** 無需租用伺服器、無需管理資料庫、無需持續開機。只要 Fork 即可擁有 24/7 的 AI 摘要機器人。
 
 ---
 
-## 🚀 快速上手 (Quick Start)
+## ✨ 核心特色
+
+- **💸 0 元營運成本**：完全依賴 GitHub Actions 免費額度，實現真正的零開銷 AI 服務。
+- **📦 免架設環境**：無需安裝資料庫或設定複雜的伺服器環境，一切都在雲端自動執行。
+- **🧠 深度 AI 解析**：基於 [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) 串接 Google NotebookLM，產出最具邏輯的繁體中文影片重點。
+- **🎯 智慧內容過濾**：自動識別遊戲相關影片（如：PoE, Build 攻略），精確命中您的興趣。
+- **📢 多元觸發模式**：
+    - **自動模式 (預設)**：每小時自動掃描訂閱。
+    - **隨選模式 (進階)**：透過 Telegram Webhook 實現遠端即時分析。
+
+---
+
+## 🚀 快速上手 (只需三步驟)
 
 ### 1. 點擊 Fork
-點擊儲存庫右上角的 **Fork** 按鈕，將專案複製到您的帳號下。
+將本儲存庫 Fork 到您的個人帳號下。
 
-### 2. 取得憑證 (使用自動化助手)
-我們提供了一個跨平台的輔助工具，只需執行一次即可取得所有 Secret：
-
-1. 本地安裝 [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) 並執行 `nlm login --force` 確保登入。
+### 2. 取得憑證 (本地執行助手)
+我們提供了一個全自動工具協助您完成最困難的認證步驟：
+1. 本地執行 `nlm login --force` 確保登入。
 2. 執行設定助手：
    ```bash
    pip install google-auth-oauthlib requests
    python setup_helper.py
    ```
-   *(Windows 使用者請參閱 [Windows 安裝指南](WINDOWS_GUIDE.md))*
-3. 腳本會自動完成 YouTube 授權並產出一個 **`.env`** 檔案。
+   腳本會自動完成 YouTube 授權並產出 **`.env`** 檔案。*(Windows 使用者請參閱 [Windows 指南](WINDOWS_GUIDE.md))*
 
 ### 3. 設定 GitHub Secrets
-前往您 Fork 的專案頁面：`Settings > Secrets and variables > Actions`，對照 **`.env`** 檔案內容填入變數。
+前往 GitHub `Settings > Secrets and variables > Actions`，對照 **`.env`** 檔案將內容填入。
 
 ---
 
-## 🏗️ 系統架構
+## 🏗️ 運作原理
 
-- **Trigger 層 (Vercel)**：接收 Telegram Webhook 指令（如貼上網址）。
-- **Worker 層 (GitHub Actions)**：執行核心分析任務（YouTube 抓取、NotebookLM 摘要）。
-- **Security**：內建使用者白名單 (`ALLOWED_USERS`)，確保只有您本人可以觸發分析。
-
----
-
-## 🤖 Telegram 指令手冊
-
-- **`/nlm <網址> [指令]`**：手動分析特定內容。
-- **直接貼網址**：若已關閉隱私模式，直接在對話框貼上網址，助手也會自動辨識。
-- **`/my_id`**：取得您的 Telegram User ID，用於填寫白名單設定。
+1. **GitHub Actions**：作為定時器與運算中心，每小時自動甦醒執行任務。
+2. **YouTube Data API**：用於輕量化掃描您的訂閱頻道動態。
+3. **NotebookLM**：作為核心 AI 引擎，對影片字幕進行深度理解。
+4. **Telegram Bot**：作為最終的訊息接收端。
 
 ---
 
-## 🛡️ 安全性與隱私
+## ⚠️ 風險聲明與隱私
 
-- **數據隱私**：所有影片內容僅傳送至 Google NotebookLM，不經過任何第三方伺服器。
-- **憑證更新**：Cookie 有效期通常為 2-4 週，失效時請重新執行 `setup_helper.py`。
+- **非官方通訊**：本專案依賴模擬瀏覽器技術，可能隨 Google 網頁更新而需調整。
+- **憑證時效**：Cookie 通常維持 2-4 週，失效時再次執行 `setup_helper.py` 即可。
+- **100% 隱私**：所有數據僅在 GitHub Actions 容器內處理，並直接傳送至 Google，不經過任何第三方中轉。
 
 ---
 *Developed by Michael*
