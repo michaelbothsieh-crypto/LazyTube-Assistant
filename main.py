@@ -102,41 +102,42 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.31]")
-    print(f"📂 當前目錄: {os.getcwd()}")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.32]")
     print("="*50)
 
-    # 1. 認證初始化 (調包計策略)
+    # 1. 認證初始化 (調包計 2.0)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
-        print("--- [ 正在初始化 NotebookLM 認證環境 ] ---")
+        print("--- [ 正在執行終極認證調包 ] ---")
         try:
             cookie_data = base64.b64decode("".join(cookie_b64_raw.split()))
             temp_auth = os.path.abspath("temp_auth.json")
             with open(temp_auth, "wb") as f:
                 f.write(cookie_data)
 
-            # A. 先讓官方指令建立正確結構 (哪怕它會過濾內容)
-            print("🔄 步驟 A: 執行官方指令初始化目錄...")
+            # 步驟 A: 先執行 login 指令，這會成功建立 profiles/default 檔案
+            print("🔄 步驟 A: 執行官方指令初始化 (建立路徑與 Profile)...")
             subprocess.run(
                 ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
                 capture_output=True
             )
             
-            # B. 立即調包：覆蓋掉官方產生的 auth.json，換成我們的完整版
+            # 步驟 B: 暴力覆蓋內容
+            # 根據 0.4.0 版 Logs，路徑在 ~/.notebooklm-mcp-cli/profiles/default
             home = os.path.expanduser("~")
-            target_auth = os.path.join(home, ".notebooklm-mcp-cli", "profiles", "default", "auth.json")
-            if os.path.exists(os.path.dirname(target_auth)):
-                with open(target_auth, "wb") as f:
+            final_target = os.path.join(home, ".notebooklm-mcp-cli", "profiles", "default")
+            
+            if os.path.exists(final_target):
+                with open(final_target, "wb") as f:
                     f.write(cookie_data)
-                print(f"✅ 步驟 B: 已成功覆蓋完整憑證至 {target_auth}")
+                print(f"✅ 步驟 B: 已成功調包，覆蓋完整憑證至 {final_target}")
             else:
-                print("⚠️ 警告: 找不到目標目錄，嘗試備用路徑...")
-                # 備用路徑 (.config)
-                config_auth = os.path.join(home, ".config", "notebooklm-mcp-cli", "profiles", "default", "auth.json")
-                os.makedirs(os.path.dirname(config_auth), exist_ok=True)
-                with open(config_auth, "wb") as f:
+                # 如果是 .config 路徑
+                config_target = os.path.join(home, ".config", "notebooklm-mcp-cli", "profiles", "default")
+                os.makedirs(os.path.dirname(config_target), exist_ok=True)
+                with open(config_target, "wb") as f:
                     f.write(cookie_data)
+                print(f"✅ 步驟 B: 已成功調包，覆蓋完整憑證至 {config_target}")
 
             if os.path.exists(temp_auth): os.remove(temp_auth)
             
