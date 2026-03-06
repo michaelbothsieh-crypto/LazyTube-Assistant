@@ -9,7 +9,6 @@ import time
 from datetime import datetime, timezone
 
 def run_nlm(*args):
-    # 強制指定配置路徑
     home = os.path.expanduser("~")
     config_dir = os.path.join(home, ".notebooklm-mcp-cli")
     env = os.environ.copy()
@@ -24,47 +23,47 @@ def run_nlm(*args):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.37 - THE FINAL BAIT]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.38 - PRECISE INJECTION]")
     print("="*50)
 
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
-        print("--- [ 正在執行智能拆解與調包佈署 ] ---")
+        print("--- [ 正在執行精確數據解構與注入 ] ---")
         try:
-            full_data = base64.b64decode("".join(cookie_b64_raw.split()))
-            full_json = json.loads(full_data)
+            full_data_bytes = base64.b64decode("".join(cookie_b64_raw.split()))
+            full_json = json.loads(full_data_bytes)
             
-            # 1. 拆解出純 Cookie (指令只認這個)
-            pure_cookies = full_json.get("cookies", full_json)
+            # 1. 準備三種不同格式的數據
+            pure_cookies = full_json.get("cookies", [])
+            metadata_only = {k: v for k, v in full_json.items() if k != "cookies"}
+            
+            # 2. 讓官方指令初始化目錄
             temp_cookies_path = os.path.abspath("temp_cookies.json")
             with open(temp_cookies_path, "w") as f:
                 json.dump(pure_cookies, f)
             
-            # 2. 讓官方指令初始化 (這會成功建立 profiles/default 目錄)
-            print("🔄 步驟 A: 使用純 Cookie 匯入以初始化目錄結構...")
+            print("🔄 步驟 A: 執行目錄結構初始化...")
             run_nlm("login", "--manual", "--file", temp_cookies_path, "--profile", "default", "--force")
             
-            # 3. 立即調包：用完整的合併數據覆蓋掉所有檔案
+            # 3. 步驟 B: 精確調包 (將正確的數據放入正確的檔案)
             home = os.path.expanduser("~")
-            base_dir = os.path.join(home, ".notebooklm-mcp-cli")
-            profile_dir = os.path.join(base_dir, "profiles", "default")
+            profile_dir = os.path.join(home, ".notebooklm-mcp-cli", "profiles", "default")
             
-            # 覆蓋所有可能的憑證檔名
             if os.path.exists(profile_dir):
-                for fname in ["auth.json", "cookies.json", "metadata.json", "default"]:
-                    fpath = os.path.join(profile_dir, fname)
-                    with open(fpath, "wb") as f:
-                        f.write(full_data)
-                print(f"✅ 步驟 B: 已成功調包，將完整憑證注入至 {profile_dir}")
-            else:
-                # 備案：如果目錄沒建成功，我們強行手動建
-                os.makedirs(profile_dir, exist_ok=True)
+                # auth.json -> 完整數據
                 with open(os.path.join(profile_dir, "auth.json"), "wb") as f:
-                    f.write(full_data)
-                with open(os.path.join(base_dir, "profiles.json"), "w") as f:
-                    json.dump({"default_profile": "default", "profiles": {"default": {"auth_file": "auth.json"}}}, f)
-                print(f"✅ 步驟 B (備案): 已手動建立並注入完整憑證。")
-
+                    f.write(full_data_bytes)
+                
+                # cookies.json -> 僅列表 (List)
+                with open(os.path.join(profile_dir, "cookies.json"), "w") as f:
+                    json.dump(pure_cookies, f)
+                
+                # metadata.json -> 僅元數據 (Dict)
+                with open(os.path.join(profile_dir, "metadata.json"), "w") as f:
+                    json.dump(metadata_only, f)
+                
+                print(f"✅ 步驟 B: 已完成精確數據注入至 {profile_dir}")
+            
             if os.path.exists(temp_cookies_path): os.remove(temp_cookies_path)
             
             print("--- [ NLM 認證診斷 ] ---")
@@ -76,12 +75,12 @@ def main():
     # --- [ 測試摘要 ] ---
     print("🧪 啟動測試摘要流程...")
     test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    nb_name = f"Final_{uuid.uuid4().hex[:4].upper()}"
+    nb_name = f"Test_{uuid.uuid4().hex[:4].upper()}"
     
     res = run_nlm("notebook", "create", nb_name)
     if res.returncode == 0:
         run_nlm("source", "add", nb_name, "--url", test_url)
-        run_nlm("query", nb_name, "這影片說什麼", "--confirm")
+        run_nlm("query", nb_name, "請用繁體中文總結", "--confirm")
         run_nlm("notebook", "delete", nb_name, "--confirm")
     
     print("本次測試處理完成。")
