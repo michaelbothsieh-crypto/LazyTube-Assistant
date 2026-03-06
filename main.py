@@ -191,10 +191,36 @@ def main():
     # 還原 NLM Cookie (用於 GitHub Actions 環境)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
-        os.makedirs(os.path.dirname(AUTH_JSON_PATH), exist_ok=True)
-        with open(AUTH_JSON_PATH, "wb") as f:
+        # 定義多個可能的路徑以增加相容性
+        base_dir = os.path.expanduser("~/.notebooklm-mcp-cli")
+        os.makedirs(base_dir, exist_ok=True)
+        
+        # 1. 寫入原始 auth.json
+        auth_path = os.path.join(base_dir, "auth.json")
+        with open(auth_path, "wb") as f:
             f.write(base64.b64decode(cookie_b64))
-        print("已還原 NotebookLM 登入憑證")
+            
+        # 2. 建立 profiles.json 以定義 'default' profile
+        # 這能解決 "Profile 'default' not found" 的問題
+        profiles_path = os.path.join(base_dir, "profiles.json")
+        profiles_data = {
+            "default_profile": "default",
+            "profiles": {
+                "default": {
+                    "auth_path": auth_path
+                }
+            }
+        }
+        with open(profiles_path, "w") as f:
+            json.dump(profiles_data, f)
+            
+        # 3. 為了保險，也建立一個 default 資料夾並放入 auth.json
+        default_profile_dir = os.path.join(base_dir, "profiles", "default")
+        os.makedirs(default_profile_dir, exist_ok=True)
+        with open(os.path.join(default_profile_dir, "auth.json"), "wb") as f:
+            f.write(base64.b64decode(cookie_b64))
+
+        print("✅ 已成功還原 NotebookLM 登入憑證與 Profiles 設定")
 
     youtube = get_yt_service()
     last_check_time = get_last_check_time()
