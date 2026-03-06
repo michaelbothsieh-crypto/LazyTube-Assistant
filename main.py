@@ -188,61 +188,48 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.11]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.12]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 深度偵錯：找出 nlm 原始碼邏輯
+    # 1. 源頭分析：找出 nlm 到底在看哪裡
+    print("--- [ 原始碼路徑分析 ] ---")
     try:
-        import notebooklm_mcp_cli
-        pkg_dir = os.path.dirname(notebooklm_mcp_cli.__file__)
-        print(f"📦 notebooklm-mcp-cli 路徑: {pkg_dir}")
-        subprocess.run(["grep", "-r", "auth", pkg_dir], check=False)
+        # 找出套件安裝路徑
+        import subprocess
+        show_proc = subprocess.run(["pip", "show", "-f", "notebooklm-mcp-cli"], capture_output=True, text=True)
+        print(show_proc.stdout[:1000]) # 印出前 1000 字元參考
+        
+        # 嘗試搜尋關鍵路徑邏輯
+        location_line = [l for l in show_proc.stdout.splitlines() if l.startswith("Location:")][0]
+        pkg_base = location_line.split(": ")[1].strip()
+        print(f"📍 套件根目錄: {pkg_base}")
+        
+        # 搜尋包含 'profiles.json' 或 'auth.json' 的檔案
+        print("🔍 搜尋配置路徑定義...")
+        subprocess.run(["grep", "-r", "profiles.json", pkg_base], check=False)
     except Exception as e:
-        print(f"⚠️ 無法執行深度偵錯: {e}")
+        print(f"⚠️ 源頭分析失敗: {e}")
 
-    # 還原 NLM Cookie (用於 GitHub Actions 環境)
+    # 2. 還原 NLM Cookie (採用目前最廣泛推測的結構作為過渡)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
         print("--- [ 正在還原 NotebookLM 憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
-        
-        # 1. 定義標準路徑
         base_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
         os.makedirs(base_dir, exist_ok=True)
+        
         auth_path = os.path.join(base_dir, "auth.json")
-        
-        # 寫入暫存檔用於指令匯入
-        temp_auth = os.path.abspath("temp_auth.json")
-        with open(temp_auth, "wb") as f:
-            f.write(cookie_data)
-
-        # 2. 嘗試使用官方 login 指令匯入憑證
-        print(f"🔄 正在透過 nlm login 連結憑證...")
-        subprocess.run(["nlm", "login", "--profile", "default", "--auth-file", temp_auth], capture_output=True)
-        
-        # 3. 手動加固：寫入 profiles.json (包含多種可能的欄位名稱)
-        profiles_path = os.path.join(base_dir, "profiles.json")
-        profiles_data = {
-            "default_profile": "default",
-            "profiles": {
-                "default": {
-                    "auth_path": auth_path,
-                    "auth_file": auth_path
-                }
-            }
-        }
-        with open(profiles_path, "w") as f:
-            json.dump(profiles_data, f)
-        
-        # 也確保 auth.json 本身存在
         with open(auth_path, "wb") as f:
             f.write(cookie_data)
+            
+        profiles_path = os.path.join(base_dir, "profiles.json")
+        with open(profiles_path, "w") as f:
+            json.dump({"default_profile": "default", "profiles": {"default": {"auth_path": auth_path}}}, f)
+        
+        print(f"✅ 已嘗試寫入: {base_dir}")
 
-        if os.path.exists(temp_auth):
-            os.remove(temp_auth)
-
-        # 診斷：執行 nlm doctor
+        # 3. 診斷：執行 nlm doctor
         print("--- [ NLM Doctor 診斷報告 ] ---")
         subprocess.run(["nlm", "doctor"], check=False)
         print("="*50)
