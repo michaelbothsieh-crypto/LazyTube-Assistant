@@ -78,8 +78,8 @@ async def handle_telegram_update(update: dict):
             await _handle_nlm(chat_id, f"/nlm {urls[0]}")
 
     else:
-        # 非指令訊息，忽略
-        logger.info(f"收到非指令訊息，略過: {text[:50]}")
+        # 非指令訊息，安靜地忽略，不留 Log
+        return
 
 
 async def _handle_start(chat_id: str):
