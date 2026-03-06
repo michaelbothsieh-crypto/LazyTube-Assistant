@@ -188,48 +188,42 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.12]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.13]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 源頭分析：找出 nlm 到底在看哪裡
-    print("--- [ 原始碼路徑分析 ] ---")
+    # 1. 深度探查 notebooklm_tools
+    print("--- [ 原始碼深度探查 ] ---")
     try:
-        # 找出套件安裝路徑
-        import subprocess
-        show_proc = subprocess.run(["pip", "show", "-f", "notebooklm-mcp-cli"], capture_output=True, text=True)
-        print(show_proc.stdout[:1000]) # 印出前 1000 字元參考
+        import notebooklm_tools
+        pkg_dir = os.path.dirname(notebooklm_tools.__file__)
+        print(f"📍 模組路徑: {pkg_dir}")
         
-        # 嘗試搜尋關鍵路徑邏輯
-        location_line = [l for l in show_proc.stdout.splitlines() if l.startswith("Location:")][0]
-        pkg_base = location_line.split(": ")[1].strip()
-        print(f"📍 套件根目錄: {pkg_base}")
+        # 列出目錄結構
+        print("📂 目錄清單:")
+        subprocess.run(["find", pkg_dir, "-maxdepth", 2, "-not", "-path", "*/__pycache__*"], check=False)
         
-        # 搜尋包含 'profiles.json' 或 'auth.json' 的檔案
-        print("🔍 搜尋配置路徑定義...")
-        subprocess.run(["grep", "-r", "profiles.json", pkg_base], check=False)
+        # 搜尋關鍵邏輯
+        print("🔍 搜尋路徑定義邏輯:")
+        subprocess.run(["grep", "-rE", "user_config_dir|auth.json|profiles.json", pkg_dir], check=False)
     except Exception as e:
-        print(f"⚠️ 源頭分析失敗: {e}")
+        print(f"⚠️ 探查失敗: {e}")
 
-    # 2. 還原 NLM Cookie (採用目前最廣泛推測的結構作為過渡)
+    # 2. 還原 NLM Cookie (暫時維持舊邏輯)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
         print("--- [ 正在還原 NotebookLM 憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
         base_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
         os.makedirs(base_dir, exist_ok=True)
-        
         auth_path = os.path.join(base_dir, "auth.json")
         with open(auth_path, "wb") as f:
             f.write(cookie_data)
-            
-        profiles_path = os.path.join(base_dir, "profiles.json")
-        with open(profiles_path, "w") as f:
+        with open(os.path.join(base_dir, "profiles.json"), "w") as f:
             json.dump({"default_profile": "default", "profiles": {"default": {"auth_path": auth_path}}}, f)
-        
         print(f"✅ 已嘗試寫入: {base_dir}")
 
-        # 3. 診斷：執行 nlm doctor
+        # 3. 診斷
         print("--- [ NLM Doctor 診斷報告 ] ---")
         subprocess.run(["nlm", "doctor"], check=False)
         print("="*50)
