@@ -18,9 +18,10 @@ class Config:
     LAST_CHECK_FILE = "last_check.txt"
     MAX_VIDEOS = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
     
-    DEFAULT_KEYWORDS = "poe,path of exile,流亡黯道,build,guide,攻略,開荒,賽季,league,atlas,輿圖,天賦,機制,拓荒,暗黑,diablo"
+    # 預設過濾關鍵字 (留空代表不進行過濾，抓取所有影片)
+    DEFAULT_KEYWORDS = ""
     FILTER_KEYWORDS = os.environ.get("FILTER_KEYWORDS", DEFAULT_KEYWORDS)
-    
+
     # 白名單使用者 ID (逗號分隔)
     ALLOWED_USERS = os.environ.get("ALLOWED_USERS", "")
 
@@ -33,4 +34,6 @@ class Config:
     @classmethod
     def get_keywords(cls):
         """取得處理後的關鍵字清單"""
+        if not cls.FILTER_KEYWORDS: return []
         return [k.strip().lower() for k in cls.FILTER_KEYWORDS.split(",")]
+

@@ -48,8 +48,11 @@ class YouTubeService:
                     
                     if pub_time > last_check_time:
                         title = item.get("snippet", {}).get("title", "Unknown")
-                        # 檢查關鍵字
-                        if any(k in title.lower() for k in keywords):
+                        
+                        # --- [ 邏輯優化：若沒設定關鍵字則全抓 ] ---
+                        is_match = True if not keywords else any(k in title.lower() for k in keywords)
+                        
+                        if is_match:
                             video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
                             if video_id:
                                 new_videos.append({
@@ -58,7 +61,7 @@ class YouTubeService:
                                     "time": pub_time,
                                     "channel": item["snippet"]["channelTitle"]
                                 })
-                                print(f"🎯 發現相關影片: {title}")
+                                print(f"🎯 發現影片: {title}")
         except Exception as e:
             print(f"❌ YouTube 抓取錯誤: {e}")
             
