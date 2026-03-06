@@ -35,7 +35,10 @@ async def handle_telegram_update(update: dict):
 
 
     # --- 指令路由 ---
-    if text.startswith("/help"):
+    if text.startswith("/start"):
+        await _handle_start(chat_id)
+
+    elif text.startswith("/help"):
         await _handle_help(chat_id)
 
     elif text.startswith("/status"):
@@ -47,6 +50,18 @@ async def handle_telegram_update(update: dict):
     else:
         # 非指令訊息，忽略
         logger.info(f"收到非指令訊息，略過: {text[:50]}")
+
+
+async def _handle_start(chat_id: str):
+    """回傳歡迎詞"""
+    welcome_text = (
+        "👋 <b>你好！我是 LazyTube 摘要助理</b>\n\n"
+        "我可以幫你把冗長的 YouTube 影片或網頁內容，透過 Google NotebookLM 轉化為精簡的重點摘要。\n\n"
+        "🚀 <b>快速開始：</b>\n"
+        "直接輸入 <code>/nlm &lt;網址&gt;</code> 即可！\n\n"
+        "使用 /help 查看更多進階指令。"
+    )
+    await send_telegram_message(chat_id, welcome_text)
 
 
 async def _handle_help(chat_id: str):
@@ -127,13 +142,19 @@ async def _handle_nlm(chat_id: str, text: str):
             chat_id=chat_id
         )
         if not success:
+            debug_info = f"Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'} | Repo:{os.environ.get('GH_REPO_NAME')}"
             await send_telegram_message(
                 chat_id,
-                "❌ <b>觸發任務失敗</b>：無法啟動 GitHub Actions，請稍後再試。"
+                f"❌ <b>觸發任務失敗</b>\n\n"
+                f"原因：無法連接到 GitHub API。\n"
+                f"🔧 <b>除錯資訊</b>：<code>{debug_info}</code>\n"
+                f"請檢查 Vercel 環境變數設定是否正確。"
             )
     except Exception as e:
         logger.error(f"dispatch_nlm_workflow 發生錯誤: {e}")
         await send_telegram_message(
             chat_id,
-            "❌ <b>系統錯誤</b>：觸發任務時發生異常，請聯繫管理員。"
+            f"❌ <b>系統發生異常</b>\n\n"
+            f"錯誤內容：<code>{str(e)[:100]}</code>\n"
+            f"請聯繫管理員檢查 Vercel 日誌。"
         )
