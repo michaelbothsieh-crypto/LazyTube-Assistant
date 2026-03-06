@@ -25,10 +25,8 @@ def main():
     # 2. 執行摘要 (使用 NotebookService)
     nlm = NotebookService()
     
-    # 這裡我們稍微修改 NotebookService 邏輯，或者直接在這裡寫
-    # 為了保持模組化，我們直接在 NotebookService 增加一個支援 prompt 的方法
-    # 但現在先用最快的方式確保您收到訊息：
-    summary = nlm.process_video(url, "On-Demand Query")
+    # 將自定義 Prompt 傳遞給處理方法
+    summary = nlm.process_video(url, "On-Demand Query", custom_prompt=prompt)
 
     if summary:
         # 3. 通知 (Notifier 會自動判斷 Telegram/LINE)

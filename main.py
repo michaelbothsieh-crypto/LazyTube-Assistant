@@ -47,6 +47,7 @@ def main():
     target_chat_id = sys.argv[1] if len(sys.argv) > 1 else None
     
     for video in new_videos[:Config.MAX_VIDEOS]:
+        # 呼叫時維持原樣，使用預設 Prompt
         summary = nlm.process_video(video["url"], video["title"])
         if summary:
             Notifier.send_summary(

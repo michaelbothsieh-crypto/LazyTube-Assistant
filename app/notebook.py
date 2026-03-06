@@ -23,7 +23,7 @@ class NotebookService:
         cmd = ["nlm", *args]
         return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
-    def process_video(self, url, title):
+    def process_video(self, url, title, custom_prompt=None):
         """
         /// 完整處理一個影片的摘要流程
         """
@@ -44,7 +44,7 @@ class NotebookService:
             self.run_nlm("source", "add", nb_id, "--url", url)
             
             # 3. 產出摘要
-            prompt = "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
+            prompt = custom_prompt or "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
             res = self.run_nlm("query", "notebook", nb_id, prompt)
             
             if res.returncode == 0:
