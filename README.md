@@ -10,6 +10,13 @@
 
 ---
 
+## 🌐 Language
+- [繁體中文](README.md)
+- [简体中文](README.zh-cn.md)
+- [English](README.en.md)
+
+---
+
 ## 🚀 運作流程與 Actions 說明
 
 當您在 GitHub 的 **Actions** 分頁中查看時，會看到以下兩個工作流：
