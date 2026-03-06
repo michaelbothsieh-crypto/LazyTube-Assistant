@@ -188,62 +188,45 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.16 - TEST MODE]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.17 - TEST MODE]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 深入探查 nlm 指令與原始碼
-    print("--- [ 指令與原始碼探查 ] ---")
+    # 1. 修正探查指令
+    print("--- [ 原始碼深度探查 ] ---")
     try:
         import notebooklm_tools
         pkg_dir = os.path.dirname(notebooklm_tools.__file__)
         print(f"📍 模組路徑: {pkg_dir}")
-        
-        # 查看指令說明
-        print("📖 nlm login --help:")
-        subprocess.run(["nlm", "login", "--help"], check=False)
-        print("📖 nlm config --help:")
-        subprocess.run(["nlm", "config", "--help"], check=False)
-        
-        # 列出所有檔案以定位邏輯
-        print("📂 完整檔案清單:")
-        subprocess.run(["find", pkg_dir, "-maxdepth", 3, "-name", "*.py"], check=False)
-        
-        # 搜尋 "Profile" 關鍵字
-        print("🔍 搜尋 'Profile' 關鍵字定義:")
-        subprocess.run(["grep", "-r", "Profile", pkg_dir], check=False)
+        subprocess.run(["find", pkg_dir, "-maxdepth", "3", "-name", "*.py"], check=False)
     except Exception as e:
         print(f"⚠️ 探查失敗: {e}")
 
-    # 2. 還原 NLM Cookie (新增 notebooklm-tools 路徑嘗試)
+    # 2. 使用正規指令還原 NLM 憑證
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
-        print("--- [ 正在還原 NotebookLM 憑證 ] ---")
+        print("--- [ 正在透過正規指令還原憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
-        home = os.path.expanduser("~")
+        temp_auth = os.path.abspath("temp_auth.json")
+        with open(temp_auth, "wb") as f:
+            f.write(cookie_data)
         
-        # 增加 'notebooklm-tools' 變體
-        app_names = ["notebooklm-tools", "notebooklm-mcp-cli", "notebooklm-mcp"]
-        for app_name in app_names:
-            base_dir = platformdirs.user_config_dir(app_name)
-            try:
-                os.makedirs(base_dir, exist_ok=True)
-                auth_path = os.path.join(base_dir, "auth.json")
-                with open(auth_path, "wb") as f:
-                    f.write(cookie_data)
-                
-                # 寫入簡約版 profiles.json
-                with open(os.path.join(base_dir, "profiles.json"), "w") as f:
-                    json.dump({"default_profile": "default", "profiles": {"default": {"auth_path": auth_path}}}, f)
-                
-                # 建立子目錄結構
-                d_dir = os.path.join(base_dir, "profiles", "default")
-                os.makedirs(d_dir, exist_ok=True)
-                with open(os.path.join(d_dir, "auth.json"), "wb") as f:
-                    f.write(cookie_data)
-                print(f"✅ 已嘗試還原至: {base_dir}")
-            except Exception:
-                pass
+        try:
+            # 使用 nlm login --manual 指令
+            print(f"🔄 執行: nlm login --manual --file {temp_auth} --profile default")
+            login_proc = subprocess.run(
+                ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
+                capture_output=True, text=True
+            )
+            if login_proc.returncode == 0:
+                print("✅ nlm login 執行成功！")
+            else:
+                print(f"❌ nlm login 失敗: {login_proc.stdout} {login_proc.stderr}")
+        except Exception as e:
+            print(f"❌ 執行指令時發生異常: {e}")
+        finally:
+            if os.path.exists(temp_auth):
+                os.remove(temp_auth)
 
         # 3. 診斷
         print("--- [ NLM Doctor 診斷報告 ] ---")
