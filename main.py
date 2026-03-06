@@ -188,58 +188,64 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.20 - TEST MODE]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.21 - TEST MODE]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 還原 NLM Cookie (強化清理與驗證)
-    cookie_b64 = os.environ.get("NLM_COOKIE_BASE64", "")
-    if cookie_b64:
-        print("--- [ 正在還原 NotebookLM 憑證 ] ---")
-        # 清理字串，移除可能的換行符或空格
-        cookie_b64 = "".join(cookie_b64.split())
+    # 1. 還原 NLM Cookie (增加長度診斷)
+    cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
+    if cookie_b64_raw:
+        print("--- [ 正在分析 NLM 憑證字串 ] ---")
+        print(f"📏 原始字串長度 (含空白/換行): {len(cookie_b64_raw)}")
+        
+        # 清理字串
+        cookie_b64 = "".join(cookie_b64_raw.split())
+        print(f"📏 清理後字串長度: {len(cookie_b64)}")
         
         try:
             cookie_data = base64.b64decode(cookie_b64)
-            # 檢查是否為有效的 JSON
+            print(f"📦 解碼後數據大小: {len(cookie_data)} bytes")
+            
             try:
                 cookie_json = json.loads(cookie_data)
-                print(f"✅ 憑證 JSON 解析成功。包含欄位: {list(cookie_json.keys())}")
+                print(f"✅ JSON 解析成功。欄位: {list(cookie_json.keys())}")
                 if "cookies" in cookie_json:
                     print(f"✅ 偵測到 {len(cookie_json['cookies'])} 個 Cookie。")
-                else:
-                    print("⚠️ 警告: JSON 中找不到 'cookies' 欄位。")
-            except Exception as je:
-                print(f"❌ 憑證內容並非有效 JSON: {je}")
-
-            # 寫入暫存檔用於指令匯入
-            temp_auth = os.path.abspath("temp_auth.json")
-            with open(temp_auth, "wb") as f:
-                f.write(cookie_data)
-
-            # 使用 nlm login --manual 指令
-            print(f"🔄 執行: nlm login --manual --file {temp_auth} --profile default --force")
-            login_proc = subprocess.run(
-                ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
-                capture_output=True, text=True
-            )
-            if login_proc.returncode == 0:
-                print("✅ nlm login 執行成功！")
-            else:
-                print(f"❌ nlm login 失敗: {login_proc.stdout} {login_proc.stderr}")
                 
-            if os.path.exists(temp_auth):
-                os.remove(temp_auth)
-        except Exception as e:
-            print(f"❌ 還原過程發生異常: {e}")
+                # 寫入暫存檔
+                temp_auth = os.path.abspath("temp_auth.json")
+                with open(temp_auth, "wb") as f:
+                    f.write(cookie_data)
 
-        # 2. 診斷 (保持 doctor 診斷以確認 Profiles 狀態)
-        print("--- [ NLM Doctor 診斷報告 ] ---")
+                print(f"🔄 執行: nlm login --manual --profile default --force")
+                login_proc = subprocess.run(
+                    ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
+                    capture_output=True, text=True
+                )
+                if login_proc.returncode == 0:
+                    print("✅ nlm login 成功！")
+                else:
+                    print(f"❌ nlm login 失敗: {login_proc.stdout} {login_proc.stderr}")
+                
+                if os.path.exists(temp_auth):
+                    os.remove(temp_auth)
+            except Exception as je:
+                print(f"❌ JSON 格式錯誤 (可能被截斷): {je}")
+                # 嘗試印出最後 20 個字元來確認是否結尾正確 (JSON 應以 } 結尾)
+                try:
+                    last_chars = cookie_data.decode('utf-8')[-20:]
+                    print(f"🔍 數據結尾 20 字元: ...{last_chars}")
+                except: pass
+                
+        except Exception as e:
+            print(f"❌ 還原過程異常: {e}")
+
+        print("--- [ NLM Doctor 診斷 ] ---")
         subprocess.run(["nlm", "doctor"], check=False)
         print("="*50)
 
-    # --- [ 測試模式：跳過 YouTube API ] ---
-    print("🧪 測試模式啟動：跳過 YouTube API，使用固定測試 URL。")
+    # --- [ 測試模式 ] ---
+...    print("🧪 測試模式啟動：跳過 YouTube API，使用固定測試 URL。")
     videos_to_process = [{
         "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         "title": "TEST_VIDEO_SUMMARY",
