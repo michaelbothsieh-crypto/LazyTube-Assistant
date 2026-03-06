@@ -36,18 +36,31 @@ async def handle_telegram_update(update: dict):
         return
 
     chat_id = str(message.get("chat", {}).get("id", ""))
+    user_id = str(message.get("from", {}).get("id", ""))
     text = (message.get("text") or "").strip()
 
     if not chat_id or not text:
         return
 
-    # 2. 處理群組指令格式 (e.g. /nlm@LazyTubeBot -> /nlm)
+    # 2. 安全性檢查：白名單過濾
+    # 如果設定了 ALLOWED_USERS，只有名單內的使用者可以觸發任務
+    allowed_list = os.environ.get("ALLOWED_USERS", "").split(",")
+    allowed_list = [u.strip() for u in allowed_list if u.strip()]
+    if allowed_list and user_id not in allowed_list and chat_id not in allowed_list:
+        if text.startswith("/"):
+            await send_telegram_message(chat_id, f"⚠️ <b>權限不足</b>\n您的 ID (<code>{user_id}</code>) 不在授權名單中。")
+        return
+
+    # 3. 處理群組指令格式 (e.g. /nlm@LazyTubeBot -> /nlm)
     if "@" in text:
         text = text.split("@")[0] if text.startswith("/") else text
 
     # --- 指令路由 ---
     if text.startswith("/start"):
         await _handle_start(chat_id)
+
+    elif text.startswith("/my_id"):
+        await send_telegram_message(chat_id, f"您的 Telegram ID 為：<code>{user_id}</code>")
 
     elif text.startswith("/help"):
         await _handle_help(chat_id)
@@ -57,6 +70,12 @@ async def handle_telegram_update(update: dict):
 
     elif text.startswith("/nlm"):
         await _handle_nlm(chat_id, text)
+
+    elif "youtube.com/" in text or "youtu.be/" in text:
+        # 自動辨識網址 (若沒打指令但貼了網址)
+        urls = re.findall(r'(https?://\S+)', text)
+        if urls:
+            await _handle_nlm(chat_id, f"/nlm {urls[0]}")
 
     else:
         # 非指令訊息，忽略

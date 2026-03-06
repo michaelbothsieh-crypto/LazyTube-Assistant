@@ -20,10 +20,12 @@ class Config:
     
     DEFAULT_KEYWORDS = "poe,path of exile,流亡黯道,build,guide,攻略,開荒,賽季,league,atlas,輿圖,天賦,機制,拓荒,暗黑,diablo"
     FILTER_KEYWORDS = os.environ.get("FILTER_KEYWORDS", DEFAULT_KEYWORDS)
+    
+    # 白名單使用者 ID (逗號分隔)
+    ALLOWED_USERS = os.environ.get("ALLOWED_USERS", "")
 
     @classmethod
-    def get_keywords(cls):
-        """
-        /// 取得處理後的關鍵字清單
-        """
-        return [k.strip().lower() for k in cls.FILTER_KEYWORDS.split(",")]
+    def get_allowed_users(cls):
+        """取得授權使用者清單"""
+        if not cls.ALLOWED_USERS: return []
+        return [u.strip() for k in cls.ALLOWED_USERS.split(",")]
