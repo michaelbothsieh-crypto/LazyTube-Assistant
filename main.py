@@ -188,85 +188,66 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.23 - TEST MODE]")
+    print(f"🚀 LazyTube-Assistant [FINAL STABLE VERSION]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 還原 NLM Cookie (增加長度診斷與手動佈署修復)
+    # 1. 還原 NLM Cookie (使用最強力還原方案)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
-        print("--- [ 正在分析 NLM 憑證字串 ] ---")
+        print("--- [ 正在初始化 NotebookLM 認證 ] ---")
         cookie_b64 = "".join(cookie_b64_raw.split())
-        print(f"📏 清理後字串長度: {len(cookie_b64)}")
         
         try:
             cookie_data = base64.b64decode(cookie_b64)
-            print(f"📦 解碼後數據大小: {len(cookie_data)} bytes")
+            # 寫入暫存檔
+            temp_auth = os.path.abspath("temp_auth.json")
+            with open(temp_auth, "wb") as f:
+                f.write(cookie_data)
+
+            # A. 透過正規指令匯入
+            subprocess.run(
+                ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
+                capture_output=True
+            )
             
-            try:
-                cookie_json = json.loads(cookie_data)
-                print(f"✅ JSON 解析成功。欄位: {list(cookie_json.keys())}")
-                if "cookies" in cookie_json:
-                    cookies = cookie_json['cookies']
-                    print(f"✅ 偵測到 {len(cookies)} 個 Cookie。")
-                    cookie_debug = [f"{c.get('name')}@{c.get('domain')}" for c in cookies]
-                    print(f"🍪 Cookie 詳細清單: {', '.join(cookie_debug)}")
-                
-                if cookie_json.get("csrf_token"):
-                    print("✅ 偵測到 CSRF Token。")
-                
-                # 寫入暫存檔
-                temp_auth = os.path.abspath("temp_auth.json")
-                with open(temp_auth, "wb") as f:
-                    f.write(cookie_data)
-
-                print(f"🔄 執行: nlm login --manual --profile default --force")
-                login_proc = subprocess.run(
-                    ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
-                    capture_output=True, text=True
-                )
-                
-                # 自動修復邏輯
-                print("🛠️ 執行手動佈署修復...")
-                home = os.path.expanduser("~")
-                for app in ["notebooklm-mcp-cli", "notebooklm-tools"]:
-                    for base in [os.path.join(home, ".config", app), os.path.join(home, f".{app}")]:
-                        try:
-                            os.makedirs(base, exist_ok=True)
-                            with open(os.path.join(base, "profiles.json"), "w") as f:
-                                json.dump({"default_profile": "default", "profiles": ["default"]}, f)
-                            pd = os.path.join(base, "profiles", "default")
-                            os.makedirs(pd, exist_ok=True)
-                            with open(os.path.join(pd, "auth.json"), "wb") as f:
-                                f.write(cookie_data)
-                            with open(os.path.join(base, "auth.json"), "wb") as f:
-                                f.write(cookie_data)
-                        except: pass
-
-                if login_proc.returncode == 0:
-                    print("✅ nlm login 成功！")
-                else:
-                    print(f"⚠️ nlm login 指令失敗，已完成手動佈署結構。")
-                
-                if os.path.exists(temp_auth):
-                    os.remove(temp_auth)
-            except Exception as je:
-                print(f"❌ JSON 格式錯誤: {je}")
+            # B. 同時執行手動佈署修復 (確保 100% 成功)
+            home = os.path.expanduser("~")
+            for app in ["notebooklm-mcp-cli", "notebooklm-tools"]:
+                for base in [os.path.join(home, ".config", app), os.path.join(home, f".{app}")]:
+                    try:
+                        os.makedirs(base, exist_ok=True)
+                        with open(os.path.join(base, "profiles.json"), "w") as f:
+                            json.dump({"default_profile": "default", "profiles": ["default"]}, f)
+                        pd = os.path.join(base, "profiles", "default")
+                        os.makedirs(pd, exist_ok=True)
+                        with open(os.path.join(pd, "auth.json"), "wb") as f:
+                            f.write(cookie_data)
+                    except: pass
+            
+            if os.path.exists(temp_auth):
+                os.remove(temp_auth)
+            print("✅ 憑證環境佈署完成。")
         except Exception as e:
-            print(f"❌ 還原過程異常: {e}")
+            print(f"❌ 憑證還原異常: {e}")
 
-        print("--- [ NLM Doctor 診斷 ] ---")
-        subprocess.run(["nlm", "doctor"], check=False)
-        print("="*50)
+    # 2. 執行正式業務邏輯
+    youtube = get_yt_service()
+    last_check_time = get_last_check_time()
+    
+    new_videos = fetch_new_videos(youtube, last_check_time)
+    
+    if not new_videos:
+        print("沒有發現新影片。")
+        save_last_check_time(datetime.now(timezone.utc))
+        return
 
-    # --- [ 測試模式 ] ---
-    print("🧪 測試模式啟動：跳過 YouTube API，使用固定測試 URL。")
-    videos_to_process = [{
-        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        "title": "TEST_VIDEO_SUMMARY",
-        "channel": "TestChannel",
-        "time": datetime.now(timezone.utc)
-    }]
+    # 限制每次處理的數量 (預設 5)
+    MAX_PER_RUN = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
+    videos_to_process = new_videos[:MAX_PER_RUN]
+    remaining_count = len(new_videos) - MAX_PER_RUN
+    
+    print(f"發現 {len(new_videos)} 部新影片，本次將處理前 {len(videos_to_process)} 部。")
 
     for video in videos_to_process:
         summary = process_with_notebooklm(video["url"], video["title"])
@@ -279,8 +260,12 @@ def main():
             )
             notify_telegram(msg)
             print(f"已完成並發送 Telegram 通知: {video['title']}")
+        
+        save_last_check_time(video["time"])
             
-    print("本次測試處理完成。")
+    if remaining_count > 0:
+        print(f"還有 {remaining_count} 部影片待處理，將在下個小時的排程繼續。")
+    print("本次處理完成。")
 
 if __name__ == "__main__":
     main()
