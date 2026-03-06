@@ -1,0 +1,14 @@
+name: Bug Report
+description: 報告發現的錯誤
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: 錯誤描述
+      description: 請詳細描述發生的問題。
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 重現步驟
+      description: 讓我們知道如何重現這個錯誤。

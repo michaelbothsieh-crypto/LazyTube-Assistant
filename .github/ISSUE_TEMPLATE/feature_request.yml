@@ -1,0 +1,8 @@
+name: Feature Request
+description: 提議新功能
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: 功能描述
+      description: 您希望增加什麼功能？
