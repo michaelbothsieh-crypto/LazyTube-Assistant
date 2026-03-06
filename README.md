@@ -1,77 +1,62 @@
 # 🤖 LazyTube-Assistant
 
-一個結合 **Google NotebookLM** 與 **YouTube API** 的個人化全自動摘要工具。本專案專為解決資訊焦慮設計，能自動追蹤訂閱內容或透過自定義 Hook（如行動裝置、Telegram）實現隨選 AI 分析。
+[![GitHub License](https://img.shields.io/github/license/michaelbothsieh-crypto/LazyTube-Assistant)](LICENSE)
+[![Actions Status](https://img.shields.io/github/actions/workflow/status/michaelbothsieh-crypto/LazyTube-Assistant/yt-summary.yml?branch=main&label=Automated%20Summary)](https://github.com/michaelbothsieh-crypto/LazyTube-Assistant/actions)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 
-> **核心依賴**：本專案基於 [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) 開發，利用其 MCP 協議實現對 NotebookLM 的深度操作。
+**LazyTube-Assistant** 是一個基於 **Google NotebookLM** 與 **YouTube API** 的智慧追劇助理。它能自動過濾您感興趣的遊戲內容，利用 NotebookLM 的強大上下文理解能力產出精確摘要，並即時推播至 **Telegram**。
 
-## 🌟 核心功能
-- **🔍 自動監控**：定時檢查 YouTube 訂閱頻道，第一時間掌握新知。
-- **🧠 隨選分析**：支援外部 Hook 觸發（如 Telegram Webhook），實現遠端隨傳隨到的 AI 摘要。
-- **🧹 自動清理**：摘要完成後立即銷毀臨時 Notebook，保護隱私且維持環境整潔。
-- **📢 多端通知**：結果可即時推播至您的行動裝置或 Telegram 頻道。
+不再需要點開每部影片，讓 AI 幫您過濾出 5 個核心重點！
 
 ---
 
-## 🛠️ 開發紀錄與技術挑戰
+## ✨ 核心亮點
 
-在開發過程中，我們解決了針對 `notebooklm-mcp-cli` (v0.4.0+) 在雲端環境執行的關鍵卡關問題：
-
-### 1. 認證完整性 (CSRF Token 謎題)
-- **挑戰**：單純使用 `cookies.json` 會導致 Google 回報憑證無效。
-- **解決**：我們發現工具需要 `metadata.json` 裡的 `csrf_token`。由於官方指令在匯入時會自動過濾部分數據，本專案改用「**先由指令初始化結構，再手動注入完整合併 JSON**」的調包計（Bait-and-Switch），確保在無頭環境（Headless）也能 100% 認證成功。
-
-### 2. 多環境路徑相容
-- **挑戰**：Ubuntu (GitHub Actions) 與 Mac 的配置路徑完全不同，且 0.4.0 版本將 Profile 視為資料夾而非檔案。
-- **解決**：我們實作了動態路徑偵測邏輯，精確鎖定 `~/.notebooklm-mcp-cli/profiles/default/auth.json` 進行數據注入。
+- **🎯 智慧關鍵字過濾**：僅針對感興趣的標題（如：PoE, Build, 賽季攻略）進行分析，節省 API 配額與時間。
+- **🧠 深度 AI 理解**：利用 [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) 模擬瀏覽器行為，獲取比一般 GPT 更精確的影片上下文摘要。
+- **🧹 自動清理機制**：任務完成後立即銷毀臨時 Notebook，保護隱私且維持環境整潔。
+- **⚡ 零成本營運**：完全託管於 GitHub Actions 與 Vercel，24/7 不間斷服務且無需自備伺服器。
+- **📱 隨選摘要支援**：支援行動裝置觸發 Webhook，隨時對特定 URL 進行 AI 深度分析。
 
 ---
 
-## 🏗️ 系統架構與安全性
+## 🚀 快速上手 (Quick Start)
 
-本專案採用 **「觸發與執行分離」** 的架構：
+### 1. 取得認證憑證 (核心步驟)
+本專案依賴 NotebookLM 的 Session Cookie。請依照以下步驟操作：
+1. 在本地安裝 [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) 並執行 `nlm login --force`。
+2. 進入憑證目錄並執行本專案附帶的工具：
+   ```bash
+   python auth_tool.py
+   ```
+3. 複製輸出的 Base64 字串，準備貼到 GitHub Secrets。
 
-1.  **觸發層 (Trigger)**：支援 Vercel API 作為 Webhook 端點。
-    - **安全性**：透過 `TG_WEBHOOK_SECRET` 確保只有來自授權來源（如 Telegram 官方伺服器）的請求能被接受。
-    - **隱私**：建議開發者在代碼中加入 `chat_id` 白名單檢查，確保機器人僅回應您本人的指令。
-2.  **執行層 (Worker)**：利用 [GitHub Actions](https://github.com/features/actions) 作為運算核心，避免長時間占用伺服器資源。
-
----
-
-## ⚠️ 風險聲明與限制
-
-1. **非官方通訊協議**：本專案依賴模擬瀏覽器行為與 Google 通訊。一旦 Google 修改 NotebookLM 的網頁結構，本工具可能需要更新後方可使用。
-2. **憑證時效性**：`NLM_COOKIE_BASE64` 憑證通常僅維持 **2 至 4 週**。失效時請參閱下方教學重新產生。
-3. **配額限制**：[YouTube Data API v3](https://developers.google.com/youtube/v3) 每日有配額限制，請合理設定掃描頻率。
-
----
-
-## 🔑 憑證更新教學
-
-當功能失效時，請在本地執行以下合併指令，產生 22,060 字元以上的完整 Base64：
-
-```bash
-cd ~/.notebooklm-mcp-cli/profiles/default
-python3 -c "
-import json, base64
-with open('cookies.json', 'r') as f: cookies = json.load(f)
-with open('metadata.json', 'r') as f: meta = json.load(f)
-meta['cookies'] = cookies
-combined = json.dumps(meta)
-print(base64.b64encode(combined.encode()).decode())
-" | tr -d '\n' | pbcopy
-```
-將結果更新至 GitHub Secret：`NLM_COOKIE_BASE64`。
-
----
-
-## 🛠️ 環境變數 (Secrets) 參考
+### 2. 環境變數設定
+在 GitHub 儲存庫的 `Settings > Secrets > Actions` 設定以下變數：
 
 | 變數名稱 | 來源 / 用途 |
 | :--- | :--- |
-| `YT_CLIENT_ID` | [Google Cloud Console](https://console.cloud.google.com/) OAuth 憑證 |
-| `TELEGRAM_BOT_TOKEN` | [BotFather](https://t.me/botfather) 取得 |
-| `NLM_COOKIE_BASE64` | 本地合併後的完整認證 JSON |
-| `TG_WEBHOOK_SECRET` | 用於驗證 Webhook 來源的自定義安全金鑰 |
+| `YT_CLIENT_ID` | YouTube API 用戶端 ID |
+| `YT_REFRESH_TOKEN` | YouTube API 重新整理令牌 |
+| `TELEGRAM_BOT_TOKEN` | Telegram 機器人 Token |
+| `NLM_COOKIE_BASE64` | `auth_tool.py` 產生的合併憑證 |
+| `FILTER_KEYWORDS` | (選填) 自定義過濾關鍵字，以逗號分隔 |
+
+---
+
+## 🏗️ 系統架構
+
+1. **Trigger 層 (Vercel)**：接收 Telegram 指令或行動裝置 Hook。
+2. **Worker 層 (GitHub Actions)**：執行 YouTube 抓取、NotebookLM 分析與推播。
+3. **AI 層 (NotebookLM)**：負責處理最核心的內容理解與摘要產出。
+
+---
+
+## 🛡️ 安全性與風險告知
+
+- **隱私聲明**：專案會將 URL 傳送至 Google NotebookLM 伺服器，請勿分析敏感內容。
+- **維護提醒**：Cookie 通常有效期為 2-4 週，失效時需重新執行 `auth_tool.py`。
+- **合規性**：本專案使用非官方通訊協議，請遵守 Google 相關使用規範。
 
 ---
 *Developed by Michael*
