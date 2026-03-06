@@ -27,31 +27,33 @@ def process_with_notebooklm(video_url, title):
     summary_text = None
     
     try:
-        # 1. 建立筆記本並抓取 ID
+        # 1. 建立筆記本
         res = run_nlm("notebook", "create", notebook_name)
         if res.returncode == 0:
             match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
             notebook_id = match.group(1) if match else notebook_name
-            print(f"📌 使用 Notebook ID: {notebook_id}")
         else: return None
         
-        # 2. 新增來源 (嘗試使用 ID)
-        res = run_nlm("source", "add", notebook_id, "--url", video_url)
-        if res.returncode != 0:
-            print("⚠️ 嘗試使用名稱新增來源...")
-            res = run_nlm("source", "add", notebook_name, "--url", video_url)
+        # 2. 新增來源
+        run_nlm("source", "add", notebook_id, "--url", video_url)
         
+        # 3. 執行摘要 (嘗試多種 0.4.0 語法)
+        print("🔄 嘗試獲取摘要...")
+        
+        # 語法 A: 使用 describe 指令 (最推薦用於摘要)
+        print("--- [ 嘗試語法 A: nlm describe ] ---")
+        res = run_nlm("describe", "notebook", notebook_id)
         if res.returncode == 0:
-            # 3. 執行查詢 (修正語法：加入 ask 子指令)
-            query = "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
-            # 嘗試兩種可能語法
-            print("🔄 執行摘要查詢...")
-            res = run_nlm("query", "ask", notebook_id, query)
-            if res.returncode != 0:
-                res = run_nlm("query", notebook_id, query) # 備案語法
-            
+            summary_text = res.stdout.strip()
+        
+        # 語法 B: 使用 query notebook 指令
+        if not summary_text:
+            print("--- [ 嘗試語法 B: nlm query notebook ] ---")
+            query = "請用繁體中文總結這部影片的 5 個重點"
+            res = run_nlm("query", "notebook", notebook_id, query)
             if res.returncode == 0:
                 summary_text = res.stdout.strip()
+
     finally:
         if notebook_id:
             run_nlm("notebook", "delete", notebook_id, "--confirm")
@@ -59,10 +61,10 @@ def process_with_notebooklm(video_url, title):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.39 - SYNTAX FIX]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.40 - COMMAND DISCOVERY]")
     print("="*50)
 
-    # 1. 認證佈署 (維持 VERSION 38 成功的邏輯)
+    # 1. 認證佈署 (維持穩定邏輯)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
         try:
@@ -71,7 +73,6 @@ def main():
             home = os.path.expanduser("~")
             profile_dir = os.path.join(home, ".notebooklm-mcp-cli", "profiles", "default")
             os.makedirs(profile_dir, exist_ok=True)
-            
             with open(os.path.join(profile_dir, "auth.json"), "wb") as f: f.write(full_data_bytes)
             with open(os.path.join(profile_dir, "cookies.json"), "w") as f: json.dump(full_json.get("cookies", []), f)
             with open(os.path.join(profile_dir, "metadata.json"), "w") as f: json.dump({k:v for k,v in full_json.items() if k!="cookies"}, f)
@@ -80,15 +81,20 @@ def main():
             print("✅ 憑證環境佈署成功。")
         except Exception as e: print(f"❌ 佈署失敗: {e}")
 
-    # --- [ 測試模式：使用確定可抓取的影片 ] ---
-    print("🧪 啟動修正語法後的測試摘要...")
-    test_url = "https://www.youtube.com/watch?v=t5RVVWUS9nk" # 您清單中最近的一部
+    # 2. 幫助診斷：找出正確指令
+    print("--- [ 指令幫助診斷 ] ---")
+    run_nlm("query", "--help")
+    run_nlm("describe", "--help")
+    print("="*50)
+
+    # 3. 測試摘要
+    test_url = "https://www.youtube.com/watch?v=t5RVVWUS9nk"
     summary = process_with_notebooklm(test_url, "POEGuy Live Stream")
     
     if summary:
         print(f"\n🎉 摘要產出成功！\n{summary}")
     else:
-        print("\n❌ 摘要產出失敗，請檢查 Log。")
+        print("\n❌ 摘要產出失敗。")
     
     print("本次測試處理完成。")
 
