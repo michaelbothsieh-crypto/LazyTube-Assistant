@@ -1,8 +1,8 @@
 # 🤖 LazyTube-Assistant
 
-[![GitHub License](https://img.shields.io/github/license/michaelbothsieh-crypto/LazyTube-Assistant)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Zero Cost](https://img.shields.io/badge/Cost-0_Server_Required-brightgreen)](https://github.com/features/actions)
-[![Automated](https://img.shields.io/badge/Service-100%25_Automated-orange)](https://github.com/features/actions)
+[![Actions Status](https://img.shields.io/badge/Actions-24/7_Ready-success)](https://github.com/michaelbothsieh-crypto/LazyTube-Assistant/actions)
 
 **LazyTube-Assistant** 是一個實現「完全零成本」營運的智慧影片摘要助理。利用 **GitHub Actions** 的免費運算資源，自動監控、分析並推播您感興趣的內容。
 
