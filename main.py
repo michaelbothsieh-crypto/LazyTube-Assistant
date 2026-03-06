@@ -215,11 +215,22 @@ def main():
             print("✅ 憑證環境佈署完成。")
             time.sleep(1) # 給予系統短暫時間同步
             
-            print("--- [ NLM Doctor 診斷報告 ] ---")
-            subprocess.run(["nlm", "doctor"], check=False)
+            print("--- [ 正在驗證 NLM 認證狀態 ] ---")
+            doctor_proc = subprocess.run(["nlm", "doctor"], capture_output=True, text=True)
+            print(doctor_proc.stdout)
+            
+            # 檢查是否認證成功
+            # 在 0.4.0 中，若成功應顯示 Profiles: default 或類似資訊
+            doctor_out = doctor_proc.stdout.lower()
+            if "profiles: none" in doctor_out or "not found" in doctor_out:
+                print("❌ [熔斷] NLM 認證未通過！請檢查憑證完整性。")
+                sys.exit(1)
+            
+            print("✨ NLM 認證驗證成功，準備執行業務邏輯。")
             print("="*50)
         except Exception as e:
             print(f"❌ 憑證還原失敗: {e}")
+            sys.exit(1)
 
     # 2. 執行業務邏輯
     youtube = get_yt_service()
