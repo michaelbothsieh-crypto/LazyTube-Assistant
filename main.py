@@ -6,12 +6,11 @@ import base64
 import subprocess
 import requests
 import uuid
+import platformdirs
 from datetime import datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
-
-import platformdirs
 
 # 配置區域
 LAST_CHECK_FILE = "last_check.txt"
@@ -188,6 +187,11 @@ def notify_telegram(message):
         print(f"Telegram 推播失敗: {resp.status_code} {resp.text}")
 
 def main():
+    print("="*50)
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.05]")
+    print(f"📂 當前目錄: {os.getcwd()}")
+    print("="*50)
+
     # 還原 NLM Cookie (用於 GitHub Actions 環境)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
@@ -244,8 +248,6 @@ def main():
             pass
 
     youtube = get_yt_service()
-
-
     last_check_time = get_last_check_time()
     
     new_videos = fetch_new_videos(youtube, last_check_time)
