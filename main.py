@@ -17,6 +17,7 @@ from google.auth.transport.requests import Request
 LAST_CHECK_FILE = "last_check.txt"
 
 def get_yt_service():
+    """取得 YouTube API 服務"""
     client_id = os.environ.get("YT_CLIENT_ID")
     client_secret = os.environ.get("YT_CLIENT_SECRET")
     refresh_token = os.environ.get("YT_REFRESH_TOKEN")
@@ -39,29 +40,8 @@ def save_last_check_time(dt):
     with open(LAST_CHECK_FILE, "w") as f:
         f.write(dt.isoformat())
 
-def fetch_new_videos(youtube, last_check_time):
-    print(f"正在檢查 {last_check_time.isoformat()} 之後的新影片...")
-    new_videos = []
-    try:
-        subs_request = youtube.subscriptions().list(part="snippet,contentDetails", mine=True, maxResults=20, order="relevance")
-        subs_response = subs_request.execute()
-        for sub in subs_response.get("items", []):
-            channel_id = sub["snippet"]["resourceId"]["channelId"]
-            channel_title = sub["snippet"]["title"]
-            activities_request = youtube.activities().list(part="snippet,contentDetails", channelId=channel_id, maxResults=5)
-            activities_response = activities_request.execute()
-            for item in activities_response.get("items", []):
-                if item["snippet"]["type"] == "upload":
-                    publish_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                    if publish_time > last_check_time:
-                        video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
-                        if video_id:
-                            new_videos.append({"url": f"https://www.youtube.com/watch?v={video_id}", "title": item.get("snippet", {}).get("title", "Unknown"), "time": publish_time, "channel": channel_title})
-                            print(f"發現新影片: {item.get('snippet', {}).get('title')} (來自 {channel_title})")
-    except Exception as e: print(f"抓取影片錯誤: {e}")
-    return sorted(new_videos, key=lambda x: x["time"])
-
 def run_nlm(*args):
+    """執行 nlm 指令並印出完整輸出"""
     cmd = ["nlm", *args]
     print(f"[CMD] {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -95,14 +75,16 @@ def process_with_notebooklm(video_url, title):
 def notify_telegram(message):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not bot_token or not chat_id: return
+    if not bot_token or not chat_id:
+        print(f"--- [ 模擬 Telegram 通知 ] ---\n{message}\n---------------------------")
+        return
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     try: requests.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"}, timeout=15)
     except: pass
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.33]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.34 - TEST MODE]")
     print("="*50)
 
     # 1. 認證初始化 (調包計 3.0)
@@ -122,23 +104,22 @@ def main():
                 capture_output=True
             )
             
-            # 步驟 B: 針對資料夾結構進行精確調包
+            # 步驟 B: 精確調包
             home = os.path.expanduser("~")
             config_dir = os.path.join(home, ".notebooklm-mcp-cli")
-            # 在 0.4.0 中，憑證檔案在 profiles/default/auth.json
+            # 針對 0.4.0 版路徑
             final_auth = os.path.join(config_dir, "profiles", "default", "auth.json")
             
             os.makedirs(os.path.dirname(final_auth), exist_ok=True)
             with open(final_auth, "wb") as f:
                 f.write(cookie_data)
             
-            # 同時也寫入一份名為 'default' 的檔案，以防某些版本直接把檔名當成 profile 名稱
+            # 同時也寫入一份名為 'default' 的檔案 (不帶副檔名)
             alt_auth = os.path.join(config_dir, "profiles", "default", "default")
             with open(alt_auth, "wb") as f:
                 f.write(cookie_data)
 
-            print(f"✅ 步驟 B: 已成功調包，覆蓋完整憑證至 {final_auth}")
-
+            print(f"✅ 步驟 B: 調包完成，已覆蓋憑證至 {final_auth}")
             if os.path.exists(temp_auth): os.remove(temp_auth)
             
             print("--- [ NLM 認證診斷 ] ---")
@@ -147,16 +128,16 @@ def main():
         except Exception as e:
             print(f"❌ 憑證佈署失敗: {e}")
 
-    # 2. 業務邏輯
-    youtube = get_yt_service()
-    last_check_time = get_last_check_time()
-    new_videos = fetch_new_videos(youtube, last_check_time)
-    if not new_videos:
-        save_last_check_time(datetime.now(timezone.utc))
-        return
-    
-    MAX_PER_RUN = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
-    for video in new_videos[:MAX_PER_RUN]:
+    # --- [ 測試模式：跳過 YouTube API ] ---
+    print("🧪 測試模式啟動：完全跳過 YouTube API。")
+    test_videos = [{
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "title": "Rickroll Test Video",
+        "channel": "TestChannel",
+        "time": datetime.now(timezone.utc)
+    }]
+
+    for video in test_videos:
         summary = process_with_notebooklm(video["url"], video["title"])
         if summary:
             msg = (f"<b>🎥 {video['title']}</b>\n"
@@ -164,8 +145,9 @@ def main():
                    f"🔗 <a href='{video['url']}'>觀看</a>\n\n"
                    f"📝 <b>AI 摘要</b>\n{summary}")
             notify_telegram(msg)
-        save_last_check_time(video["time"])
-    print("本次處理完成。")
+            print(f"✅ 已完成測試摘要：{video['title']}")
+            
+    print("本次測試處理完成。")
 
 if __name__ == "__main__":
     main()
