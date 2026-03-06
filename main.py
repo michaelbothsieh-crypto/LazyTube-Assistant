@@ -11,10 +11,10 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 
+import platformdirs
+
 # 配置區域
 LAST_CHECK_FILE = "last_check.txt"
-# 通用路徑：~/.notebooklm-mcp-cli/auth.json (可用於還原模擬)
-AUTH_JSON_PATH = os.path.expanduser("~/.notebooklm-mcp-cli/auth.json")
 
 def get_yt_service():
     """取得 YouTube API 服務"""
@@ -191,20 +191,21 @@ def main():
     # 還原 NLM Cookie (用於 GitHub Actions 環境)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64")
     if cookie_b64:
-        base_dir = os.path.expanduser("~/.notebooklm-mcp-cli")
+        # 1. 使用 platformdirs 定位正確的設定檔目錄 (Ubuntu 上應為 ~/.config/notebooklm-mcp-cli)
+        base_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
         os.makedirs(base_dir, exist_ok=True)
         cookie_data = base64.b64decode(cookie_b64)
 
-        # 定義檔案路徑
+        # 2. 定義檔案路徑
         auth_path = os.path.join(base_dir, "auth.json")
         profiles_path = os.path.join(base_dir, "profiles.json")
 
-        # 1. 寫入 auth.json
+        # 3. 寫入 auth.json (這是最重要的檔案)
         with open(auth_path, "wb") as f:
             f.write(cookie_data)
         print(f"✅ 已還原憑證至: {auth_path}")
 
-        # 2. 寫入 profiles.json (包含 default 宣告)
+        # 4. 寫入 profiles.json (包含 default 宣告)
         profiles_data = {
             "default_profile": "default",
             "profiles": {
@@ -217,14 +218,16 @@ def main():
             json.dump(profiles_data, f)
         print(f"✅ 已建立並宣告 'default' 設定檔於: {profiles_path}")
 
-        # 3. Debug: 列出當前 CLI 狀態
-        try:
-            print("--- [ NLM Profile 狀態 ] ---")
-            subprocess.run(["nlm", "profile", "list"], capture_output=True, text=True)
-        except Exception:
-            pass
+        # 5. 為了絕對相容，也將 auth.json 複製一份到舊路徑
+        legacy_dir = os.path.expanduser("~/.notebooklm-mcp-cli")
+        if legacy_dir != base_dir:
+            os.makedirs(legacy_dir, exist_ok=True)
+            with open(os.path.join(legacy_dir, "auth.json"), "wb") as f:
+                f.write(cookie_data)
+            print(f"✅ 已同步憑證至舊路徑: {legacy_dir}")
 
     youtube = get_yt_service()
+
 
     last_check_time = get_last_check_time()
     

@@ -3,6 +3,7 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 requests
+platformdirs
 
 # Vercel FastAPI Server
 fastapi>=0.110.0
