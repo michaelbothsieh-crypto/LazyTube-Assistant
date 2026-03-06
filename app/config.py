@@ -28,4 +28,9 @@ class Config:
     def get_allowed_users(cls):
         """取得授權使用者清單"""
         if not cls.ALLOWED_USERS: return []
-        return [u.strip() for k in cls.ALLOWED_USERS.split(",")]
+        return [u.strip() for u in cls.ALLOWED_USERS.split(",")]
+
+    @classmethod
+    def get_keywords(cls):
+        """取得處理後的關鍵字清單"""
+        return [k.strip().lower() for k in cls.FILTER_KEYWORDS.split(",")]
