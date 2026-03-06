@@ -37,8 +37,20 @@ def main():
         
         # 4. 刪除處理中訊息 (僅限 Telegram)
         if message_id and not chat_id.startswith(('U', 'C', 'R')):
-            requests.post(f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/deleteMessage", 
-                          json={"chat_id": chat_id, "message_id": message_id})
+            print(f"🗑️ 正在嘗試刪除 Telegram 訊息 ID: {message_id}")
+            del_url = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/deleteMessage"
+            try:
+                # Telegram API 要求 message_id 為整數
+                del_resp = requests.post(del_url, json={
+                    "chat_id": chat_id, 
+                    "message_id": int(message_id)
+                }, timeout=10)
+                if del_resp.status_code == 200:
+                    print("✅ 訊息刪除成功")
+                else:
+                    print(f"⚠️ 訊息刪除失敗: {del_resp.status_code} {del_resp.text}")
+            except Exception as de:
+                print(f"❌ 刪除訊息發生異常: {de}")
 
 if __name__ == "__main__":
     main()
