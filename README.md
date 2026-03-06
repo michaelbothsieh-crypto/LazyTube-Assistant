@@ -1,15 +1,16 @@
 # 🤖 LAZYTUBE-ASSISTANT
 
+<p align="center">
+  <a href="README.md">繁體中文</a> | 
+  <a href="README.zh-cn.md">简体中文</a> | 
+  <a href="README.en.md">English</a>
+</p>
+
 > 🎉 **開發者告白！** 這是一個基於 **Google NotebookLM** 實現「完全零成本」營運的智慧影片摘要助理。
 
+---
+
 **LazyTube-Assistant** 讓你從此告別資訊焦慮。利用 GitHub Actions 的免費資源，24/7 自動監控、分析並推播您感興趣的內容精華。
-
----
-
-## 🌐 語言選擇 (Language)
-[繁體中文](README.md) | [简体中文](README.zh-cn.md) | [English](README.en.md)
-
----
 
 ## ✨ 功能特色
 
@@ -18,8 +19,6 @@
 - **🧠 深度 AI 解析**：基於 Google NotebookLM，提供邏輯嚴密且具備上下文理解的摘要。
 - **🎯 智慧內容過濾**：自動識別感興趣的內容（如：PoE 攻略、賽季更新），精確命中您的愛好。
 - **🛡️ 安全隱私設計**：憑證僅在隔離容器中處理，數據直接傳送至 Google，隱私無虞。
-
----
 
 ## 🚀 兩種使用方式
 
@@ -30,8 +29,6 @@
 ### 2. 📱 隨選摘要模式 (進階)
 透過 Telegram Webhook，直接將任何影片或網頁網址貼給機器人，AI 會立即開始分析。
 > **最適合：** 臨時需要深入了解特定影片，但沒時間看完。
-
----
 
 ## 📦 快速上手
 
@@ -52,8 +49,6 @@
 ### 3. 設定 GitHub Secrets
 前往 GitHub `Settings > Secrets and variables > Actions`，對照 **`.env`** 填入內容。
 
----
-
 ## 🛠️ 運作原理
 
 | 組件 | 角色說明 |
@@ -63,23 +58,17 @@
 | **NotebookLM** | 核心 AI 引擎（提供深度理解與摘要） |
 | **Telegram Bot** | 您的私人互動入口與結果接收端 |
 
----
-
 ## ⚠️ 風險聲明與限制
 
 - **非官方通訊協議**：本專案依賴模擬瀏覽器行為。若 Google 修改 NotebookLM 網頁結構，本工具可能需更新。
 - **憑證時效性**：Cookie 通常維持 **2 至 4 週**。失效時請重新執行 `setup_helper.py`。
 - **100% 隱私保護**：所有數據皆在隔離環境處理並直接傳送至 Google。
 
----
-
 ## ❤️ 特別鳴謝
 
 本專案的核心認證與操作邏輯深受 **[notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli)** 的啟發與支持。
 
 特別感謝作者 **[Jacob Ben-David](https://github.com/jacob-bd)** 開發了如此強大的 MCP 協議工具，讓 AI 代理能以程式化方式操作 NotebookLM。
-
----
 
 ## 📜 授權協議
 MIT License. Developed by Michael.
