@@ -13,6 +13,9 @@ class Config:
     TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
     TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
     
+    # LINE 配置
+    LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+    
     NLM_COOKIE_BASE64 = os.environ.get("NLM_COOKIE_BASE64", "")
     
     LAST_CHECK_FILE = "last_check.txt"

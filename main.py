@@ -43,10 +43,19 @@ def main():
     nlm = NotebookService()
     process_count = 0
     
+    # 支援從命令行參數讀取目標 Chat ID (隨選模式用)
+    target_chat_id = sys.argv[1] if len(sys.argv) > 1 else None
+    
     for video in new_videos[:Config.MAX_VIDEOS]:
         summary = nlm.process_video(video["url"], video["title"])
         if summary:
-            Notifier.send_summary(video["title"], video["url"], video["channel"], summary)
+            Notifier.send_summary(
+                video["title"], 
+                video["url"], 
+                video["channel"], 
+                summary, 
+                target_chat_id=target_chat_id
+            )
             print(f"✅ 已發送推播: {video['title']}")
             process_count += 1
         
