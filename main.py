@@ -188,11 +188,11 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.19 - TEST MODE]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.20 - TEST MODE]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 還原 NLM Cookie (強化清理邏輯)
+    # 1. 還原 NLM Cookie (強化清理與驗證)
     cookie_b64 = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64:
         print("--- [ 正在還原 NotebookLM 憑證 ] ---")
@@ -208,7 +208,7 @@ def main():
                 if "cookies" in cookie_json:
                     print(f"✅ 偵測到 {len(cookie_json['cookies'])} 個 Cookie。")
                 else:
-                    print("⚠️ 警告: JSON 中找不到 'cookies' 欄位，這可能導致認證失敗。")
+                    print("⚠️ 警告: JSON 中找不到 'cookies' 欄位。")
             except Exception as je:
                 print(f"❌ 憑證內容並非有效 JSON: {je}")
 
@@ -233,7 +233,7 @@ def main():
         except Exception as e:
             print(f"❌ 還原過程發生異常: {e}")
 
-        # 2. 診斷
+        # 2. 診斷 (保持 doctor 診斷以確認 Profiles 狀態)
         print("--- [ NLM Doctor 診斷報告 ] ---")
         subprocess.run(["nlm", "doctor"], check=False)
         print("="*50)
