@@ -210,7 +210,17 @@ def main():
                 cookie_json = json.loads(cookie_data)
                 print(f"✅ JSON 解析成功。欄位: {list(cookie_json.keys())}")
                 if "cookies" in cookie_json:
-                    print(f"✅ 偵測到 {len(cookie_json['cookies'])} 個 Cookie。")
+                    cookies = cookie_json['cookies']
+                    print(f"✅ 偵測到 {len(cookies)} 個 Cookie。")
+                    # 印出所有 Cookie 的名稱以便排錯 (不印內容)
+                    cookie_names = [c.get('name', 'UNKNOWN') for c in cookies]
+                    print(f"🍪 Cookie 名稱清單: {', '.join(cookie_names)}")
+                
+                # 檢查 CSRF Token
+                if cookie_json.get("csrf_token"):
+                    print("✅ 偵測到 CSRF Token。")
+                else:
+                    print("⚠️ 警告: 找不到 CSRF Token。")
                 
                 # 寫入暫存檔
                 temp_auth = os.path.abspath("temp_auth.json")
