@@ -17,7 +17,6 @@ from google.auth.transport.requests import Request
 LAST_CHECK_FILE = "last_check.txt"
 
 def get_yt_service():
-    """取得 YouTube API 服務"""
     client_id = os.environ.get("YT_CLIENT_ID")
     client_secret = os.environ.get("YT_CLIENT_SECRET")
     refresh_token = os.environ.get("YT_REFRESH_TOKEN")
@@ -63,7 +62,6 @@ def fetch_new_videos(youtube, last_check_time):
     return sorted(new_videos, key=lambda x: x["time"])
 
 def run_nlm(*args):
-    """執行 nlm 指令並印出完整輸出"""
     cmd = ["nlm", *args]
     print(f"[CMD] {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -104,32 +102,45 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.30]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.31]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 終極憑證佈署 (手動佈署合併後的 22,060 字元 JSON)
+    # 1. 認證初始化 (調包計策略)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
-        print("--- [ 正在手動佈署完整合併憑證 ] ---")
+        print("--- [ 正在初始化 NotebookLM 認證環境 ] ---")
         try:
             cookie_data = base64.b64decode("".join(cookie_b64_raw.split()))
-            home = os.path.expanduser("~")
-            # 根據 doctor 輸出的確定路徑
-            config_dir = os.path.join(home, ".notebooklm-mcp-cli")
-            profile_dir = os.path.join(config_dir, "profiles", "default")
-            os.makedirs(profile_dir, exist_ok=True)
-            
-            # 直接寫入 auth.json (包含 CSRF Token)
-            with open(os.path.join(profile_dir, "auth.json"), "wb") as f:
+            temp_auth = os.path.abspath("temp_auth.json")
+            with open(temp_auth, "wb") as f:
                 f.write(cookie_data)
+
+            # A. 先讓官方指令建立正確結構 (哪怕它會過濾內容)
+            print("🔄 步驟 A: 執行官方指令初始化目錄...")
+            subprocess.run(
+                ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
+                capture_output=True
+            )
             
-            # 寫入 profiles.json
-            with open(os.path.join(config_dir, "profiles.json"), "w") as f:
-                json.dump({"default_profile": "default", "profiles": {"default": {}}}, f)
+            # B. 立即調包：覆蓋掉官方產生的 auth.json，換成我們的完整版
+            home = os.path.expanduser("~")
+            target_auth = os.path.join(home, ".notebooklm-mcp-cli", "profiles", "default", "auth.json")
+            if os.path.exists(os.path.dirname(target_auth)):
+                with open(target_auth, "wb") as f:
+                    f.write(cookie_data)
+                print(f"✅ 步驟 B: 已成功覆蓋完整憑證至 {target_auth}")
+            else:
+                print("⚠️ 警告: 找不到目標目錄，嘗試備用路徑...")
+                # 備用路徑 (.config)
+                config_auth = os.path.join(home, ".config", "notebooklm-mcp-cli", "profiles", "default", "auth.json")
+                os.makedirs(os.path.dirname(config_auth), exist_ok=True)
+                with open(config_auth, "wb") as f:
+                    f.write(cookie_data)
+
+            if os.path.exists(temp_auth): os.remove(temp_auth)
             
-            print(f"✅ 憑證已手動佈署至: {profile_dir}")
-            time.sleep(1)
+            print("--- [ NLM 認證診斷 ] ---")
             run_nlm("doctor")
             print("="*50)
         except Exception as e:
