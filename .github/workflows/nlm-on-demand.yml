@@ -31,9 +31,9 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install notebooklm-mcp-cli
+    - name: Install dependencies
       run: |
-        pip install notebooklm-mcp-cli
+        pip install notebooklm-mcp-cli requests
 
     - name: Run NLM On-Demand Query
       env:

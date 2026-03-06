@@ -5,6 +5,7 @@ import re
 import base64
 import subprocess
 import requests
+import uuid
 from datetime import datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -12,7 +13,6 @@ from google.auth.transport.requests import Request
 
 # 配置區域
 LAST_CHECK_FILE = "last_check.txt"
-DEFAULT_NOTEBOOK = "YouTube_Summaries"
 # 通用路徑：~/.notebooklm-mcp-cli/auth.json (可用於還原模擬)
 AUTH_JSON_PATH = os.path.expanduser("~/.notebooklm-mcp-cli/auth.json")
 
@@ -103,8 +103,11 @@ def fetch_new_videos(youtube, last_check_time):
     return sorted(new_videos, key=lambda x: x["time"])
 
 def process_with_notebooklm(video_url, title):
-    """使用 nlm CLI 處理影片並生成摘要，確保獨立性和不遺留源檔"""
+    """使用 nlm CLI 處理影片並生成摘要，確保獨立性且在處理後刪除 Notebook"""
     print(f"正在處理: {title} ({video_url})")
+    
+    # 產生唯一的 Notebook 名稱
+    notebook_name = f"YT_Summary_{uuid.uuid4().hex[:8].upper()}"
 
     def run_nlm(*args):
         """執行 nlm 指令並印出完整輸出（debug 用）"""
@@ -117,35 +120,34 @@ def process_with_notebooklm(video_url, title):
             print(f"[STDERR] {result.stderr[:500]}")
         return result
     
-    # 1. 確保 Notebook 存在
-    print("正在確認 Notebook 存在...")
-    create_result = run_nlm("notebook", "create", DEFAULT_NOTEBOOK)
-    if create_result.returncode != 0:
-        combined = (create_result.stdout + create_result.stderr).lower()
-        if "already exists" not in combined:
-            print(f"警告: Notebook 建立/確認失敗，嘗試繼續...")
-
-    # 2. 新增來源並擷取 Source ID
-    print("正在新增來源至 NotebookLM...")
-    add_result = run_nlm("source", "add", DEFAULT_NOTEBOOK, "--url", video_url)
-    if add_result.returncode != 0:
-        print(f"新增來源失敗（stdout+stderr 已印於上方）")
-        return None
-
-    # 用正規表達式從合併輸出截取 Source ID（因 nlm 可能輸出在 stdout 或 stderr）
-    combined_output = add_result.stdout + add_result.stderr
-    match = re.search(r"Source ID:\s*([a-zA-Z0-9\-]+)", combined_output)
-    source_id = match.group(1) if match else None
-
-    if not source_id:
-        print(f"警告: 無法解析出 Source ID，可能會發生摘要混疊。")
-
+    notebook_created = False
     summary_text = None
+    
     try:
+        # 1. 建立獨立 Notebook
+        print(f"正在建立獨立 Notebook: {notebook_name}...")
+        create_result = run_nlm("notebook", "create", notebook_name)
+        if create_result.returncode != 0:
+            print(f"警告: Notebook 建立失敗，嘗試繼續...")
+        else:
+            notebook_created = True
+
+        # 2. 新增來源並擷取 Source ID
+        print("正在新增來源至 NotebookLM...")
+        add_result = run_nlm("source", "add", notebook_name, "--url", video_url)
+        if add_result.returncode != 0:
+            print(f"新增來源失敗")
+            return None
+
+        # 用正規表達式從合併輸出截取 Source ID
+        combined_output = add_result.stdout + add_result.stderr
+        match = re.search(r"Source ID:\s*([a-zA-Z0-9\-]+)", combined_output)
+        source_id = match.group(1) if match else None
+
         # 3. 執行查詢取得摘要
         query = "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
         print("正在產生摘要...")
-        query_args = ["query", DEFAULT_NOTEBOOK, query]
+        query_args = ["query", notebook_name, query]
         if source_id:
             query_args.extend(["-s", source_id])
 
@@ -154,13 +156,13 @@ def process_with_notebooklm(video_url, title):
         if query_result.returncode == 0:
             summary_text = query_result.stdout.strip()
         else:
-            print(f"查詢失敗（stdout+stderr 已印於上方）")
+            print(f"查詢失敗")
 
     finally:
-        # 4. 查完就刪除來源，避免塞爆 NotebookLM (每個 Notebook 上限 50 個來源)
-        if source_id:
-            print("清理中: 從 NotebookLM 刪除此影片來源...")
-            run_nlm("source", "delete", source_id, "--confirm")
+        # 4. 查完就刪除整個 Notebook，確保不遺留任何資料
+        if notebook_created:
+            print(f"清理中: 刪除臨時 Notebook {notebook_name}...")
+            run_nlm("notebook", "delete", notebook_name, "--confirm")
 
     return summary_text
 
