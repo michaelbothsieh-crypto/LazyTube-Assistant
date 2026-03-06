@@ -168,50 +168,60 @@ def notify_telegram(message):
     except Exception as e:
         print(f"Telegram 推播失敗: {e}")
 
+import time
+
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.25]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.26]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 憑證佈署 (使用 45 Cookie 數據配合正規 login --manual 指令)
+    # 1. 還原 NLM Cookie (必須是第一件事)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
-        print("--- [ 正在透過官方指令匯入 45-Cookie 憑證 ] ---")
-        cookie_data = base64.b64decode("".join(cookie_b64_raw.split()))
-        temp_auth = os.path.abspath("temp_auth.json")
-        with open(temp_auth, "wb") as f:
-            f.write(cookie_data)
-        
+        print("--- [ 正在還原 NotebookLM 憑證環境 ] ---")
         try:
-            # 執行官方推薦的 manual 匯入流程
+            cookie_data = base64.b64decode("".join(cookie_b64_raw.split()))
+            temp_auth = os.path.abspath("temp_auth.json")
+            with open(temp_auth, "wb") as f:
+                f.write(cookie_data)
+            
+            # 執行官方匯入指令
             subprocess.run(
                 ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
                 capture_output=True
             )
             
-            # 手動加固 (地毯式寫入，確保 doctor 一定能看到)
+            # 手動佈署加固 (針對 0.4.0 版本)
             home = os.path.expanduser("~")
             base_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
             os.makedirs(base_dir, exist_ok=True)
             auth_path = os.path.join(base_dir, "auth.json")
-            with open(auth_path, "wb") as f:
-                f.write(cookie_data)
+            
             with open(os.path.join(base_dir, "profiles.json"), "w") as f:
                 json.dump({"default_profile": "default", "profiles": {"default": {"auth_file": auth_path}}}, f)
+            with open(auth_path, "wb") as f:
+                f.write(cookie_data)
             
-            # 同時佈署到 profiles/default/ 結構
+            # 同時寫入 profiles/default/ 結構
             pd = os.path.join(base_dir, "profiles", "default")
             os.makedirs(pd, exist_ok=True)
             with open(os.path.join(pd, "auth.json"), "wb") as f:
                 f.write(cookie_data)
-
-            print("✅ 憑證環境佈署完成。")
-            subprocess.run(["nlm", "doctor"], check=False)
-        finally:
+            
             if os.path.exists(temp_auth):
                 os.remove(temp_auth)
+            
+            print("✅ 憑證環境佈署完成。")
+            time.sleep(1) # 給予系統短暫時間同步
+            
+            print("--- [ NLM Doctor 診斷報告 ] ---")
+            subprocess.run(["nlm", "doctor"], check=False)
+            print("="*50)
+        except Exception as e:
+            print(f"❌ 憑證還原失敗: {e}")
 
+    # 2. 執行業務邏輯
     youtube = get_yt_service()
     last_check_time = get_last_check_time()
     new_videos = fetch_new_videos(youtube, last_check_time)
