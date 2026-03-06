@@ -1,199 +1,58 @@
-import os
 import sys
-import json
-import re
-import base64
-import subprocess
-import uuid
-import time
-import requests
-from datetime import datetime, timedelta, timezone
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
-
-# 配置區域
-LAST_CHECK_FILE = "last_check.txt"
-
-# 遊戲相關過濾關鍵字 (可根據需求增減)
-GAME_KEYWORDS = [
-    "poe", "path of exile", "流亡黯道", "build", "guide", "攻略", "開荒", 
-    "賽季", "league", "atlas", "輿圖", "天賦", "機制", "拓荒", "暗黑", "diablo"
-]
-
-def get_yt_service():
-    """取得 YouTube API 服務"""
-    client_id = os.environ.get("YT_CLIENT_ID")
-    client_secret = os.environ.get("YT_CLIENT_SECRET")
-    refresh_token = os.environ.get("YT_REFRESH_TOKEN")
-    if not all([client_id, client_secret, refresh_token]):
-        print("錯誤: 缺少 YouTube API 環境變數")
-        sys.exit(1)
-    creds = Credentials(None, refresh_token=refresh_token, token_uri="https://oauth2.googleapis.com/token",
-                        client_id=client_id, client_secret=client_secret)
-    if creds.expired: creds.refresh(Request())
-    return build("youtube", "v3", credentials=creds)
+from datetime import datetime, timezone
+from app.config import Config
+from app.auth import AuthManager
+from app.youtube import YouTubeService
+from app.notebook import NotebookService
+from app.notifier import Notifier
 
 def get_last_check_time():
-    if os.path.exists(LAST_CHECK_FILE):
-        with open(LAST_CHECK_FILE, "r") as f:
-            content = f.read().strip()
-            if content: return datetime.fromisoformat(content)
-    return datetime.now(timezone.utc) - timedelta(hours=1)
+    """讀取上次檢查時間"""
+    try:
+        with open(Config.LAST_CHECK_FILE, "r") as f:
+            return datetime.fromisoformat(f.read().strip())
+    except:
+        return datetime.now(timezone.utc)
 
-def save_last_check_time(dt):
-    with open(LAST_CHECK_FILE, "w") as f:
+def save_check_time(dt):
+    """更新檢查時間"""
+    with open(Config.LAST_CHECK_FILE, "w") as f:
         f.write(dt.isoformat())
-
-def is_game_related(title):
-    """檢查標題是否包含遊戲相關關鍵字"""
-    title_lower = title.lower()
-    return any(keyword in title_lower for keyword in GAME_KEYWORDS)
-
-def fetch_new_videos(youtube, last_check_time):
-    print(f"正在檢查 {last_check_time.isoformat()} 之後的新影片...")
-    new_videos = []
-    try:
-        # 1. 取得訂閱頻道清單 (最多 50 個頻道以增加覆蓋率)
-        subs_request = youtube.subscriptions().list(
-            part="snippet,contentDetails", 
-            mine=True, 
-            maxResults=50, 
-            order="relevance"
-        )
-        subs_response = subs_request.execute()
-        
-        for sub in subs_response.get("items", []):
-            channel_id = sub["snippet"]["resourceId"]["channelId"]
-            channel_title = sub["snippet"]["title"]
-            
-            # 2. 取得該頻道的最新動態
-            activities_request = youtube.activities().list(
-                part="snippet,contentDetails", 
-                channelId=channel_id, 
-                maxResults=5
-            )
-            activities_response = activities_request.execute()
-            
-            for item in activities_response.get("items", []):
-                if item["snippet"]["type"] == "upload":
-                    publish_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                    
-                    if publish_time > last_check_time:
-                        title = item.get("snippet", {}).get("title", "Unknown")
-                        
-                        # --- [ 核心優化：過濾遊戲相關內容 ] ---
-                        if is_game_related(title):
-                            video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
-                            if video_id:
-                                new_videos.append({
-                                    "url": f"https://www.youtube.com/watch?v={video_id}", 
-                                    "title": title, 
-                                    "time": publish_time, 
-                                    "channel": channel_title
-                                })
-                                print(f"🎯 發現相關影片: {title} (來自 {channel_title})")
-                        else:
-                            print(f"⏭️ 略過非相關影片: {title}")
-                            
-    except Exception as e: 
-        print(f"抓取影片錯誤: {e}")
-        
-    return sorted(new_videos, key=lambda x: x["time"])
-
-def run_nlm(*args):
-    home = os.path.expanduser("~")
-    config_dir = os.path.join(home, ".notebooklm-mcp-cli")
-    env = os.environ.copy()
-    env["NLM_CONFIG_DIR"] = config_dir
-    cmd = ["nlm", *args]
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    return result
-
-def process_with_notebooklm(video_url, title):
-    print(f"正在處理: {title} ({video_url})")
-    notebook_name = f"YT_{uuid.uuid4().hex[:4].upper()}"
-    notebook_id = None
-    summary_text = None
-    try:
-        # 1. 建立筆記本
-        res = run_nlm("notebook", "create", notebook_name)
-        if res.returncode == 0:
-            match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
-            notebook_id = match.group(1) if match else notebook_name
-        else: return None
-        
-        # 2. 新增來源
-        run_nlm("source", "add", notebook_id, "--url", video_url)
-        
-        # 3. 執行摘要
-        query = "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
-        res = run_nlm("query", "notebook", notebook_id, query)
-        
-        if res.returncode == 0:
-            try:
-                data = json.loads(res.stdout)
-                summary_text = data.get("value", {}).get("answer", res.stdout)
-            except:
-                summary_text = res.stdout.strip()
-    finally:
-        if notebook_id:
-            run_nlm("notebook", "delete", notebook_id, "--confirm")
-    return summary_text
-
-def notify_telegram(message):
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not bot_token or not chat_id: return
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    try: requests.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"}, timeout=15)
-    except: pass
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [SMART FILTER VERSION]")
+    print(f"🚀 LazyTube-Assistant [MODULAR VERSION]")
     print("="*50)
 
-    # 1. 憑證精確注入
-    cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
-    if cookie_b64_raw:
-        try:
-            full_data_bytes = base64.b64decode("".join(cookie_b64_raw.split()))
-            full_json = json.loads(full_data_bytes)
-            home = os.path.expanduser("~")
-            profile_dir = os.path.join(home, ".notebooklm-mcp-cli", "profiles", "default")
-            os.makedirs(profile_dir, exist_ok=True)
-            with open(os.path.join(profile_dir, "auth.json"), "wb") as f: f.write(full_data_bytes)
-            with open(os.path.join(profile_dir, "cookies.json"), "w") as f: json.dump(full_json.get("cookies", []), f)
-            with open(os.path.join(profile_dir, "metadata.json"), "w") as f: json.dump({k:v for k,v in full_json.items() if k!="cookies"}, f)
-            with open(os.path.join(os.path.dirname(profile_dir), "..", "profiles.json"), "w") as f:
-                json.dump({"default_profile": "default", "profiles": {"default": {}}}, f)
-            print("✅ 憑證環境佈署成功。")
-        except Exception as e: print(f"❌ 佈署失敗: {e}")
+    # 1. 認證初始化
+    if not AuthManager.deploy_credentials():
+        print("❌ 憑證初始化失敗，中斷執行")
+        sys.exit(1)
 
-    # 2. 正式業務邏輯 (含過濾)
-    youtube = get_yt_service()
-    last_check_time = get_last_check_time()
-    new_videos = fetch_new_videos(youtube, last_check_time)
+    # 2. 獲取新影片
+    yt = YouTubeService()
+    last_check = get_last_check_time()
+    new_videos = yt.fetch_new_game_videos(last_check)
     
     if not new_videos:
-        print("沒有發現感興趣的遊戲影片。")
-        save_last_check_time(datetime.now(timezone.utc))
+        print("沒有發現感興趣的影片。")
+        save_check_time(datetime.now(timezone.utc))
         return
 
-    # 限制每次處理的數量 (預設 5)
-    MAX_PER_RUN = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
-    for video in new_videos[:MAX_PER_RUN]:
-        summary = process_with_notebooklm(video["url"], video["title"])
+    # 3. 處理摘要與通知
+    nlm = NotebookService()
+    process_count = 0
+    
+    for video in new_videos[:Config.MAX_VIDEOS]:
+        summary = nlm.process_video(video["url"], video["title"])
         if summary:
-            msg = (f"<b>🎥 {video['title']}</b>\n"
-                   f"📺 頻道：{video['channel']}\n"
-                   f"🔗 <a href='{video['url']}'>觀看</a>\n\n"
-                   f"📝 <b>AI 摘要</b>\n{summary}")
-            notify_telegram(msg)
+            Notifier.send_summary(video["title"], video["url"], video["channel"], summary)
             print(f"✅ 已發送推播: {video['title']}")
-        save_last_check_time(video["time"])
-    print("本次處理完成。")
+            process_count += 1
+        
+        save_check_time(video["time"])
+        
+    print(f"本次處理完成，共產出 {process_count} 份摘要。")
 
 if __name__ == "__main__":
     main()
