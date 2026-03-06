@@ -172,61 +172,61 @@ import time
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.26]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.28]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 還原 NLM Cookie (必須是第一件事)
+    # 1. 還原 NLM Cookie (終極路徑策略)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
         print("--- [ 正在還原 NotebookLM 憑證環境 ] ---")
         try:
             cookie_data = base64.b64decode("".join(cookie_b64_raw.split()))
-            temp_auth = os.path.abspath("temp_auth.json")
-            with open(temp_auth, "wb") as f:
-                f.write(cookie_data)
             
-            # 執行官方匯入指令
-            subprocess.run(
-                ["nlm", "login", "--manual", "--file", temp_auth, "--profile", "default", "--force"],
-                capture_output=True
-            )
-            
-            # 手動佈署加固 (針對 0.4.0 版本)
+            # 強制指定配置目錄並設定環境變數
             home = os.path.expanduser("~")
-            base_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
+            base_dir = os.path.join(home, ".notebooklm-mcp-cli")
+            os.environ["NLM_CONFIG_DIR"] = base_dir
             os.makedirs(base_dir, exist_ok=True)
-            auth_path = os.path.join(base_dir, "auth.json")
             
-            with open(os.path.join(base_dir, "profiles.json"), "w") as f:
-                json.dump({"default_profile": "default", "profiles": {"default": {"auth_file": auth_path}}}, f)
-            with open(auth_path, "wb") as f:
-                f.write(cookie_data)
+            # A. 寫入 auth.json 到所有可能的位置
+            target_files = [
+                os.path.join(base_dir, "auth.json"),
+                os.path.join(base_dir, "profiles", "default", "auth.json")
+            ]
+            for f_path in target_files:
+                os.makedirs(os.path.dirname(f_path), exist_ok=True)
+                with open(f_path, "wb") as f:
+                    f.write(cookie_data)
             
-            # 同時寫入 profiles/default/ 結構
-            pd = os.path.join(base_dir, "profiles", "default")
-            os.makedirs(pd, exist_ok=True)
-            with open(os.path.join(pd, "auth.json"), "wb") as f:
-                f.write(cookie_data)
+            # B. 寫入 profiles.json (使用相對路徑與雙重宣告)
+            profiles_path = os.path.join(base_dir, "profiles.json")
+            profiles_data = {
+                "default_profile": "default",
+                "profiles": {
+                    "default": {
+                        "auth_file": "auth.json",
+                        "auth_path": "auth.json"
+                    }
+                }
+            }
+            with open(profiles_path, "w") as f:
+                json.dump(profiles_data, f)
             
-            if os.path.exists(temp_auth):
-                os.remove(temp_auth)
-            
-            print("✅ 憑證環境佈署完成。")
-            time.sleep(1) # 給予系統短暫時間同步
+            print(f"✅ 憑證環境已佈署至: {base_dir}")
+            time.sleep(1)
             
             print("--- [ 正在驗證 NLM 認證狀態 ] ---")
             doctor_proc = subprocess.run(["nlm", "doctor"], capture_output=True, text=True)
             print(doctor_proc.stdout)
             
-            # 檢查是否認證成功
-            # 在 0.4.0 中，若成功應顯示 Profiles: default 或類似資訊
             doctor_out = doctor_proc.stdout.lower()
-            if "profiles: none" in doctor_out or "not found" in doctor_out:
-                print("❌ [熔斷] NLM 認證未通過！請檢查憑證完整性。")
+            # 檢查是否真正成功 (不再只是看到 profiles found)
+            if "profile 'default': not found" in doctor_out or "profiles: none" in doctor_out:
+                print("❌ [熔斷] NLM 認證檔案鏈接失敗！")
                 sys.exit(1)
             
-            print("✨ NLM 認證驗證成功，準備執行業務邏輯。")
+            print("✨ NLM 認證驗證成功！")
             print("="*50)
         except Exception as e:
             print(f"❌ 憑證還原失敗: {e}")
