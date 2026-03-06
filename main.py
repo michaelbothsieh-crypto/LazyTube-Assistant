@@ -188,7 +188,7 @@ def notify_telegram(message):
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.05]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.06]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
@@ -198,54 +198,45 @@ def main():
         print("--- [ 正在還原 NotebookLM 憑證 ] ---")
         cookie_data = base64.b64decode(cookie_b64)
         
-        # 定義多個可能的配置目錄
-        home = os.path.expanduser("~")
-        possible_dirs = [
-            os.path.join(home, ".config", "notebooklm-mcp-cli"),
-            os.path.join(home, ".notebooklm-mcp-cli"),
-            # 針對 GitHub Actions 的特定路徑
-            "/home/runner/.config/notebooklm-mcp-cli"
-        ]
+        # 1. 建立一個暫存的 auth.json 用於匯入
+        temp_auth = os.path.abspath("temp_auth.json")
+        with open(temp_auth, "wb") as f:
+            f.write(cookie_data)
         
-        # 確保 platformdirs 提供的路徑也在其中
+        # 2. 嘗試使用 CLI 指令建立/覆蓋 'default' Profile
+        # 這是最保險的做法，讓 CLI 自己處理路徑
+        print(f"🔄 正在透過 nlm 指令建立 default Profile...")
         try:
-            p_dir = platformdirs.user_config_dir("notebooklm-mcp-cli")
-            if p_dir not in possible_dirs:
-                possible_dirs.append(p_dir)
-        except Exception:
-            pass
-
-        for base_dir in possible_dirs:
-            try:
-                os.makedirs(base_dir, exist_ok=True)
-                auth_path = os.path.join(base_dir, "auth.json")
-                profiles_path = os.path.join(base_dir, "profiles.json")
-
-                # 寫入 auth.json
-                with open(auth_path, "wb") as f:
-                    f.write(cookie_data)
+            # 嘗試刪除舊的（如果有的話）以確保乾淨
+            subprocess.run(["nlm", "profile", "delete", "default", "--confirm"], capture_output=True)
+            
+            # 建立新的 Profile，指向我們的 temp_auth
+            import_proc = subprocess.run(
+                ["nlm", "profile", "create", "default", "--auth-file", temp_auth],
+                capture_output=True, text=True
+            )
+            if import_proc.returncode == 0:
+                print("✅ 已透過 nlm profile 指令成功建立 default Profile")
+            else:
+                print(f"⚠️ nlm profile create 失敗: {import_proc.stderr}")
                 
-                # 寫入 profiles.json
-                profiles_data = {
-                    "default_profile": "default",
-                    "profiles": {
-                        "default": {
-                            "auth_path": auth_path
-                        }
-                    }
-                }
-                with open(profiles_path, "w") as f:
-                    json.dump(profiles_data, f)
-                
-                print(f"✅ 成功寫入配置至: {base_dir}")
-            except Exception as e:
-                print(f"⚠️ 無法寫入 {base_dir}: {e}")
+                # 備案：如果指令不支援，則執行原本的地毯式寫入
+                home = os.path.expanduser("~")
+                for d in [os.path.join(home, ".config", "notebooklm-mcp-cli"), os.path.join(home, ".notebooklm-mcp-cli")]:
+                    os.makedirs(d, exist_ok=True)
+                    with open(os.path.join(d, "auth.json"), "wb") as f:
+                        f.write(cookie_data)
+                    with open(os.path.join(d, "profiles.json"), "w") as f:
+                        json.dump({"default_profile": "default", "profiles": {"default": {"auth_path": os.path.join(d, "auth.json")}}}, f)
+        except Exception as e:
+            print(f"❌ 執行 nlm 指令出錯: {e}")
+        finally:
+            if os.path.exists(temp_auth):
+                os.remove(temp_auth)
 
-        # 嘗試使用 CLI 自身指令來加固 Profile 設定 (若指令支援)
-        try:
-            subprocess.run(["nlm", "profile", "create", "default", "--confirm"], capture_output=True)
-        except Exception:
-            pass
+        # 3. 最後確認狀態
+        print("--- [ 當前 NLM Profile 狀態 ] ---")
+        subprocess.run(["nlm", "profile", "list"], check=False)
 
     youtube = get_yt_service()
     last_check_time = get_last_check_time()
