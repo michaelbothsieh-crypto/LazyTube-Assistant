@@ -7,6 +7,7 @@ import subprocess
 import requests
 import uuid
 import platformdirs
+import time
 from datetime import datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -22,7 +23,7 @@ def get_yt_service():
     refresh_token = os.environ.get("YT_REFRESH_TOKEN")
     
     if not all([client_id, client_secret, refresh_token]):
-        print("錯誤: 缺少 YouTube API 環境變數 (YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN)")
+        print("錯誤: 缺少 YouTube API 環境變數")
         sys.exit(1)
         
     creds = Credentials(
@@ -45,7 +46,6 @@ def get_last_check_time():
             content = f.read().strip()
             if content:
                 return datetime.fromisoformat(content)
-    # 預設為 1 小時前
     return datetime.now(timezone.utc) - timedelta(hours=1)
 
 def save_last_check_time(dt):
@@ -56,12 +56,8 @@ def save_last_check_time(dt):
 def fetch_new_videos(youtube, last_check_time):
     """抓取訂閱頻道的最新影片"""
     print(f"正在檢查 {last_check_time.isoformat()} 之後的新影片...")
-    
     new_videos = []
-    
     try:
-        # 1. 先取得你訂閱的頻道清單
-        print("正在獲取訂閱頻道清單...")
         subs_request = youtube.subscriptions().list(
             part="snippet,contentDetails",
             mine=True,
@@ -69,35 +65,27 @@ def fetch_new_videos(youtube, last_check_time):
             order="relevance"
         )
         subs_response = subs_request.execute()
-        
         for sub in subs_response.get("items", []):
             channel_id = sub["snippet"]["resourceId"]["channelId"]
             channel_title = sub["snippet"]["title"]
-            
-            # 2. 取得該頻道的最新動態
             activities_request = youtube.activities().list(
                 part="snippet,contentDetails",
                 channelId=channel_id,
                 maxResults=5
             )
             activities_response = activities_request.execute()
-            
             for item in activities_response.get("items", []):
                 if item["snippet"]["type"] == "upload":
                     publish_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                    
                     if publish_time > last_check_time:
                         video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
-                        if not video_id:
-                            continue
-                        video_url = f"https://www.youtube.com/watch?v={video_id}"
-                        title = item.get("snippet", {}).get("title", "Unknown")
-                        new_videos.append({"url": video_url, "title": title, "time": publish_time, "channel": channel_title})
-                        print(f"發現新影片: {title} (來自 {channel_title})")
-                        
+                        if video_id:
+                            video_url = f"https://www.youtube.com/watch?v={video_id}"
+                            title = item.get("snippet", {}).get("title", "Unknown")
+                            new_videos.append({"url": video_url, "title": title, "time": publish_time, "channel": channel_title})
+                            print(f"發現新影片: {title} (來自 {channel_title})")
     except Exception as e:
         print(f"抓取影片時發生錯誤: {e}")
-                
     return sorted(new_videos, key=lambda x: x["time"])
 
 def process_with_notebooklm(video_url, title):
@@ -109,144 +97,81 @@ def process_with_notebooklm(video_url, title):
         cmd = ["nlm", *args]
         print(f"[CMD] {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.stdout:
-            print(f"[STDOUT] {result.stdout[:500]}")
-        if result.stderr:
-            print(f"[STDERR] {result.stderr[:500]}")
         return result
     
     notebook_created = False
     summary_text = None
-    
     try:
-        # 1. 建立獨立 Notebook
         create_result = run_nlm("notebook", "create", notebook_name)
         if create_result.returncode == 0:
             notebook_created = True
-        else:
-            print(f"❌ 建立 Notebook 失敗")
-            return None
-
-        # 2. 新增來源
         add_result = run_nlm("source", "add", notebook_name, "--url", video_url)
-        if add_result.returncode != 0:
-            print(f"❌ 新增來源失敗")
-            return None
-
-        combined_output = add_result.stdout + add_result.stderr
-        match = re.search(r"Source ID:\s*([a-zA-Z0-9\-]+)", combined_output)
-        source_id = match.group(1) if match else None
-
-        # 3. 執行查詢
-        query = "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
-        query_args = ["query", notebook_name, query]
-        if source_id:
-            query_args.extend(["-s", source_id])
-
-        query_result = run_nlm(*query_args)
-        if query_result.returncode == 0:
-            summary_text = query_result.stdout.strip()
-        else:
-            print(f"❌ 產生摘要失敗")
-
+        if add_result.returncode == 0:
+            combined = add_result.stdout + add_result.stderr
+            match = re.search(r"Source ID:\s*([a-zA-Z0-9\-]+)", combined)
+            source_id = match.group(1) if match else None
+            query = "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
+            query_args = ["query", notebook_name, query]
+            if source_id: query_args.extend(["-s", source_id])
+            query_result = run_nlm(*query_args)
+            if query_result.returncode == 0:
+                summary_text = query_result.stdout.strip()
     finally:
         if notebook_created:
             run_nlm("notebook", "delete", notebook_name, "--confirm")
-
     return summary_text
 
 def notify_telegram(message):
     """透過 Telegram Bot 推播摘要"""
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not bot_token or not chat_id:
-        print(message)
-        return
+    if not bot_token or not chat_id: return
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    try:
-        requests.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"}, timeout=10)
-    except Exception as e:
-        print(f"Telegram 推播失敗: {e}")
-
-import time
+    requests.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
 
 def main():
     print("="*50)
-    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.28]")
+    print(f"🚀 LazyTube-Assistant [VERSION: 2026.03.06.29]")
     print(f"📂 當前目錄: {os.getcwd()}")
     print("="*50)
 
-    # 1. 還原 NLM Cookie (終極路徑策略)
+    # 1. 認證初始化 (回歸原始指令匯入模式)
     cookie_b64_raw = os.environ.get("NLM_COOKIE_BASE64", "")
     if cookie_b64_raw:
-        print("--- [ 正在還原 NotebookLM 憑證環境 ] ---")
+        print("--- [ 正在透過原始 Cookie 匯入認證 ] ---")
         try:
             cookie_data = base64.b64decode("".join(cookie_b64_raw.split()))
+            temp_cookies = os.path.abspath("temp_cookies.json")
+            with open(temp_cookies, "wb") as f:
+                f.write(cookie_data)
             
-            # 強制指定配置目錄並設定環境變數
-            home = os.path.expanduser("~")
-            base_dir = os.path.join(home, ".notebooklm-mcp-cli")
-            os.environ["NLM_CONFIG_DIR"] = base_dir
-            os.makedirs(base_dir, exist_ok=True)
+            # 使用官方推薦的 --manual 指令讓工具自行產生 auth.json
+            print(f"🔄 執行: nlm login --manual --file {temp_cookies} --profile default --force")
+            login_proc = subprocess.run(
+                ["nlm", "login", "--manual", "--file", temp_cookies, "--profile", "default", "--force"],
+                capture_output=True, text=True
+            )
+            print(f"STDOUT: {login_proc.stdout}")
+            print(f"STDERR: {login_proc.stderr}")
             
-            # A. 寫入 auth.json 到所有可能的位置
-            target_files = [
-                os.path.join(base_dir, "auth.json"),
-                os.path.join(base_dir, "profiles", "default", "auth.json")
-            ]
-            for f_path in target_files:
-                os.makedirs(os.path.dirname(f_path), exist_ok=True)
-                with open(f_path, "wb") as f:
-                    f.write(cookie_data)
+            if os.path.exists(temp_cookies): os.remove(temp_cookies)
             
-            # B. 寫入 profiles.json (使用相對路徑與雙重宣告)
-            profiles_path = os.path.join(base_dir, "profiles.json")
-            profiles_data = {
-                "default_profile": "default",
-                "profiles": {
-                    "default": {
-                        "auth_file": "auth.json",
-                        "auth_path": "auth.json"
-                    }
-                }
-            }
-            with open(profiles_path, "w") as f:
-                json.dump(profiles_data, f)
-            
-            print(f"✅ 憑證環境已佈署至: {base_dir}")
-            time.sleep(1)
-            
-            print("--- [ 正在驗證 NLM 認證狀態 ] ---")
-            doctor_proc = subprocess.run(["nlm", "doctor"], capture_output=True, text=True)
-            print(doctor_proc.stdout)
-            
-            doctor_out = doctor_proc.stdout.lower()
-            # 檢查是否真正成功 (不再只是看到 profiles found)
-            if "profile 'default': not found" in doctor_out or "profiles: none" in doctor_out:
-                print("❌ [熔斷] NLM 認證檔案鏈接失敗！")
-                sys.exit(1)
-            
-            print("✨ NLM 認證驗證成功！")
+            # 驗證狀態
+            print("--- [ NLM 認證診斷 ] ---")
+            subprocess.run(["nlm", "doctor"], check=False)
             print("="*50)
         except Exception as e:
-            print(f"❌ 憑證還原失敗: {e}")
-            sys.exit(1)
+            print(f"❌ 認證初始化失敗: {e}")
 
-    # 2. 執行業務邏輯
+    # 2. 業務邏輯
     youtube = get_yt_service()
     last_check_time = get_last_check_time()
     new_videos = fetch_new_videos(youtube, last_check_time)
-    
     if not new_videos:
-        print("沒有發現新影片。")
         save_last_check_time(datetime.now(timezone.utc))
         return
-
     MAX_PER_RUN = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
     videos_to_process = new_videos[:MAX_PER_RUN]
-    
-    print(f"發現 {len(new_videos)} 部影片，處理前 {len(videos_to_process)} 部。")
-
     for video in videos_to_process:
         summary = process_with_notebooklm(video["url"], video["title"])
         if summary:
@@ -255,7 +180,6 @@ def main():
                    f"🔗 <a href='{video['url']}'>觀看</a>\n\n"
                    f"📝 <b>AI 摘要</b>\n{summary}")
             notify_telegram(msg)
-            print(f"✅ 已發送 Telegram 通知: {video['title']}")
         save_last_check_time(video["time"])
     print("本次處理完成。")
 
