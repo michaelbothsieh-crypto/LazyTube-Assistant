@@ -80,6 +80,7 @@ async def external_dispatch(
         url = data.get("url")
         prompt = data.get("prompt", "請用繁體中文列出 5 個核心重點。")
         chat_id = data.get("chat_id")
+        command = data.get("command", "nlm")  # 新增 command 參數支援 slide
 
         if not url or not chat_id:
             return JSONResponse(content={"ok": False, "error": "Missing params"}, status_code=400)
@@ -93,8 +94,13 @@ async def external_dispatch(
                 return JSONResponse(content={"ok": False, "error": "Permission denied"}, status_code=403)
 
         # 3. 觸發 GitHub Actions
-        from api.utils.github_dispatch import dispatch_nlm_workflow
-        await dispatch_nlm_workflow(url=url, prompt=prompt, chat_id=chat_id)
+        if command == "slide":
+            from api.utils.github_dispatch import dispatch_slide_workflow
+            # 對於 LINE 來的請求，將來如果要支援推播檔案，需要解決 public url 的問題
+            await dispatch_slide_workflow(url=url, prompt=prompt, chat_id=chat_id)
+        else:
+            from api.utils.github_dispatch import dispatch_nlm_workflow
+            await dispatch_nlm_workflow(url=url, prompt=prompt, chat_id=chat_id)
         
         return JSONResponse(content={"ok": True})
     except Exception as e:
