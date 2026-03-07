@@ -14,9 +14,16 @@ def main():
     url = sys.argv[1]
     chat_id = sys.argv[2]
     message_id = os.environ.get("INPUT_MSG_ID")
-    prompt = os.environ.get("INPUT_PROMPT") or "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
-    slide_format = os.environ.get("INPUT_FORMAT", "pdf")
+    prompt = os.environ.get("INPUT_PROMPT") or ""
+    slide_format = "pdf" # 預設
 
+    # 解析嵌入在 Prompt 中的格式 (繞過 Workflow Input 限制)
+    if prompt.startswith("__FORMAT:pptx__"):
+        slide_format = "pptx"
+        prompt = prompt.replace("__FORMAT:pptx__", "", 1)
+    elif os.environ.get("INPUT_FORMAT"): # 如果之後 Workflow 有更新則優先使用
+        slide_format = os.environ.get("INPUT_FORMAT")
+    
     print(f"--- 🚀 隨選簡報生成任務啟動: {url} ---")
     print(f"📝 Prompt: {prompt}")
     print(f"📄 Format: {slide_format}")

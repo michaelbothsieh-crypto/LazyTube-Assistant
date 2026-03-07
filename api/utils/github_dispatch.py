@@ -77,14 +77,18 @@ async def dispatch_slide_workflow(url: str, prompt: str = "", chat_id: str = "",
         f"/actions/workflows/{slide_workflow_file}/dispatches"
     )
 
+    # 由於無法修改 Workflow 增加 Input，我們將格式資訊嵌入在 prompt 中傳遞
+    effective_prompt = prompt
+    if slide_format == "pptx":
+        effective_prompt = f"__FORMAT:pptx__{prompt}"
+
     payload = {
         "ref": GH_BRANCH,
         "inputs": {
             "url": url,
-            "prompt": prompt,
+            "prompt": effective_prompt,
             "chat_id": str(chat_id),
-            "message_id": str(message_id),
-            "format": slide_format  # 傳遞格式
+            "message_id": str(message_id)
         }
     }
 
