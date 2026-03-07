@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from app.config import Config
 from app.auth import AuthManager
 from app.youtube import YouTubeService
@@ -12,7 +12,8 @@ def get_last_check_time():
         with open(Config.LAST_CHECK_FILE, "r") as f:
             return datetime.fromisoformat(f.read().strip())
     except:
-        return datetime.now(timezone.utc)
+        # A missing state file should not cause the hourly job to skip every recent upload.
+        return datetime.now(timezone.utc) - timedelta(hours=2)
 
 def save_check_time(dt):
     """更新檢查時間"""
