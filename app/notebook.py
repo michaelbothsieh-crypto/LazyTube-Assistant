@@ -70,7 +70,7 @@ class NotebookService:
         
         return summary
 
-    def process_slide(self, url, title, custom_prompt=None, slide_format="pdf"):
+    def process_slide(self, url, title, custom_prompt=None, slide_format="pdf", slide_lang="zh-TW"):
         """
         /// 完整處理一個影片的簡報生成流程
         """
@@ -94,13 +94,13 @@ class NotebookService:
             print(f"🔗 正在新增來源並等待處理: {url}...")
             self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
             
-            # 3. 觸發生成簡報 (強制語言: 繁體中文)
-            print(f"🎨 正在請求生成簡報 (語言: zh-TW, 格式: {slide_format})...")
+            # 3. 觸發生成簡報 (語言: 使用傳入參數)
+            print(f"🎨 正在請求生成簡報 (語言: {slide_lang}, 格式: {slide_format})...")
             
             # 使用正確的 --language 參數，並將 custom_prompt 傳入 --focus
             cmd_args = [
                 "slides", "create", nb_id, 
-                "--language", "zh-TW", 
+                "--language", slide_lang, 
                 "--confirm"
             ]
             if custom_prompt:

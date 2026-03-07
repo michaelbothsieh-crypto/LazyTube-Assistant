@@ -15,18 +15,22 @@ def main():
     chat_id = sys.argv[2]
     message_id = os.environ.get("INPUT_MSG_ID")
     prompt = os.environ.get("INPUT_PROMPT") or ""
-    slide_format = "pdf" # 預設
+    slide_format = "pdf"
+    slide_lang = "zh-TW"
 
-    # 解析嵌入在 Prompt 中的格式 (繞過 Workflow Input 限制)
-    if prompt.startswith("__FORMAT:pptx__"):
-        slide_format = "pptx"
-        prompt = prompt.replace("__FORMAT:pptx__", "", 1)
-    elif os.environ.get("INPUT_FORMAT"): # 如果之後 Workflow 有更新則優先使用
-        slide_format = os.environ.get("INPUT_FORMAT")
+    # 解析嵌入在 Prompt 中的元數據 (格示: __META:lang,format__Prompt)
+    if prompt.startswith("__META:"):
+        import re
+        match = re.search(r"__META:([^,]+),([^_]+)__", prompt)
+        if match:
+            slide_lang = match.group(1)
+            slide_format = match.group(2)
+            prompt = prompt.split("__", 2)[-1] # 取得後半部真實內容
     
     print(f"--- 🚀 隨選簡報生成任務啟動: {url} ---")
     print(f"📝 Prompt: {prompt}")
     print(f"📄 Format: {slide_format}")
+    print(f"🌐 Lang: {slide_lang}")
 
     # 1. 認證環境佈署
     if not AuthManager.deploy_credentials():
@@ -35,7 +39,7 @@ def main():
     # 2. 處理影片並生成簡報
     nlm = NotebookService()
 
-    pdf_path = nlm.process_slide(url, "On-Demand Slide", custom_prompt=prompt, slide_format=slide_format)
+    pdf_path = nlm.process_slide(url, "On-Demand Slide", custom_prompt=prompt, slide_format=slide_format, slide_lang=slide_lang)
 
     if pdf_path and os.path.exists(pdf_path):
         # 3. 通知 (目前僅實作 Telegram 傳送檔案)

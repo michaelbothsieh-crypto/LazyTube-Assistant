@@ -110,19 +110,16 @@ async def _handle_help(chat_id: str):
     """回傳使用說明"""
     help_text = (
         "🤖 <b>LazyTube NotebookLM 查詢機器人</b>\n\n"
-        "<b>指令說明：</b>\n"
-        "📌 <code>/nlm &lt;url&gt;</code>\n"
-        "  → 使用預設 Prompt 生成摘要\n\n"
-        "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt&gt;</code>\n"
-        "  → 使用自訂 Prompt 查詢\n\n"
-        "📌 <code>/slide &lt;url&gt; [pptx] [主題]</code>\n"
-        "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報 (約1-3分鐘)\n\n"
+        "<b>指令說明：</b> (問號?代表有預設值)\n"
+        "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt?&gt;</code> (約1-3分鐘)\n"
+        "  → 獲取來源的精華摘要\n\n"
+        "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt?&gt; &lt;語言?&gt; &lt;格式?&gt;</code> (約5-10分鐘)\n"
+        "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報\n\n"
         "<b>範例：</b>\n"
         "<code>/nlm https://youtu.be/xxxxx</code>\n"
-        "<code>/nlm https://youtu.be/xxxxx 列出所有術語</code>\n"
         "<code>/slide https://youtu.be/xxxxx</code> (預設 PDF)\n"
-        "<code>/slide https://youtu.be/xxxxx pptx</code> (生成 PPTX)\n"
-        "<code>/slide https://youtu.be/xxxxx pptx 詳細介紹架構圖</code>"
+        "<code>/slide https://youtu.be/xxxxx 著重架構 zh-TW pptx</code>\n"
+        "<code>/slide https://youtu.be/xxxxx _ zh-TW pptx</code> (若不改 Prompt 可用 _ 代替)"
     )
     await send_telegram_message(chat_id, help_text)
 
@@ -256,19 +253,32 @@ async def _handle_slide(chat_id: str, text: str):
     if resp_data and resp_data.get("ok"):
         msg_id = str(resp_data.get("result", {}).get("message_id", ""))
 
-    # 格式辨識與 Prompt 提取
-    # 支援格式: /slide <url> [pptx] [自訂prompt]
-    slide_format = "pdf"
-    final_prompt = custom_prompt
+    # 參數解析邏輯調整: /slide <url> <prompt?> <lang?> <format?>
+    # 範例: /slide <url> "hello world" zh-TW pptx
+    remaining_text = parts[2] if len(parts) >= 3 else ""
     
-    # 檢查 custom_prompt 是否以 pptx 開頭 (忽略大小寫)
-    prompt_parts = custom_prompt.split(maxsplit=1)
-    if prompt_parts and prompt_parts[0].lower() == "pptx":
-        slide_format = "pptx"
-        final_prompt = prompt_parts[1] if len(prompt_parts) > 1 else ""
-    elif prompt_parts and prompt_parts[0].lower() == "pdf":
-        slide_format = "pdf"
-        final_prompt = prompt_parts[1] if len(prompt_parts) > 1 else ""
+    slide_format = "pdf"
+    slide_lang = "zh-TW"
+    final_prompt = DEFAULT_PROMPT
+    
+    if remaining_text:
+        # 簡單解析：尋找最後面的關鍵字
+        sub_parts = remaining_text.rsplit(maxsplit=2)
+        
+        # 判斷最後一個是否為格式
+        if len(sub_parts) >= 1 and sub_parts[-1].lower() in ["pdf", "pptx"]:
+            slide_format = sub_parts[-1].lower()
+            remaining_text = remaining_text.rsplit(maxsplit=1)[0] if len(sub_parts) > 1 else ""
+            sub_parts = remaining_text.rsplit(maxsplit=1)
+            
+        # 判斷倒數第二個(或現在的最後一個)是否為語言簡稱 (如 zh-TW, en-US)
+        if len(sub_parts) >= 1 and "-" in sub_parts[-1] and len(sub_parts[-1]) <= 5:
+            slide_lang = sub_parts[-1]
+            remaining_text = remaining_text.rsplit(maxsplit=1)[0] if len(sub_parts) > 1 else ""
+        
+        # 剩下的就是 Prompt
+        if remaining_text.strip() and remaining_text.strip() != "_":
+            final_prompt = remaining_text.strip()
 
     # 觸發 GitHub Actions
     try:
@@ -277,7 +287,8 @@ async def _handle_slide(chat_id: str, text: str):
             prompt=final_prompt,
             chat_id=chat_id,
             message_id=msg_id,
-            slide_format=slide_format  # 傳遞格式參數
+            slide_format=slide_format,
+            slide_lang=slide_lang  # 傳遞語言
         )
         if not success:
             debug_info = f"Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'} | Repo:{os.environ.get('GH_REPO_NAME')}"
