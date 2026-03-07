@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -38,10 +40,25 @@ jobs:
         run: |
           python main.py
 
-      - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Update last_check.txt [skip ci]"
-          file_pattern: 'last_check.txt'
-          commit_user_name: "michael"
-          commit_user_email: "michaelbothsieh@gmail.com"
+      - name: Commit last_check.txt
+        shell: bash
+        run: |
+          git config user.name "michael"
+          git config user.email "michaelbothsieh@gmail.com"
+
+          NEW_LAST_CHECK="$(cat last_check.txt)"
+
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+          printf "%s\n" "$NEW_LAST_CHECK" > last_check.txt
+
+          if git diff --quiet -- last_check.txt; then
+            echo "last_check.txt 沒有變更，略過提交。"
+            exit 0
+          fi
+
+          git add last_check.txt
+          git commit -m "Update last_check.txt [skip ci]"
+          git push origin HEAD:main
