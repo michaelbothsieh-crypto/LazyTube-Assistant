@@ -48,6 +48,8 @@ def main():
         "本輪檢查區間："
         f"{format_local_time(last_check)} 到 {format_local_time(current_time)}（台北時間）"
     )
+    print(f"上次檢查時間（UTC）：{last_check.isoformat()}")
+    print(f"本次執行時間（UTC）：{current_time.isoformat()}")
 
     # 3. 抓取新影片
     new_videos = yt.fetch_new_game_videos(last_check)

@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -8,10 +8,14 @@ from googleapiclient.discovery import build
 from app.config import Config
 
 
+def format_taipei_time(dt):
+    return dt.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+
+
 class YouTubeService:
     """
     /// YouTube API 封裝模組
-    /// 負責高效獲取訂閱頻道的新上傳影片
+    /// 負責取得訂閱頻道的新上傳影片，並排除 Shorts
     """
 
     def __init__(self):
@@ -83,22 +87,46 @@ class YouTubeService:
                 item for item in all_items if item.get("snippet", {}).get("type") == "upload"
             ]
 
+            print(f"本輪共取得 {len(all_items)} 筆動態，upload 類型 {len(upload_items)} 筆。")
+
             recent_candidates = []
+            time_filtered = 0
+            keyword_filtered = 0
+            missing_video_id = 0
+
             for item in upload_items:
-                published_at = item.get("snippet", {}).get("publishedAt")
+                snippet = item.get("snippet", {})
+                published_at = snippet.get("publishedAt")
+                title = snippet.get("title", "Unknown")
+                channel = snippet.get("channelTitle", "Unknown")
+
                 if not published_at:
+                    print(f"略過影片：{title}，原因：缺少 publishedAt。")
                     continue
 
                 pub_time = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+                print(
+                    f"檢查 upload：{title} | 頻道：{channel} | 發布時間："
+                    f"{format_taipei_time(pub_time)}（台北時間）"
+                )
+
                 if pub_time <= last_check_time:
+                    time_filtered += 1
+                    print(
+                        f"略過影片：{title}，原因：發布時間早於或等於上次檢查時間 "
+                        f"{format_taipei_time(last_check_time)}。"
+                    )
                     continue
 
-                title = item.get("snippet", {}).get("title", "Unknown")
                 if keywords and not any(keyword in title.lower() for keyword in keywords):
+                    keyword_filtered += 1
+                    print(f"略過影片：{title}，原因：未命中關鍵字 {keywords}。")
                     continue
 
                 video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
                 if not video_id:
+                    missing_video_id += 1
+                    print(f"略過影片：{title}，原因：缺少 videoId。")
                     continue
 
                 recent_candidates.append(
@@ -107,9 +135,10 @@ class YouTubeService:
                         "url": f"https://www.youtube.com/watch?v={video_id}",
                         "title": title,
                         "time": pub_time,
-                        "channel": item.get("snippet", {}).get("channelTitle", "Unknown"),
+                        "channel": channel,
                     }
                 )
+                print(f"通過前置篩選：{title}")
 
             durations = self._fetch_video_durations(
                 [candidate["video_id"] for candidate in recent_candidates]
@@ -120,14 +149,21 @@ class YouTubeService:
                 duration_seconds = durations.get(candidate["video_id"], 0)
                 if duration_seconds <= Config.SHORTS_MAX_SECONDS:
                     shorts_skipped += 1
-                    print(f"略過 Shorts 或短片：{candidate['title']}（{duration_seconds} 秒）")
+                    print(
+                        f"略過 Shorts 或短片：{candidate['title']}（{duration_seconds} 秒）"
+                    )
                     continue
 
                 candidate["duration_seconds"] = duration_seconds
                 new_videos.append(candidate)
-                print(f"找到符合條件的長影片：{candidate['title']}（{duration_seconds} 秒）")
+                print(
+                    f"保留長影片：{candidate['title']}（{duration_seconds} 秒）"
+                )
 
-            print(f"本輪共取得 {len(all_items)} 筆動態，upload 類型 {len(upload_items)} 筆。")
+            print(
+                f"時間篩掉 {time_filtered} 支，關鍵字篩掉 {keyword_filtered} 支，"
+                f"缺少 videoId {missing_video_id} 支。"
+            )
             print(
                 "經過時間與關鍵字篩選後，候選影片 "
                 f"{len(recent_candidates)} 支；略過 Shorts/短片 {shorts_skipped} 支；"
