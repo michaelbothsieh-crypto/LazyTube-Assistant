@@ -54,18 +54,23 @@ def main():
     # 3. 抓取新影片
     new_videos = yt.fetch_new_game_videos(last_check)
     if not new_videos:
-        print("本輪沒有找到新的長影片。")
-        save_check_time(current_time)
+        print("本輪沒有找到新的長影片，保持原有檢查時間。")
         return
 
     # 4. 產生摘要並通知
     notebook = NotebookService()
     process_count = 0
+    
+    # 紀錄最新成功處理的影片時間
+    latest_processed_time = last_check
 
     # 支援從命令列參數傳入目標 Chat ID（隨選模式用）
     target_chat_id = sys.argv[1] if len(sys.argv) > 1 else None
 
-    for video in new_videos[: Config.MAX_VIDEOS]:
+    # 只處理 Config 中限制的數量
+    videos_to_process = new_videos[: Config.MAX_VIDEOS]
+    
+    for video in videos_to_process:
         summary = notebook.process_video(video["url"], video["title"])
         if summary:
             Notifier.send_summary(
@@ -77,8 +82,19 @@ def main():
             )
             print(f"已發送摘要：{video['title']}")
             process_count += 1
+            # 只有當摘要成功生成並發送後，才視為這個時間點已被「完整處理」
+            latest_processed_time = video["time"]
+        else:
+            # 如果失敗（例如 API 超時），我們下次還想再試一次這支影片
+            # 所以不更新 latest_processed_time，迴圈繼續
+            print(f"摘要生成失敗，跳過影片：{video['title']}，下次將重試。")
 
-        save_check_time(video["time"])
+    # 5. 更新檢查時間
+    if latest_processed_time > last_check:
+        save_check_time(current_time)
+        print(f"更新檢查時間至：{current_time.isoformat()}")
+    else:
+        print("本輪無新影片或處理失敗，保持原有檢查時間。")
 
     print(f"本輪完成，成功處理 {process_count} 支影片。")
 

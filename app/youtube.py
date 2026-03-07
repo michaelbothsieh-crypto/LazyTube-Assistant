@@ -112,10 +112,12 @@ class YouTubeService:
 
                 if pub_time <= last_check_time:
                     time_filtered += 1
-                    print(
-                        f"略過影片：{title}，原因：發布時間早於或等於上次檢查時間 "
-                        f"{format_taipei_time(last_check_time)}。"
-                    )
+                    # 只有在時間非常接近（1小時內）時才輸出略過訊息，減少舊影片產生的雜訊
+                    if (last_check_time - pub_time).total_seconds() < 3600:
+                        print(
+                            f"略過影片：{title}，原因：發布時間早於或等於上次檢查時間 "
+                            f"{format_taipei_time(last_check_time)}。"
+                        )
                     continue
 
                 if keywords and not any(keyword in title.lower() for keyword in keywords):
