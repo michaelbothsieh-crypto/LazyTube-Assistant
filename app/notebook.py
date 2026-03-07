@@ -95,10 +95,12 @@ class NotebookService:
             self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
             
             # 3. 觸發生成簡報
-            print("🎨 正在請求生成簡報...")
-            cmd_args = ["slides", "create", nb_id, "--confirm"]
-            if custom_prompt:
-                cmd_args.extend(["--focus", custom_prompt])
+            print("🎨 正在請求生成簡報 (語言需求: 繁體中文)...")
+            # 強化 Prompt 避免中英夾雜
+            base_prompt = "請完全使用「繁體中文」製作簡報。嚴禁使用英文內容（除非是專有名詞）。請確保所有標題、內文均正確轉化為繁體中文。"
+            final_prompt = f"{base_prompt} {custom_prompt}" if custom_prompt else base_prompt
+            
+            cmd_args = ["slides", "create", nb_id, "--confirm", "--focus", final_prompt]
             create_res = self.run_nlm(*cmd_args)
             
             if create_res.returncode != 0:
