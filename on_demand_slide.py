@@ -18,14 +18,16 @@ def main():
     slide_format = "pdf"
     slide_lang = "zh-TW"
 
-    # 解析嵌入在 Prompt 中的元數據 (格示: __META:lang,format__Prompt)
+    # 解析嵌入在 Prompt 中的元數據 (格式: __META:lang,format__Prompt)
     if prompt.startswith("__META:"):
         import re
-        match = re.search(r"__META:([^,]+),([^_]+)__", prompt)
+        # 更加強健的正規表示式，抓取直到 __ 結尾的部分
+        match = re.match(r"^__META:([^,]+),([^__]+)__", prompt)
         if match:
             slide_lang = match.group(1)
             slide_format = match.group(2)
-            prompt = prompt.split("__", 2)[-1] # 取得後半部真實內容
+            # 找到第一個 __ 之後的內容
+            prompt = prompt[prompt.find("__", 7) + 2:]
     
     print(f"--- 🚀 隨選簡報生成任務啟動: {url} ---")
     print(f"📝 Prompt: {prompt}")
