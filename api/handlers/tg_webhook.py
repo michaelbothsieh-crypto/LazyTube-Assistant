@@ -245,10 +245,10 @@ async def _handle_slide(chat_id: str, text: str):
     # 立即回應「處理中」並取得 message_id
     resp_data = await send_telegram_message(
         chat_id,
-        f"⏳ <b>已收到簡報生成任務，處理中...</b>\n\n"
-        f"🔗 URL：<code>{url[:100]}</code>\n"
-        f"📝 Prompt：{custom_prompt[:80]}{'...' if len(custom_prompt) > 80 else ''}\n\n"
-        f"<i>NotebookLM 正在分析並生成簡報，完成後將自動回傳 PDF 檔案（約 1-3 分鐘）。</i>"
+        f"<b>已收到簡報生成任務，正在處理中...</b>\n\n"
+        f"URL：<code>{url[:100]}</code>\n"
+        f"Prompt：{final_prompt[:80]}{'...' if len(final_prompt) > 80 else ''}\n\n"
+        f"<i>系統分析與簡報製作可能需要 5-10 分鐘，完成後將自動發送檔案。</i>"
     )
     
     msg_id = ""
