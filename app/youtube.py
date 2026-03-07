@@ -1,15 +1,14 @@
+import re
+from datetime import datetime
+
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
-from datetime import datetime, timezone
+
 from app.config import Config
 
-class YouTubeService:
-    """
-    /// YouTube API 封裝模組
-    /// 負責高效獲取訂閱頻道活動
-    """
 
+class YouTubeService:
     def __init__(self):
         self.service = self._get_service()
 
@@ -25,45 +24,105 @@ class YouTubeService:
             creds.refresh(Request())
         return build("youtube", "v3", credentials=creds)
 
+    def _parse_duration_seconds(self, duration_text):
+        if not duration_text:
+            return 0
+
+        match = re.fullmatch(
+            r"PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?",
+            duration_text,
+        )
+        if not match:
+            return 0
+
+        hours = int(match.group("hours") or 0)
+        minutes = int(match.group("minutes") or 0)
+        seconds = int(match.group("seconds") or 0)
+        return hours * 3600 + minutes * 60 + seconds
+
+    def _fetch_video_durations(self, video_ids):
+        if not video_ids:
+            return {}
+
+        response = self.service.videos().list(
+            part="contentDetails",
+            id=",".join(video_ids),
+            maxResults=len(video_ids),
+        ).execute()
+
+        durations = {}
+        for item in response.get("items", []):
+            durations[item["id"]] = self._parse_duration_seconds(
+                item.get("contentDetails", {}).get("duration", "")
+            )
+        return durations
+
     def fetch_new_game_videos(self, last_check_time):
-        """
-        /// 使用 activities().list(mine=True) 高效獲取所有新影片
-        /// 這比遍歷每個頻道節省約 95% 的 API 配額
-        """
         new_videos = []
         try:
-            # 單一請求獲取所有訂閱頻道的最新活動
-            request = self.service.activities().list(
+            response = self.service.activities().list(
                 part="snippet,contentDetails",
                 mine=True,
-                maxResults=50
-            )
-            response = request.execute()
-            
+                maxResults=50,
+            ).execute()
+
             keywords = Config.get_keywords()
-            
-            for item in response.get("items", []):
-                if item["snippet"]["type"] == "upload":
-                    pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                    
-                    if pub_time > last_check_time:
-                        title = item.get("snippet", {}).get("title", "Unknown")
-                        
-                        # --- [ 邏輯優化：若沒設定關鍵字則全抓 ] ---
-                        is_match = True if not keywords else any(k in title.lower() for k in keywords)
-                        
-                        if is_match:
-                            video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
-                            if video_id:
-                                new_videos.append({
-                                    "url": f"https://www.youtube.com/watch?v={video_id}",
-                                    "title": title,
-                                    "time": pub_time,
-                                    "channel": item["snippet"]["channelTitle"]
-                                })
-                                print(f"🎯 發現影片: {title}")
-        except Exception as e:
-            print(f"❌ YouTube 抓取錯誤: {e}")
-            
-        # 依照時間排序，確保處理順序正確
-        return sorted(new_videos, key=lambda x: x["time"])
+            all_items = response.get("items", [])
+            upload_items = [
+                item for item in all_items if item.get("snippet", {}).get("type") == "upload"
+            ]
+
+            recent_candidates = []
+            for item in upload_items:
+                published_at = item.get("snippet", {}).get("publishedAt")
+                if not published_at:
+                    continue
+
+                pub_time = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+                if pub_time <= last_check_time:
+                    continue
+
+                title = item.get("snippet", {}).get("title", "Unknown")
+                if keywords and not any(keyword in title.lower() for keyword in keywords):
+                    continue
+
+                video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
+                if not video_id:
+                    continue
+
+                recent_candidates.append(
+                    {
+                        "video_id": video_id,
+                        "url": f"https://www.youtube.com/watch?v={video_id}",
+                        "title": title,
+                        "time": pub_time,
+                        "channel": item.get("snippet", {}).get("channelTitle", "Unknown"),
+                    }
+                )
+
+            durations = self._fetch_video_durations(
+                [candidate["video_id"] for candidate in recent_candidates]
+            )
+
+            shorts_skipped = 0
+            for candidate in recent_candidates:
+                duration_seconds = durations.get(candidate["video_id"], 0)
+                if duration_seconds <= Config.SHORTS_MAX_SECONDS:
+                    shorts_skipped += 1
+                    print(f"略過 Shorts 或短片：{candidate['title']}（{duration_seconds} 秒）")
+                    continue
+
+                candidate["duration_seconds"] = duration_seconds
+                new_videos.append(candidate)
+                print(f"找到符合條件的長影片：{candidate['title']}（{duration_seconds} 秒）")
+
+            print(f"本輪共取得 {len(all_items)} 筆動態，upload 類型 {len(upload_items)} 筆。")
+            print(
+                "經過時間與關鍵字篩選後，候選影片 "
+                f"{len(recent_candidates)} 支；略過 Shorts/短片 {shorts_skipped} 支；"
+                f"最終保留長影片 {len(new_videos)} 支。"
+            )
+        except Exception as error:
+            print(f"YouTube 抓取失敗：{error}")
+
+        return sorted(new_videos, key=lambda item: item["time"])

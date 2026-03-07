@@ -2,8 +2,8 @@ import os
 
 class Config:
     """
-    /// 專案全域配置管理
-    /// 負責讀取並驗證環境變數
+    /// 撠??典??蔭蝞∠?
+    /// 鞎痊霈?蒂撽??啣?霈
     """
     
     YT_CLIENT_ID = os.environ.get("YT_CLIENT_ID")
@@ -13,30 +13,30 @@ class Config:
     TG_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
     TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
     
-    # LINE 配置
+    # LINE ?蔭
     LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
     
     NLM_COOKIE_BASE64 = os.environ.get("NLM_COOKIE_BASE64", "")
     
     LAST_CHECK_FILE = "last_check.txt"
     MAX_VIDEOS = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
+    SHORTS_MAX_SECONDS = int(os.environ.get("SHORTS_MAX_SECONDS", 60))
     
-    # 預設過濾關鍵字 (留空代表不進行過濾，抓取所有影片)
+    # ?身?蕪?摮?(?征隞?”銝脰??蕪嚗????蔣??
     DEFAULT_KEYWORDS = ""
     FILTER_KEYWORDS = os.environ.get("FILTER_KEYWORDS", DEFAULT_KEYWORDS)
 
-    # 白名單使用者 ID (逗號分隔)
+    # ?賢??桐蝙?刻?ID (????)
     ALLOWED_USERS = os.environ.get("ALLOWED_USERS", "")
 
     @classmethod
     def get_allowed_users(cls):
-        """取得授權使用者清單"""
+        """????雿輻????"""
         if not cls.ALLOWED_USERS: return []
         return [u.strip() for u in cls.ALLOWED_USERS.split(",")]
 
     @classmethod
     def get_keywords(cls):
-        """取得處理後的關鍵字清單"""
+        """????敺??摮???"""
         if not cls.FILTER_KEYWORDS: return []
         return [k.strip().lower() for k in cls.FILTER_KEYWORDS.split(",")]
-
