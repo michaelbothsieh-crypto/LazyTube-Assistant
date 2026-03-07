@@ -112,10 +112,10 @@ class NotebookService:
                 print("❌ 簡報生成請求失敗")
                 return None
 
-            # 4. 輪詢直到完成 (最多等待 10 分鐘 = 30次 * 20秒)
+            # 4. 輪詢直到完成 (最多等待 20 分鐘 = 60次 * 20秒)
             artifact_id = None
-            print("⏳ 正在等待簡報製作完成 (此步驟可能需要 1-5 分鐘)...")
-            for i in range(30):
+            print("⏳ 正在等待簡報製作完成 (此步驟可能需要 1-10 分鐘)...")
+            for i in range(60):
                 time.sleep(20)
                 status_res = self.run_nlm("studio", "status", nb_id, "--json", verbose=False)
                 
@@ -157,7 +157,8 @@ class NotebookService:
                 out_path = f"slide_{nb_name}.{ext}"
                 print(f"📥 正在下載簡報檔案 ({ext}): {out_path}...")
                 down_res = self.run_nlm(
-                    "download", "slide-deck", nb_id, artifact_id, 
+                    "download", "slide-deck", nb_id, 
+                    "--id", artifact_id,
                     "--output", out_path,
                     "--format", ext
                 )
