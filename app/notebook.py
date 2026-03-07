@@ -110,27 +110,38 @@ class NotebookService:
             print("⏳ 正在等待簡報製作完成 (此步驟可能需要 1-5 分鐘)...")
             for i in range(30):
                 time.sleep(20)
-                status_res = self.run_nlm("studio", "status", nb_id, "--json", verbose=False) # 輪詢就不 verbose 了
-                if status_res.returncode == 0:
+                status_res = self.run_nlm("studio", "status", nb_id, "--json", verbose=False)
+                
+                # 即使 returncode 不為 0 也印出輸出供除錯
+                raw_out = status_res.stdout.strip() if status_res.stdout else ""
+                
+                if status_res.returncode == 0 and raw_out:
                     try:
                         # 解析 JSON 輸出
-                        status_data = json.loads(status_res.stdout)
+                        status_data = json.loads(raw_out)
+                        if not isinstance(status_data, list):
+                            print(f"  ({i+1}/30) 收到非預期格式: {raw_out[:50]}...")
+                            continue
+
+                        current_status = "UNKNOWN"
                         for art in status_data:
-                            # 判斷是否為剛建立的 slide_deck 且狀態為 DONE
                             if art.get("artifact_type") == "slide_deck":
-                                if art.get("status") == "DONE":
+                                current_status = art.get("status")
+                                if current_status == "DONE":
                                     artifact_id = art.get("artifact_id")
                                     print(f"✨ 簡報製作完成! Artifact ID: {artifact_id}")
                                     break
-                                elif art.get("status") == "ERROR":
-                                    print(f"❌ 簡報製作失敗，狀態顯示為 ERROR")
+                                elif current_status == "ERROR":
+                                    print(f"❌ 簡報製作失敗: {art.get('error_message', '原因不明')}")
                                     return None
+                        
                         if artifact_id: break
-                        print(f"  ({i+1}/30) 仍然處理中...")
+                        print(f"  ({i+1}/30) 目前狀態: {current_status}...")
                     except BaseException as e:
-                        print(f"  ({i+1}/30) 無法解析狀態: {e}")
+                        print(f"  ({i+1}/30) 解析失敗: {e} | 原始輸出: {raw_out[:50]}...")
                 else:
-                    print(f"  ({i+1}/30) 查詢狀態失敗")
+                    print(f"  ({i+1}/30) 查詢中... (Code: {status_res.returncode})")
+                    if status_res.stderr: print(f"    DEBUG STDERR: {status_res.stderr.strip()[:100]}")
             
             # 5. 下載檔案
             if artifact_id:
