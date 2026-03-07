@@ -8,15 +8,10 @@ on:
         required: true
         type: string
       prompt:
-        description: 'Custom prompt for slide generation'
+        description: '生成簡報的自訂指令 (Focus Topic)'
         required: false
         type: string
-        default: '請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。'
-      format:
-        description: 'Slide format (pdf or pptx)'
-        required: false
-        type: string
-        default: 'pdf'
+        default: ''
       chat_id:
         description: '回傳結果的 Telegram ID'
         required: true
@@ -54,9 +49,8 @@ jobs:
         YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
         YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
         YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-        INPUT_MSG_ID: ${{ github.event.client_payload.message_id }}
-        INPUT_PROMPT: ${{ github.event.client_payload.prompt || github.event.inputs.prompt }}
-        INPUT_FORMAT: ${{ github.event.client_payload.format || github.event.inputs.format }}
+        INPUT_MSG_ID: ${{ inputs.message_id }}
+        INPUT_PROMPT: ${{ inputs.prompt }}
       run: |
         # 直接執行模組化的 Python 腳本
         python on_demand_slide.py "${{ inputs.url }}" "${{ inputs.chat_id }}"
