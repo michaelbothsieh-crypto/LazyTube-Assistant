@@ -115,13 +115,14 @@ async def _handle_help(chat_id: str):
         "  → 使用預設 Prompt 生成摘要\n\n"
         "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt&gt;</code>\n"
         "  → 使用自訂 Prompt 查詢\n\n"
-        "📌 <code>/slide &lt;url&gt; &lt;自訂主題(選填)&gt;</code>\n"
-        "  → 產生該來源的 <b>繁體中文</b> PDF 簡報 (開發中，約需1-3分鐘)\n\n"
+        "📌 <code>/slide &lt;url&gt; [pptx] [主題]</code>\n"
+        "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報 (約1-3分鐘)\n\n"
         "<b>範例：</b>\n"
         "<code>/nlm https://youtu.be/xxxxx</code>\n"
-        "<code>/nlm https://youtu.be/xxxxx 列出所有技術術語和定義</code>\n"
-        "<code>/slide https://youtu.be/xxxxx</code>\n"
-        "<code>/slide https://youtu.be/xxxxx 詳細介紹影片中的架構圖</code>"
+        "<code>/nlm https://youtu.be/xxxxx 列出所有術語</code>\n"
+        "<code>/slide https://youtu.be/xxxxx</code> (預設 PDF)\n"
+        "<code>/slide https://youtu.be/xxxxx pptx</code> (生成 PPTX)\n"
+        "<code>/slide https://youtu.be/xxxxx pptx 詳細介紹架構圖</code>"
     )
     await send_telegram_message(chat_id, help_text)
 
