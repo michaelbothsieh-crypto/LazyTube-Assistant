@@ -117,8 +117,6 @@ async def _handle_help(chat_id: str):
         "  → 使用自訂 Prompt 查詢\n\n"
         "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt(選填)&gt;</code>\n"
         "  → 產生該來源的 PDF 幻燈片 (約需1-3分鐘)\n\n"
-        "📌 <code>/status</code>\n"
-        "  → 查看服務狀態\n\n"
         "<b>範例：</b>\n"
         "<code>/nlm https://youtu.be/xxxxx</code>\n"
         "<code>/nlm https://youtu.be/xxxxx 列出所有技術術語和定義</code>\n"
