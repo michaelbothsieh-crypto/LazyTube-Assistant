@@ -9,6 +9,11 @@ from app.config import Config
 
 
 class YouTubeService:
+    """
+    /// YouTube API 封裝模組
+    /// 負責高效獲取訂閱頻道的新上傳影片
+    """
+
     def __init__(self):
         self.service = self._get_service()
 
@@ -25,6 +30,7 @@ class YouTubeService:
         return build("youtube", "v3", credentials=creds)
 
     def _parse_duration_seconds(self, duration_text):
+        """將 YouTube ISO 8601 影片時長轉成秒數。"""
         if not duration_text:
             return 0
 
@@ -41,6 +47,7 @@ class YouTubeService:
         return hours * 3600 + minutes * 60 + seconds
 
     def _fetch_video_durations(self, video_ids):
+        """批次取得影片時長，避免逐支查詢浪費配額。"""
         if not video_ids:
             return {}
 
@@ -58,6 +65,10 @@ class YouTubeService:
         return durations
 
     def fetch_new_game_videos(self, last_check_time):
+        """
+        /// 使用 activities().list(mine=True) 取得訂閱頻道最新活動
+        /// 再用 videos().list 補抓時長，排除 Shorts，只保留長影片
+        """
         new_videos = []
         try:
             response = self.service.activities().list(
