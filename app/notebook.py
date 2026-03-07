@@ -94,13 +94,18 @@ class NotebookService:
             print(f"🔗 正在新增來源並等待處理: {url}...")
             self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
             
-            # 3. 觸發生成簡報
-            print("🎨 正在請求生成簡報 (語言需求: 繁體中文)...")
-            # 強化 Prompt 避免中英夾雜
-            base_prompt = "請完全使用「繁體中文」製作簡報。嚴禁使用英文內容（除非是專有名詞）。請確保所有標題、內文均正確轉化為繁體中文。"
-            final_prompt = f"{base_prompt} {custom_prompt}" if custom_prompt else base_prompt
+            # 3. 觸發生成簡報 (強制語言: 繁體中文)
+            print("🎨 正在請求生成簡報 (語言: zh-TW)...")
             
-            cmd_args = ["slides", "create", nb_id, "--confirm", "--focus", final_prompt]
+            # 使用正確的 --language 參數，並將 custom_prompt 傳入 --focus
+            cmd_args = [
+                "slides", "create", nb_id, 
+                "--language", "zh-TW", 
+                "--confirm"
+            ]
+            if custom_prompt:
+                cmd_args.extend(["--focus", custom_prompt])
+            
             create_res = self.run_nlm(*cmd_args)
             
             if create_res.returncode != 0:
@@ -114,19 +119,19 @@ class NotebookService:
                 time.sleep(20)
                 status_res = self.run_nlm("studio", "status", nb_id, "--json", verbose=False)
                 
-                # 即使 returncode 不為 0 也印出輸出供除錯
                 raw_out = status_res.stdout.strip() if status_res.stdout else ""
                 
                 if status_res.returncode == 0 and raw_out:
                     try:
-                        # 解析 JSON 輸出
                         status_data = json.loads(raw_out)
                         if not isinstance(status_data, list):
                             print(f"  ({i+1}/30) 收到非預期格式: {raw_out[:50]}...")
                             continue
 
                         current_status = "UNKNOWN"
+                        # 邏輯優化：只要有 artifact_type 為 slide_deck 的項目，就檢查其狀態
                         for art in status_data:
+                            # 網頁版有時會回傳多個 artifact，我們要找的是 slide_deck
                             if art.get("artifact_type") == "slide_deck":
                                 current_status = art.get("status")
                                 if current_status == "DONE":
@@ -142,8 +147,9 @@ class NotebookService:
                     except BaseException as e:
                         print(f"  ({i+1}/30) 解析失敗: {e} | 原始輸出: {raw_out[:50]}...")
                 else:
-                    print(f"  ({i+1}/30) 查詢中... (Code: {status_res.returncode})")
-                    if status_res.stderr: print(f"    DEBUG STDERR: {status_res.stderr.strip()[:100]}")
+                    # 如果 raw_out 是空的，可能是暫時抓不到資料，繼續輪詢
+                    print(f"  ({i+1}/30) 正在獲取狀態... (Code: {status_res.returncode})")
+                    if status_res.stderr: print(f"    DEBUG: {status_res.stderr.strip()[:60]}")
             
             # 5. 下載檔案
             if artifact_id:
