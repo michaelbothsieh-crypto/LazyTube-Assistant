@@ -58,3 +58,60 @@ class NotebookService:
                 self.run_nlm("notebook", "delete", nb_id, "--confirm")
         
         return summary
+
+    def process_slide(self, url, title):
+        """
+        /// 完整處理一個影片的簡報生成流程
+        """
+        import time
+        nb_name = f"SLIDE_{uuid.uuid4().hex[:4].upper()}"
+        nb_id = None
+        pdf_path = None
+        
+        try:
+            # 1. 建立筆記本
+            res = self.run_nlm("notebook", "create", nb_name)
+            if res.returncode == 0:
+                match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
+                nb_id = match.group(1) if match else nb_name
+            else:
+                return None
+            
+            # 2. 新增來源並等待處理完成
+            self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
+            
+            # 3. 觸發生成簡報
+            self.run_nlm("slides", "create", nb_id, "--confirm")
+            
+            # 4. 輪詢直到完成 (最多等待 10 分鐘 = 30次 * 20秒)
+            artifact_id = None
+            for _ in range(30):
+                time.sleep(20)
+                status_res = self.run_nlm("studio", "status", nb_id, "--json")
+                if status_res.returncode == 0:
+                    try:
+                        # 解析 JSON 輸出
+                        status_data = json.loads(status_res.stdout)
+                        for art in status_data:
+                            # 判斷是否為剛建立的 slide_deck 且狀態為 DONE
+                            if art.get("artifact_type") == "slide_deck" and art.get("status") == "DONE":
+                                artifact_id = art.get("artifact_id")
+                                break
+                    except BaseException as e:
+                        pass
+                
+                if artifact_id:
+                    break
+            
+            # 5. 下載檔案
+            if artifact_id:
+                out_path = f"slide_{nb_name}.pdf"
+                down_res = self.run_nlm("download", "slide-deck", nb_id, artifact_id, "--output", out_path)
+                if down_res.returncode == 0 and os.path.exists(out_path):
+                    pdf_path = out_path
+
+        finally:
+            if nb_id:
+                self.run_nlm("notebook", "delete", nb_id, "--confirm")
+        
+        return pdf_path

@@ -1,0 +1,50 @@
+name: Slide On-Demand Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: '要轉換為簡報的來源 URL'
+        required: true
+        type: string
+      chat_id:
+        description: '回傳結果的 Telegram ID'
+        required: true
+        type: string
+      message_id:
+        description: '要刪除的「處理中」訊息 ID'
+        required: false
+        type: string
+
+jobs:
+  slide-generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install notebooklm-mcp-cli
+
+    - name: Run Slide On-Demand Generator
+      env:
+        NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+        YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+        YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        INPUT_MSG_ID: ${{ inputs.message_id }}
+      run: |
+        # 直接執行模組化的 Python 腳本
+        python on_demand_slide.py "${{ inputs.url }}" "${{ inputs.chat_id }}"

@@ -7,8 +7,9 @@ Telegram Webhook 處理器
 import os
 import logging
 import httpx
+import re
 
-from api.utils.github_dispatch import dispatch_nlm_workflow
+from api.utils.github_dispatch import dispatch_nlm_workflow, dispatch_slide_workflow
 from api.utils.telegram import send_telegram_message
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ async def handle_telegram_update(update: dict):
     elif text.startswith("/nlm"):
         await _handle_nlm(chat_id, text)
 
+    elif text.startswith("/slide"):
+        await _handle_slide(chat_id, text)
+
     elif "youtube.com/" in text or "youtu.be/" in text:
         # 自動辨識網址 (若沒打指令但貼了網址)
         urls = re.findall(r'(https?://\S+)', text)
@@ -111,6 +115,8 @@ async def _handle_help(chat_id: str):
         "  → 使用預設 Prompt 生成摘要\n\n"
         "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt&gt;</code>\n"
         "  → 使用自訂 Prompt 查詢\n\n"
+        "📌 <code>/slide &lt;url&gt;</code>\n"
+        "  → 產生該來源的 PDF 幻燈片 (約需1-3分鐘)\n\n"
         "📌 <code>/status</code>\n"
         "  → 查看服務狀態\n\n"
         "<b>範例：</b>\n"
@@ -195,6 +201,71 @@ async def _handle_nlm(chat_id: str, text: str):
             )
     except Exception as e:
         logger.error(f"dispatch_nlm_workflow 發生錯誤: {e}")
+        await send_telegram_message(
+            chat_id,
+            f"❌ <b>系統發生異常</b>\n\n"
+            f"錯誤內容：<code>{str(e)[:100]}</code>\n"
+            f"請聯繫管理員檢查 Vercel 日誌。"
+        )
+
+async def _handle_slide(chat_id: str, text: str):
+    """
+    解析 /slide 指令並觸發 GitHub Actions
+    格式: /slide <url>
+    """
+    parts = text.split(maxsplit=1)  # ['/slide', '<url>']
+
+    # 驗證 URL
+    if len(parts) < 2:
+        await send_telegram_message(
+            chat_id,
+            "❌ <b>格式錯誤</b>\n使用方法：<code>/slide &lt;url&gt;</code>"
+        )
+        return
+
+    url = parts[1]
+    if not url.startswith("http"):
+        await send_telegram_message(
+            chat_id,
+            f"❌ <b>無效的 URL</b>：<code>{url[:100]}</code>\n請提供完整的 http/https 網址。"
+        )
+        return
+
+    # URL 長度限制
+    if len(url) > 2048:
+        await send_telegram_message(chat_id, "❌ URL 過長（上限 2048 字元）。")
+        return
+
+    # 立即回應「處理中」並取得 message_id
+    resp_data = await send_telegram_message(
+        chat_id,
+        f"⏳ <b>已收到簡報生成任務，處理中...</b>\n\n"
+        f"🔗 URL：<code>{url[:100]}</code>\n\n"
+        f"<i>NotebookLM 正在分析並生成簡報，完成後將自動回傳 PDF 檔案（約 1-3 分鐘）。</i>"
+    )
+    
+    msg_id = ""
+    if resp_data and resp_data.get("ok"):
+        msg_id = str(resp_data.get("result", {}).get("message_id", ""))
+
+    # 觸發 GitHub Actions
+    try:
+        success = await dispatch_slide_workflow(
+            url=url,
+            chat_id=chat_id,
+            message_id=msg_id
+        )
+        if not success:
+            debug_info = f"Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'} | Repo:{os.environ.get('GH_REPO_NAME')}"
+            await send_telegram_message(
+                chat_id,
+                f"❌ <b>觸發任務失敗</b>\n\n"
+                f"原因：無法連接到 GitHub API。\n"
+                f"🔧 <b>除錯資訊</b>：<code>{debug_info}</code>\n"
+                f"請檢查 Vercel 環境變數設定是否正確。"
+            )
+    except Exception as e:
+        logger.error(f"dispatch_slide_workflow 發生錯誤: {e}")
         await send_telegram_message(
             chat_id,
             f"❌ <b>系統發生異常</b>\n\n"

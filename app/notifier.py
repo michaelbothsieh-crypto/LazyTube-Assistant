@@ -87,3 +87,45 @@ class Notifier:
         except Exception as e:
             print(f"❌ LINE API 連線異常: {e}")
             return False
+
+    @classmethod
+    def send_document(cls, target_chat_id, file_path, caption=None):
+        """
+        /// 發送文件至指定平台 (目前僅實作 Telegram)
+        """
+        chat_id = target_chat_id or Config.TG_CHAT_ID
+        if not chat_id:
+            print(f"⚠️ 找不到目標 Chat ID，無法發送文件: {file_path}")
+            return False
+
+        if str(chat_id).startswith(('U', 'C', 'R')):
+            # LINE 上傳檔案需要先傳到公開空間或改用 Content API，此處先略過
+            print("❌ LINE 尚未支援發送本地文件")
+            return False
+        else:
+            return cls._send_document_to_telegram(chat_id, file_path, caption)
+
+    @staticmethod
+    def _send_document_to_telegram(chat_id, file_path, caption=None):
+        import os
+        if not Config.TG_BOT_TOKEN:
+            print("❌ 缺少 Telegram Token")
+            return False
+            
+        endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendDocument"
+        data = {"chat_id": chat_id}
+        if caption:
+            data["caption"] = caption
+            
+        try:
+            with open(file_path, "rb") as f:
+                files = {"document": (os.path.basename(file_path), f)}
+                resp = requests.post(endpoint, data=data, files=files, timeout=60)
+                if resp.status_code == 200:
+                    return True
+                else:
+                    print(f"❌ Telegram 發送文件失敗: {resp.status_code} {resp.text}")
+                    return False
+        except Exception as e:
+            print(f"❌ Telegram API 連線異常: {e}")
+            return False
