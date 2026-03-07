@@ -11,11 +11,12 @@ import re
 
 from api.utils.github_dispatch import dispatch_nlm_workflow, dispatch_slide_workflow
 from api.utils.telegram import send_telegram_message
+from api.utils.prompt_manager import get_optimized_prompt
 
 logger = logging.getLogger(__name__)
 
-# 預設 Prompt（若用戶未提供）
-DEFAULT_PROMPT = "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
+# 預設 Prompt（若用戶未提供且非簡報任務）
+DEFAULT_NLM_PROMPT = "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
 
 
 
@@ -260,7 +261,8 @@ async def _handle_slide(chat_id: str, text: str):
     
     slide_format = "pdf"
     slide_lang = "zh-TW"
-    final_prompt = DEFAULT_PROMPT
+    # 自動根據 URL 生成優化的預設 Prompt
+    final_prompt = get_optimized_prompt(url)
     
     if remaining_text:
         # 簡單解析：尋找最後面的關鍵字
