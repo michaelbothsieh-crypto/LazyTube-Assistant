@@ -87,7 +87,7 @@ class YouTubeService:
                 item for item in all_items if item.get("snippet", {}).get("type") == "upload"
             ]
 
-            print(f"本輪共取得 {len(all_items)} 筆動態，upload 類型 {len(upload_items)} 筆。")
+            print(f"本輪共取得 {len(all_items)} 筆動態，其中 upload 類型 {len(upload_items)} 筆。")
 
             recent_candidates = []
             time_filtered = 0
@@ -149,24 +149,20 @@ class YouTubeService:
                 duration_seconds = durations.get(candidate["video_id"], 0)
                 if duration_seconds <= Config.SHORTS_MAX_SECONDS:
                     shorts_skipped += 1
-                    print(
-                        f"略過 Shorts 或短片：{candidate['title']}（{duration_seconds} 秒）"
-                    )
+                    print(f"略過 Shorts 或短片：{candidate['title']}（{duration_seconds} 秒）")
                     continue
 
                 candidate["duration_seconds"] = duration_seconds
                 new_videos.append(candidate)
-                print(
-                    f"保留長影片：{candidate['title']}（{duration_seconds} 秒）"
-                )
+                print(f"保留長影片：{candidate['title']}（{duration_seconds} 秒）")
 
             print(
-                f"時間篩掉 {time_filtered} 支，關鍵字篩掉 {keyword_filtered} 支，"
-                f"缺少 videoId {missing_video_id} 支。"
+                f"前置篩選結果：時間略過 {time_filtered} 支，"
+                f"關鍵字略過 {keyword_filtered} 支，缺少 videoId {missing_video_id} 支，"
+                f"進入 Shorts 檢查 {len(recent_candidates)} 支。"
             )
             print(
-                "經過時間與關鍵字篩選後，候選影片 "
-                f"{len(recent_candidates)} 支；略過 Shorts/短片 {shorts_skipped} 支；"
+                f"Shorts 篩選結果：略過 Shorts/短片 {shorts_skipped} 支，"
                 f"最終保留長影片 {len(new_videos)} 支。"
             )
         except Exception as error:
