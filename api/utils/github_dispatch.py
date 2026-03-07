@@ -66,7 +66,7 @@ async def dispatch_nlm_workflow(url: str, prompt: str, chat_id: str, message_id:
         logger.error(f"GitHub API 請求異常: {e}")
         return False
 
-async def dispatch_slide_workflow(url: str, chat_id: str, message_id: str = "") -> bool:
+async def dispatch_slide_workflow(url: str, prompt: str, chat_id: str, message_id: str = "") -> bool:
     """
     觸發 GitHub Actions slide-on-demand.yml
     回傳 True 表示觸發成功（202 Accepted）
@@ -85,6 +85,7 @@ async def dispatch_slide_workflow(url: str, chat_id: str, message_id: str = "") 
         "ref": GH_BRANCH,
         "inputs": {
             "url": url,
+            "prompt": prompt,
             "chat_id": chat_id,
             "message_id": message_id
         }

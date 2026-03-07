@@ -14,8 +14,10 @@ def main():
     url = sys.argv[1]
     chat_id = sys.argv[2]
     message_id = os.environ.get("INPUT_MSG_ID")
+    prompt = os.environ.get("INPUT_PROMPT") or "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
 
     print(f"--- 🚀 隨選簡報生成任務啟動: {url} ---")
+    print(f"📝 Prompt: {prompt}")
 
     # 1. 認證環境佈署
     if not AuthManager.deploy_credentials():
@@ -24,7 +26,7 @@ def main():
     # 2. 執行摘要 (使用 NotebookService)
     nlm = NotebookService()
 
-    pdf_path = nlm.process_slide(url, "On-Demand Slide")
+    pdf_path = nlm.process_slide(url, "On-Demand Slide", custom_prompt=prompt)
 
     if pdf_path and os.path.exists(pdf_path):
         # 3. 通知 (目前僅實作 Telegram 傳送檔案)

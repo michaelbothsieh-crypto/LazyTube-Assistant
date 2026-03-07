@@ -115,13 +115,14 @@ async def _handle_help(chat_id: str):
         "  → 使用預設 Prompt 生成摘要\n\n"
         "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt&gt;</code>\n"
         "  → 使用自訂 Prompt 查詢\n\n"
-        "📌 <code>/slide &lt;url&gt;</code>\n"
+        "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt(選填)&gt;</code>\n"
         "  → 產生該來源的 PDF 幻燈片 (約需1-3分鐘)\n\n"
         "📌 <code>/status</code>\n"
         "  → 查看服務狀態\n\n"
         "<b>範例：</b>\n"
         "<code>/nlm https://youtu.be/xxxxx</code>\n"
-        "<code>/nlm https://youtu.be/xxxxx 列出所有技術術語和定義</code>"
+        "<code>/nlm https://youtu.be/xxxxx 列出所有技術術語和定義</code>\n"
+        "<code>/slide https://youtu.be/xxxxx 詳細介紹架構</code>"
     )
     await send_telegram_message(chat_id, help_text)
 
@@ -211,15 +212,15 @@ async def _handle_nlm(chat_id: str, text: str):
 async def _handle_slide(chat_id: str, text: str):
     """
     解析 /slide 指令並觸發 GitHub Actions
-    格式: /slide <url>
+    格式: /slide <url> [自訂prompt]
     """
-    parts = text.split(maxsplit=1)  # ['/slide', '<url>']
+    parts = text.split(maxsplit=2)  # ['/slide', '<url>', '<prompt(可選)>']
 
     # 驗證 URL
     if len(parts) < 2:
         await send_telegram_message(
             chat_id,
-            "❌ <b>格式錯誤</b>\n使用方法：<code>/slide &lt;url&gt;</code>"
+            "❌ <b>格式錯誤</b>\n使用方法：<code>/slide &lt;url&gt; [自訂Prompt]</code>"
         )
         return
 
@@ -236,11 +237,18 @@ async def _handle_slide(chat_id: str, text: str):
         await send_telegram_message(chat_id, "❌ URL 過長（上限 2048 字元）。")
         return
 
+    # 自訂 Prompt（選填，最多 500 字）
+    custom_prompt = parts[2] if len(parts) >= 3 else DEFAULT_PROMPT
+    if len(custom_prompt) > 500:
+        custom_prompt = custom_prompt[:500]
+        logger.info("自訂 Prompt 超過 500 字元，已截斷")
+
     # 立即回應「處理中」並取得 message_id
     resp_data = await send_telegram_message(
         chat_id,
         f"⏳ <b>已收到簡報生成任務，處理中...</b>\n\n"
-        f"🔗 URL：<code>{url[:100]}</code>\n\n"
+        f"🔗 URL：<code>{url[:100]}</code>\n"
+        f"📝 Prompt：{custom_prompt[:80]}{'...' if len(custom_prompt) > 80 else ''}\n\n"
         f"<i>NotebookLM 正在分析並生成簡報，完成後將自動回傳 PDF 檔案（約 1-3 分鐘）。</i>"
     )
     
@@ -252,6 +260,7 @@ async def _handle_slide(chat_id: str, text: str):
     try:
         success = await dispatch_slide_workflow(
             url=url,
+            prompt=custom_prompt,
             chat_id=chat_id,
             message_id=msg_id
         )

@@ -59,7 +59,7 @@ class NotebookService:
         
         return summary
 
-    def process_slide(self, url, title):
+    def process_slide(self, url, title, custom_prompt=None):
         """
         /// 完整處理一個影片的簡報生成流程
         """
@@ -81,7 +81,10 @@ class NotebookService:
             self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
             
             # 3. 觸發生成簡報
-            self.run_nlm("slides", "create", nb_id, "--confirm")
+            cmd_args = ["slides", "create", nb_id, "--confirm"]
+            if custom_prompt:
+                cmd_args.extend(["--focus", custom_prompt])
+            self.run_nlm(*cmd_args)
             
             # 4. 輪詢直到完成 (最多等待 10 分鐘 = 30次 * 20秒)
             artifact_id = None
