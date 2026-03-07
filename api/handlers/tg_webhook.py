@@ -164,7 +164,7 @@ async def _handle_nlm(chat_id: str, text: str):
         return
 
     # 自訂 Prompt（選填，最多 500 字）
-    custom_prompt = parts[2] if len(parts) >= 3 else DEFAULT_PROMPT
+    custom_prompt = parts[2] if len(parts) >= 3 else DEFAULT_NLM_PROMPT
     if len(custom_prompt) > 500:
         custom_prompt = custom_prompt[:500]
         logger.info("自訂 Prompt 超過 500 字元，已截斷")
@@ -236,27 +236,8 @@ async def _handle_slide(chat_id: str, text: str):
         await send_telegram_message(chat_id, "❌ URL 過長（上限 2048 字元）。")
         return
 
-    # 自訂 Prompt（選填，最多 500 字）
-    custom_prompt = parts[2] if len(parts) >= 3 else DEFAULT_PROMPT
-    if len(custom_prompt) > 500:
-        custom_prompt = custom_prompt[:500]
-        logger.info("自訂 Prompt 超過 500 字元，已截斷")
-
-    # 立即回應「處理中」並取得 message_id
-    resp_data = await send_telegram_message(
-        chat_id,
-        f"<b>已收到簡報生成任務，正在處理中...</b>\n\n"
-        f"URL：<code>{url[:100]}</code>\n"
-        f"Prompt：{final_prompt[:80]}{'...' if len(final_prompt) > 80 else ''}\n\n"
-        f"<i>AI 分析與簡報製作可能需要 5-10 分鐘，完成後將自動發送檔案。</i>"
-    )
-    
-    msg_id = ""
-    if resp_data and resp_data.get("ok"):
-        msg_id = str(resp_data.get("result", {}).get("message_id", ""))
-
+    # 1. 參數解析與 Prompt 生成
     # 參數解析邏輯調整: /slide <url> <prompt?> <lang?> <format?>
-    # 範例: /slide <url> "hello world" zh-TW pptx
     remaining_text = parts[2] if len(parts) >= 3 else ""
     
     slide_format = "pdf"
@@ -275,8 +256,8 @@ async def _handle_slide(chat_id: str, text: str):
             sub_parts = remaining_text.rsplit(maxsplit=1)
             
         # 判斷倒數第二個(或現在的最後一個)是否為語言代碼 (如 zh-TW, en, ja)
-        lang_candidate = sub_parts[-1]
         if len(sub_parts) >= 1:
+            lang_candidate = sub_parts[-1]
             is_lang = False
             if "-" in lang_candidate and len(lang_candidate) <= 6:
                 is_lang = True
@@ -290,6 +271,19 @@ async def _handle_slide(chat_id: str, text: str):
         # 剩下的就是 Prompt
         if remaining_text.strip() and remaining_text.strip() != "_":
             final_prompt = remaining_text.strip()
+
+    # 2. 立即回應「處理中」並取得 message_id
+    resp_data = await send_telegram_message(
+        chat_id,
+        f"<b>已收到簡報生成任務，正在處理中...</b>\n\n"
+        f"URL：<code>{url[:100]}</code>\n"
+        f"Prompt：{final_prompt[:80]}{'...' if len(final_prompt) > 80 else ''}\n\n"
+        f"<i>AI 分析與簡報製作可能需要 5-10 分鐘，完成後將自動發送檔案。</i>"
+    )
+    
+    msg_id = ""
+    if resp_data and resp_data.get("ok"):
+        msg_id = str(resp_data.get("result", {}).get("message_id", ""))
 
     # 觸發 GitHub Actions
     try:
