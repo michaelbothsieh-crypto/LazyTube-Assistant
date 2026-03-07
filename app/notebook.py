@@ -98,9 +98,12 @@ class NotebookService:
             print(f"🎨 正在請求生成簡報 (語言: {slide_lang}, 格式: {slide_format})...")
             
             # 使用正確的 --language 參數，並將 custom_prompt 傳入 --focus
+            # 優化：使用 presenter_slides 且長度為 short 以加快生成速度
             cmd_args = [
                 "slides", "create", nb_id, 
                 "--language", slide_lang, 
+                "--format", "presenter_slides",
+                "--length", "short",
                 "--confirm"
             ]
             if custom_prompt:
