@@ -271,10 +271,18 @@ async def _handle_slide(chat_id: str, text: str):
             remaining_text = remaining_text.rsplit(maxsplit=1)[0] if len(sub_parts) > 1 else ""
             sub_parts = remaining_text.rsplit(maxsplit=1)
             
-        # 判斷倒數第二個(或現在的最後一個)是否為語言簡稱 (如 zh-TW, en-US)
-        if len(sub_parts) >= 1 and "-" in sub_parts[-1] and len(sub_parts[-1]) <= 5:
-            slide_lang = sub_parts[-1]
-            remaining_text = remaining_text.rsplit(maxsplit=1)[0] if len(sub_parts) > 1 else ""
+        # 判斷倒數第二個(或現在的最後一個)是否為語言代碼 (如 zh-TW, en, ja)
+        lang_candidate = sub_parts[-1]
+        if len(sub_parts) >= 1:
+            is_lang = False
+            if "-" in lang_candidate and len(lang_candidate) <= 6:
+                is_lang = True
+            elif len(lang_candidate) == 2 and lang_candidate.isalpha():
+                is_lang = True
+            
+            if is_lang:
+                slide_lang = lang_candidate
+                remaining_text = remaining_text.rsplit(maxsplit=1)[0] if len(sub_parts) > 1 else ""
         
         # 剩下的就是 Prompt
         if remaining_text.strip() and remaining_text.strip() != "_":
