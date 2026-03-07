@@ -255,13 +255,28 @@ async def _handle_slide(chat_id: str, text: str):
     if resp_data and resp_data.get("ok"):
         msg_id = str(resp_data.get("result", {}).get("message_id", ""))
 
+    # 格式辨識與 Prompt 提取
+    # 支援格式: /slide <url> [pptx] [自訂prompt]
+    slide_format = "pdf"
+    final_prompt = custom_prompt
+    
+    # 檢查 custom_prompt 是否以 pptx 開頭 (忽略大小寫)
+    prompt_parts = custom_prompt.split(maxsplit=1)
+    if prompt_parts and prompt_parts[0].lower() == "pptx":
+        slide_format = "pptx"
+        final_prompt = prompt_parts[1] if len(prompt_parts) > 1 else ""
+    elif prompt_parts and prompt_parts[0].lower() == "pdf":
+        slide_format = "pdf"
+        final_prompt = prompt_parts[1] if len(prompt_parts) > 1 else ""
+
     # 觸發 GitHub Actions
     try:
         success = await dispatch_slide_workflow(
             url=url,
-            prompt=custom_prompt,
+            prompt=final_prompt,
             chat_id=chat_id,
-            message_id=msg_id
+            message_id=msg_id,
+            slide_format=slide_format  # 傳遞格式參數
         )
         if not success:
             debug_info = f"Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'} | Repo:{os.environ.get('GH_REPO_NAME')}"

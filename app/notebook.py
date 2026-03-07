@@ -70,7 +70,7 @@ class NotebookService:
         
         return summary
 
-    def process_slide(self, url, title, custom_prompt=None):
+    def process_slide(self, url, title, custom_prompt=None, slide_format="pdf"):
         """
         /// 完整處理一個影片的簡報生成流程
         """
@@ -95,7 +95,7 @@ class NotebookService:
             self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
             
             # 3. 觸發生成簡報 (強制語言: 繁體中文)
-            print("🎨 正在請求生成簡報 (語言: zh-TW)...")
+            print(f"🎨 正在請求生成簡報 (語言: zh-TW, 格式: {slide_format})...")
             
             # 使用正確的 --language 參數，並將 custom_prompt 傳入 --focus
             cmd_args = [
@@ -153,9 +153,14 @@ class NotebookService:
             
             # 5. 下載檔案
             if artifact_id:
-                out_path = f"slide_{nb_name}.pdf"
-                print(f"📥 正在下載簡報檔案: {out_path}...")
-                down_res = self.run_nlm("download", "slide-deck", nb_id, artifact_id, "--output", out_path)
+                ext = "pptx" if slide_format == "pptx" else "pdf"
+                out_path = f"slide_{nb_name}.{ext}"
+                print(f"📥 正在下載簡報檔案 ({ext}): {out_path}...")
+                down_res = self.run_nlm(
+                    "download", "slide-deck", nb_id, artifact_id, 
+                    "--output", out_path,
+                    "--format", ext
+                )
                 if down_res.returncode == 0 and os.path.exists(out_path):
                     pdf_path = out_path
                     print("✅ 下載成功")

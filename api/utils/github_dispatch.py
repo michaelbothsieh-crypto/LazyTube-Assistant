@@ -72,28 +72,6 @@ async def dispatch_slide_workflow(url: str, prompt: str, chat_id: str, message_i
     回傳 True 表示觸發成功（202 Accepted）
     """
     if not all([GH_PAT, GH_OWNER, GH_REPO]):
-        logger.error("缺少 GitHub 環境變數：GH_PAT_WORKFLOW, GH_REPO_OWNER, GH_REPO_NAME")
-        return False
-
-    slide_workflow_file = "slide-on-demand.yml"
-    api_url = (
-        f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}"
-        f"/actions/workflows/{slide_workflow_file}/dispatches"
-    )
-
-    payload = {
-        "ref": GH_BRANCH,
-        "inputs": {
-            "url": url,
-            "prompt": prompt,
-            "chat_id": chat_id,
-            "message_id": message_id
-        }
-    }
-
-    headers = {
-        "Authorization": f"Bearer {GH_PAT}",
-        "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
     }
 
