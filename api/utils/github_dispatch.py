@@ -1,33 +1,29 @@
-"""
-GitHub Actions workflow_dispatch 觸發器
-Vercel 透過此模組呼叫 GitHub API 啟動 nlm-on-demand.yml
-"""
 import os
-import logging
 import httpx
+import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# 從環境變數讀取（需在 Vercel 設定）
-GH_PAT = os.environ.get("GH_PAT_WORKFLOW", "")
-GH_OWNER = os.environ.get("GH_REPO_OWNER", "")   # e.g. "michaelbothsieh-crypto"
-GH_REPO = os.environ.get("GH_REPO_NAME", "")     # e.g. "LazyTube-Assistant"
-GH_WORKFLOW_FILE = "nlm-on-demand.yml"
-GH_BRANCH = os.environ.get("GH_BRANCH", "main")
+# GitHub 配置
+GH_PAT = os.environ.get("GH_PAT_WORKFLOW")
+GH_OWNER = os.environ.get("GH_REPO_OWNER")
+GH_REPO = os.environ.get("GH_REPO_NAME")
+GH_BRANCH = os.environ.get("GH_REPO_BRANCH", "main")
 
-
-async def dispatch_nlm_workflow(url: str, prompt: str, chat_id: str, message_id: str = "") -> bool:
+async def dispatch_nlm_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = ""):
     """
-    觸發 GitHub Actions nlm-on-demand.yml
-    回傳 True 表示觸發成功（202 Accepted）
+    /// 觸發 GitHub Actions 的 YT Summary 工作流
+    回傳 True 表示觸發成功（204 No Content）
     """
     if not all([GH_PAT, GH_OWNER, GH_REPO]):
         logger.error("缺少 GitHub 環境變數：GH_PAT_WORKFLOW, GH_REPO_OWNER, GH_REPO_NAME")
         return False
 
+    workflow_file = "yt-summary.yml"
     api_url = (
         f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}"
-        f"/actions/workflows/{GH_WORKFLOW_FILE}/dispatches"
+        f"/actions/workflows/{workflow_file}/dispatches"
     )
 
     payload = {
@@ -35,8 +31,8 @@ async def dispatch_nlm_workflow(url: str, prompt: str, chat_id: str, message_id:
         "inputs": {
             "url": url,
             "prompt": prompt,
-            "chat_id": chat_id,
-            "message_id": message_id
+            "chat_id": str(chat_id),
+            "message_id": str(message_id)
         }
     }
 
@@ -66,12 +62,35 @@ async def dispatch_nlm_workflow(url: str, prompt: str, chat_id: str, message_id:
         logger.error(f"GitHub API 請求異常: {e}")
         return False
 
-async def dispatch_slide_workflow(url: str, prompt: str, chat_id: str, message_id: str = "") -> bool:
+async def dispatch_slide_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = "", slide_format: str = "pdf"):
     """
-    觸發 GitHub Actions slide-on-demand.yml
-    回傳 True 表示觸發成功（202 Accepted）
+    /// 觸發 GitHub Actions slide-on-demand.yml
+    回傳 True 表示觸發成功（204 No Content）
     """
     if not all([GH_PAT, GH_OWNER, GH_REPO]):
+        logger.error("缺少 GitHub 環境變數：GH_PAT_WORKFLOW, GH_REPO_OWNER, GH_REPO_NAME")
+        return False
+
+    slide_workflow_file = "slide-on-demand.yml"
+    api_url = (
+        f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}"
+        f"/actions/workflows/{slide_workflow_file}/dispatches"
+    )
+
+    payload = {
+        "ref": GH_BRANCH,
+        "inputs": {
+            "url": url,
+            "prompt": prompt,
+            "chat_id": str(chat_id),
+            "message_id": str(message_id),
+            "format": slide_format  # 傳遞格式
+        }
+    }
+
+    headers = {
+        "Authorization": f"Bearer {GH_PAT}",
+        "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
     }
 
@@ -80,7 +99,7 @@ async def dispatch_slide_workflow(url: str, prompt: str, chat_id: str, message_i
             response = await client.post(api_url, json=payload, headers=headers)
 
         if response.status_code == 204:
-            logger.info(f"✅ GitHub Actions (Slide) 觸發成功：{url[:60]}")
+            logger.info(f"✅ GitHub Actions (Slide) 觸發成功：{url[:60]} ({slide_format})")
             return True
         else:
             logger.error(
