@@ -37,6 +37,11 @@ def main():
         
         if success:
             print("✅ 簡報發送成功")
+        else:
+            print("❌ 簡報發送失敗 (Notifier 回報失敗)")
+    else:
+        print("❌ 簡報生成流程失敗，未取得 PDF 檔案")
+        sys.exit(1)
         
         # 4. 刪除處理中訊息 (僅限 Telegram)
         if message_id and not chat_id.startswith(('U', 'C', 'R')):
