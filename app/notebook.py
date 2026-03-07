@@ -129,16 +129,16 @@ class NotebookService:
                             continue
 
                         current_status = "UNKNOWN"
-                        # 邏輯優化：只要有 artifact_type 為 slide_deck 的項目，就檢查其狀態
+                        # 邏輯優化：只要有 type 為 slide_deck 的項目，就檢查其狀態
                         for art in status_data:
                             # 網頁版有時會回傳多個 artifact，我們要找的是 slide_deck
-                            if art.get("artifact_type") == "slide_deck":
+                            if art.get("type") == "slide_deck":
                                 current_status = art.get("status")
-                                if current_status == "DONE":
-                                    artifact_id = art.get("artifact_id")
+                                if current_status == "completed":
+                                    artifact_id = art.get("id")
                                     print(f"✨ 簡報製作完成! Artifact ID: {artifact_id}")
                                     break
-                                elif current_status == "ERROR":
+                                elif current_status == "failed":
                                     print(f"❌ 簡報製作失敗: {art.get('error_message', '原因不明')}")
                                     return None
                         
