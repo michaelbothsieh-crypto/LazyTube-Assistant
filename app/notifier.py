@@ -36,6 +36,36 @@ class Notifier:
             return cls._send_to_line(chat_id, msg_text)
         return cls._send_to_telegram(chat_id, msg_text)
 
+    @classmethod
+    def send_text(cls, target_chat_id, text, html=False):
+        """Send a plain text or HTML message to Telegram/LINE."""
+        chat_id = target_chat_id or Config.TG_CHAT_ID
+        if not chat_id:
+            return False
+
+        if str(chat_id).startswith(('U', 'C', 'R')):
+            return cls._send_to_line(chat_id, text)
+
+        if not html:
+            return cls._send_to_telegram(chat_id, text)
+
+        if not Config.TG_BOT_TOKEN:
+            print("??蝻箏? Telegram Token")
+            return False
+
+        endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendMessage"
+        try:
+            resp = requests.post(endpoint, json={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
+            }, timeout=15)
+            return resp.status_code == 200
+        except Exception as e:
+            print(f"??Telegram ?冽憭望?: {e}")
+            return False
+
     @staticmethod
     def _send_to_telegram(chat_id, text):
         """

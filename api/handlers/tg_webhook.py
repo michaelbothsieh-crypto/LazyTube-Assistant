@@ -11,6 +11,7 @@ import re
 
 from api.utils.github_dispatch import dispatch_nlm_workflow, dispatch_artifact_workflow
 from api.utils.telegram import send_telegram_message
+from api.utils.help_text import build_help_text
 from api.utils.prompt_manager import get_optimized_prompt
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,8 @@ async def _handle_start(chat_id: str):
 
 async def _handle_help(chat_id: str):
     """回傳使用說明"""
+    await send_telegram_message(chat_id, build_help_text(html=True))
+    return
     help_text = (
         "🤖 <b>LazyTube NotebookLM 查詢機器人</b>\n\n"
         "<b>指令說明：</b> (問號?代表有預設值)\n"

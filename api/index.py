@@ -1,25 +1,29 @@
 """
-LazyTube-Assistant - Vercel FastAPI 入口
-負責接收 Telegram Webhook 並轉發至 GitHub Actions
+LazyTube-Assistant FastAPI entrypoints for Telegram and external webhooks.
 """
+import logging
 import os
 import sys
-import logging
-from fastapi import FastAPI, Request, HTTPException, Header
+
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-# 修正匯入路徑，確保 Vercel 能找到 app 模組
+
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from api.handlers.tg_webhook import handle_telegram_update
+from api.utils.help_text import build_help_text
+from app.notifier import Notifier
 
-# 初始化日誌
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LazyTube-Assistant API", version="1.0.0")
+
+DEFAULT_EXTERNAL_PROMPT = "請幫我整理這支影片的重點，條列 5 點摘要。"
 
 
 @app.get("/api/health")
@@ -30,33 +34,23 @@ async def health_check():
 @app.post("/api/tg-webhook")
 async def telegram_webhook(
     request: Request,
-    x_telegram_bot_api_secret_token: str = Header(default=None)
+    x_telegram_bot_api_secret_token: str = Header(default=None),
 ):
-    """
-    Telegram Webhook 端點
-    1. 驗證 Secret Token
-    2. 解析指令
-    3. 觸發 GitHub Actions（非同步）
-    4. 立即回應 200 OK
-    """
-    # --- 安全驗證 ---
+    """Handle Telegram webhook updates."""
     expected_secret = os.environ.get("TG_WEBHOOK_SECRET", "")
     if expected_secret and x_telegram_bot_api_secret_token != expected_secret:
-        logger.warning(f"收到無效的 Webhook Secret Token，已拒絕請求")
+        logger.warning("Invalid Telegram webhook secret token")
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
-    # --- 解析 Telegram Update ---
     try:
         update = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
 
-    # --- 處理指令（非同步觸發 Actions，立即返回） ---
     try:
         await handle_telegram_update(update)
-    except Exception as e:
-        logger.error(f"處理 Telegram Update 時發生錯誤: {e}")
-        # 即使出錯也要回 200，避免 Telegram 無限重試
+    except Exception as exc:
+        logger.error("Failed to handle Telegram update: %s", exc)
 
     return JSONResponse(content={"ok": True})
 
@@ -64,13 +58,11 @@ async def telegram_webhook(
 @app.post("/api/external-dispatch")
 async def external_dispatch(
     request: Request,
-    authorization: str = Header(default=None)
+    authorization: str = Header(default=None),
 ):
     """
-    接收來自外部（如 LINE 機器人）的摘要請求
-    也實施 ALLOWED_USERS 白名單檢查
+    Handle external webhook dispatches, including the LINE bot relay.
     """
-    # 1. 驗證 Webhook Secret
     expected_secret = os.environ.get("TG_WEBHOOK_SECRET", "")
     if expected_secret and authorization != expected_secret:
         raise HTTPException(status_code=403, detail="Unauthorized")
@@ -78,40 +70,67 @@ async def external_dispatch(
     try:
         data = await request.json()
         url = data.get("url")
-        prompt = data.get("prompt", "請用繁體中文列出 5 個核心重點。")
+        prompt = data.get("prompt", DEFAULT_EXTERNAL_PROMPT)
         chat_id = data.get("chat_id")
-        command = data.get("command", "nlm")  # 新增 command 參數支援 slide
+        command = str(data.get("command", "nlm")).strip().lower()
 
-        if not url or not chat_id:
-            return JSONResponse(content={"ok": False, "error": "Missing params"}, status_code=400)
+        if not chat_id:
+            return JSONResponse(
+                content={"ok": False, "error": "Missing params"},
+                status_code=400,
+            )
 
-        # 2. 實施白名單檢查 (與 Telegram 共用同一個變數)
         allowed_users_raw = os.environ.get("ALLOWED_USERS", "")
         if allowed_users_raw:
             allowed_list = [u.strip() for u in allowed_users_raw.split(",") if u.strip()]
             if chat_id not in allowed_list:
-                logger.warning(f"拒絕未授權的外部請求: {chat_id}")
-                return JSONResponse(content={"ok": False, "error": "Permission denied"}, status_code=403)
+                logger.warning("External dispatch permission denied: %s", chat_id)
+                return JSONResponse(
+                    content={"ok": False, "error": "Permission denied"},
+                    status_code=403,
+                )
 
-        # 3. 觸發 GitHub Actions
+        if command in ["help", "/help"]:
+            if not Notifier.send_text(chat_id, build_help_text(html=False)):
+                return JSONResponse(
+                    content={"ok": False, "error": "Help delivery failed"},
+                    status_code=500,
+                )
+            return JSONResponse(content={"ok": True})
+
+        if not url:
+            return JSONResponse(
+                content={"ok": False, "error": "Missing params"},
+                status_code=400,
+            )
+
         if command in ["slide", "pic", "note"]:
             from api.utils.github_dispatch import dispatch_artifact_workflow
-            # 映射指令到 artifact_type
-            art_map = {"slide": "slide_deck", "pic": "infographic", "note": "report"}
-            art_type = art_map.get(command, "slide_deck")
-            
-            # 外部調度預設不帶 message_id (因為外部機器人可能無法處理 Telegram 的刪除邏輯)
+
+            art_map = {
+                "slide": "slide_deck",
+                "pic": "infographic",
+                "note": "report",
+            }
             await dispatch_artifact_workflow(
-                url=url, 
-                prompt=prompt, 
-                chat_id=chat_id, 
-                artifact_type=art_type
+                url=url,
+                prompt=prompt,
+                chat_id=chat_id,
+                artifact_type=art_map.get(command, "slide_deck"),
             )
         else:
             from api.utils.github_dispatch import dispatch_scheduled_summary_workflow
-            await dispatch_scheduled_summary_workflow(url=url, prompt=prompt, chat_id=chat_id)
-        
+
+            await dispatch_scheduled_summary_workflow(
+                url=url,
+                prompt=prompt,
+                chat_id=chat_id,
+            )
+
         return JSONResponse(content={"ok": True})
-    except Exception as e:
-        logger.error(f"external_dispatch 錯誤: {e}")
-        return JSONResponse(content={"ok": False, "error": str(e)}, status_code=500)
+    except Exception as exc:
+        logger.error("external_dispatch error: %s", exc)
+        return JSONResponse(
+            content={"ok": False, "error": str(exc)},
+            status_code=500,
+        )
