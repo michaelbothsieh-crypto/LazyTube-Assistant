@@ -70,14 +70,16 @@ class NotebookService:
         
         return summary
 
-    def process_slide(self, url, title, custom_prompt=None, slide_format="pdf", slide_lang="zh-TW"):
+    def process_artifact(self, url: str, title: str, artifact_type: str = "slide_deck", custom_prompt: str = None, **kwargs):
         """
-        /// 完整處理一個影片的簡報生成流程
+        /// 完整處理一個影片的 Artifact 生成流程 (Slide, Infographic, Report)
+        /// artifact_type: 'slide_deck', 'infographic', 'report'
         """
         import time
-        nb_name = f"SLIDE_{uuid.uuid4().hex[:4].upper()}"
+        prefix = artifact_type.upper()
+        nb_name = f"{prefix}_{uuid.uuid4().hex[:4].upper()}"
         nb_id = None
-        pdf_path = None
+        target_path = None
         
         try:
             # 1. 建立筆記本
@@ -94,88 +96,120 @@ class NotebookService:
             print(f"🔗 正在新增來源並等待處理: {url}...")
             self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
             
-            # 3. 觸發生成簡報 (語言: 使用傳入參數)
-            print(f"🎨 正在請求生成簡報 (語言: {slide_lang}, 格式: {slide_format})...")
+            # 3. 觸發生成指令
+            print(f"🎨 正在請求生成 {artifact_type}...")
             
-            # 使用正確的 --language 參數，並將 custom_prompt 傳入 --focus
-            # 優化：使用 presenter_slides 且長度為 short 以加快生成速度
-            cmd_args = [
-                "slides", "create", nb_id, 
-                "--language", slide_lang, 
-                "--format", "presenter_slides",
-                "--length", "short",
-                "--confirm"
-            ]
-            if custom_prompt:
-                cmd_args.extend(["--focus", custom_prompt])
+            cmd_args = []
+            if artifact_type == "slide_deck":
+                slide_lang = kwargs.get("slide_lang", "zh-TW")
+                slide_format = kwargs.get("slide_format", "pdf")
+                cmd_args = [
+                    "slides", "create", nb_id, 
+                    "--language", slide_lang, 
+                    "--format", "presenter_slides",
+                    "--length", "short",
+                    "--confirm"
+                ]
+                if custom_prompt:
+                    cmd_args.extend(["--focus", custom_prompt])
+            elif artifact_type == "infographic":
+                lang = kwargs.get("language", "zh-TW")
+                orientation = kwargs.get("orientation", "portrait")
+                detail = kwargs.get("detail", "detailed")
+                cmd_args = [
+                    "infographic", "create", nb_id,
+                    "--language", lang,
+                    "--orientation", orientation,
+                    "--detail", detail,
+                    "--confirm"
+                ]
+                if custom_prompt:
+                    cmd_args.extend(["--focus", custom_prompt])
+            elif artifact_type == "report":
+                lang = kwargs.get("language", "zh-TW")
+                # 報告預設使用 "Create Your Own" 以便帶入 Prompt
+                cmd_args = [
+                    "report", "create", nb_id,
+                    "--language", lang,
+                    "--format", "Create Your Own",
+                    "--confirm"
+                ]
+                # 報告的 prompt 參數名為 --prompt 而非 --focus
+                cmd_args.extend(["--prompt", custom_prompt or "請用繁體中文提供詳細的內容摘要報告"])
             
             create_res = self.run_nlm(*cmd_args)
             
             if create_res.returncode != 0:
-                print("❌ 簡報生成請求失敗")
+                print(f"❌ {artifact_type} 生成請求失敗")
                 return None
 
             # 4. 輪詢直到完成 (最多等待 20 分鐘 = 60次 * 20秒)
             artifact_id = None
-            print("⏳ 正在等待簡報製作完成 (此步驟可能需要 1-10 分鐘)...")
+            print(f"⏳ 正在等待 {artifact_type} 製作完成...")
             for i in range(60):
                 time.sleep(20)
                 status_res = self.run_nlm("studio", "status", nb_id, "--json", verbose=False)
-                
                 raw_out = status_res.stdout.strip() if status_res.stdout else ""
                 
                 if status_res.returncode == 0 and raw_out:
                     try:
                         status_data = json.loads(raw_out)
-                        if not isinstance(status_data, list):
-                            print(f"  ({i+1}/30) 收到非預期格式: {raw_out[:50]}...")
-                            continue
+                        if not isinstance(status_data, list): continue
 
                         current_status = "UNKNOWN"
-                        # 邏輯優化：只要有 type 為 slide_deck 的項目，就檢查其狀態
                         for art in status_data:
-                            # 網頁版有時會回傳多個 artifact，我們要找的是 slide_deck
-                            if art.get("type") == "slide_deck":
+                            if art.get("type") == artifact_type:
                                 current_status = art.get("status")
                                 if current_status == "completed":
                                     artifact_id = art.get("id")
-                                    print(f"✨ 簡報製作完成! Artifact ID: {artifact_id}")
+                                    print(f"✨ 製作完成! ID: {artifact_id}")
                                     break
                                 elif current_status == "failed":
-                                    print(f"❌ 簡報製作失敗: {art.get('error_message', '原因不明')}")
+                                    print(f"❌ 製作失敗: {art.get('error_message', '原因不明')}")
                                     return None
                         
                         if artifact_id: break
-                        print(f"  ({i+1}/30) 目前狀態: {current_status}...")
+                        print(f"  ({i+1}/60) 目前狀態: {current_status}...")
                     except BaseException as e:
-                        print(f"  ({i+1}/30) 解析失敗: {e} | 原始輸出: {raw_out[:50]}...")
+                        print(f"  ({i+1}/60) 解析失敗: {e}")
                 else:
-                    # 如果 raw_out 是空的，可能是暫時抓不到資料，繼續輪詢
-                    print(f"  ({i+1}/30) 正在獲取狀態... (Code: {status_res.returncode})")
-                    if status_res.stderr: print(f"    DEBUG: {status_res.stderr.strip()[:60]}")
+                    print(f"  ({i+1}/60) 正在獲起狀態...")
             
             # 5. 下載檔案
             if artifact_id:
-                ext = "pptx" if slide_format == "pptx" else "pdf"
-                out_path = f"slide_{nb_name}.{ext}"
-                print(f"📥 正在下載簡報檔案 ({ext}): {out_path}...")
-                down_res = self.run_nlm(
-                    "download", "slide-deck", nb_id, 
-                    "--id", artifact_id,
-                    "--output", out_path,
-                    "--format", ext
-                )
+                # 決定副檔名與子指令
+                if artifact_type == "slide_deck":
+                    ext = kwargs.get("slide_format", "pdf")
+                    subcmd = "slide-deck"
+                elif artifact_type == "infographic":
+                    ext = "png"
+                    subcmd = "infographic"
+                elif artifact_type == "report":
+                    ext = "md"
+                    subcmd = "report"
+                else:
+                    ext = "txt"
+                    subcmd = "artifact"
+
+                out_path = f"{artifact_type}_{uuid.uuid4().hex[:4]}.{ext}"
+                print(f"📥 正在下載檔案 ({ext}): {out_path}...")
+                
+                down_args = ["download", subcmd, nb_id, "--id", artifact_id, "--output", out_path]
+                if artifact_type == "slide_deck":
+                    down_args.extend(["--format", ext])
+                
+                down_res = self.run_nlm(*down_args)
                 if down_res.returncode == 0 and os.path.exists(out_path):
-                    pdf_path = out_path
+                    target_path = out_path
                     print("✅ 下載成功")
                 else:
                     print("❌ 檔案載入失敗")
             else:
-                print("⏰ 簡報生成超時")
+                print("⏰ 製作超時")
 
         finally:
             if nb_id:
                 print(f"🧹 正在刪除暫存筆記本: {nb_id}...")
                 self.run_nlm("notebook", "delete", nb_id, "--confirm")
         
-        return pdf_path
+        return target_path

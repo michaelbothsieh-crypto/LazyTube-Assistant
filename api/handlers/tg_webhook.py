@@ -9,7 +9,7 @@ import logging
 import httpx
 import re
 
-from api.utils.github_dispatch import dispatch_nlm_workflow, dispatch_slide_workflow
+from api.utils.github_dispatch import dispatch_nlm_workflow, dispatch_artifact_workflow
 from api.utils.telegram import send_telegram_message
 from api.utils.prompt_manager import get_optimized_prompt
 
@@ -84,6 +84,12 @@ async def handle_telegram_update(update: dict):
     elif text.startswith("/slide"):
         await _handle_slide(chat_id, text)
 
+    elif text.startswith("/pic"):
+        await _handle_pic(chat_id, text)
+
+    elif text.startswith("/note"):
+        await _handle_note(chat_id, text)
+
     elif "youtube.com/" in text or "youtu.be/" in text:
         # 自動辨識網址 (若沒打指令但貼了網址)
         urls = re.findall(r'(https?://\S+)', text)
@@ -112,16 +118,18 @@ async def _handle_help(chat_id: str):
     help_text = (
         "🤖 <b>LazyTube NotebookLM 查詢機器人</b>\n\n"
         "<b>指令說明：</b> (問號?代表有預設值)\n"
-        "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt?&gt;</code> (約1-3分鐘)\n"
-        "  → 獲取來源的精華摘要\n\n"
-        "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt?&gt; &lt;語言?&gt; &lt;格式?&gt;</code> (約5-10分鐘)\n"
-        "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報\n"
-        "  (💡 若要跳過 Prompt 直接指定語言/格式，Prompt 請輸入 <code>_</code>)\n\n"
+        "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt?&gt;</code> (1-3分)\n"
+        "  → 獲取來源的文字摘要\n\n"
+        "📌 <code>/pic &lt;url&gt; &lt;自訂Prompt?&gt;</code> (3-5分)\n"
+        "  → 生成 <b>Portrait/Detailed</b> 圖片總結 (PNG)\n\n"
+        "📌 <code>/note &lt;url&gt; &lt;自訂Prompt?&gt;</code> (3-5分)\n"
+        "  → 生成詳細的 <b>Markdown</b> 總結報告檔案\n\n"
+        "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt?&gt; &lt;語言?&gt; &lt;格式?&gt;</code> (5-10分)\n"
+        "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報\n\n"
         "<b>範例：</b>\n"
-        "<code>/nlm https://youtu.be/xxxxx</code>\n"
-        "<code>/slide https://youtu.be/xxxxx</code> (預設 PDF)\n"
-        "<code>/slide https://youtu.be/xxxxx 著重架構 zh-TW pptx</code>\n"
-        "<code>/slide https://youtu.be/xxxxx _ zh-TW pptx</code> (若不改 Prompt 可用 _ 代替)"
+        "<code>/pic https://youtu.be/xxxxx</code>\n"
+        "<code>/note https://youtu.be/xxxxx</code>\n"
+        "<code>/slide https://youtu.be/xxxxx _ zh-TW pptx</code>"
     )
     await send_telegram_message(chat_id, help_text)
 
@@ -191,13 +199,13 @@ async def _handle_nlm(chat_id: str, text: str):
             message_id=msg_id
         )
         if not success:
-            debug_info = f"Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'} | Repo:{os.environ.get('GH_REPO_NAME')}"
+            debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
             await send_telegram_message(
                 chat_id,
                 f"❌ <b>觸發任務失敗</b>\n\n"
-                f"原因：無法連接到 GitHub API。\n"
+                f"原因：無法連接到 GitHub API (NLM)。\n"
                 f"🔧 <b>除錯資訊</b>：<code>{debug_info}</code>\n"
-                f"請檢查 Vercel 環境變數設定是否正確。"
+                f"請檢查 Vercel 環境變數是否正確。"
             )
     except Exception as e:
         logger.error(f"dispatch_nlm_workflow 發生錯誤: {e}")
@@ -287,22 +295,23 @@ async def _handle_slide(chat_id: str, text: str):
 
     # 觸發 GitHub Actions
     try:
-        success = await dispatch_slide_workflow(
+        success = await dispatch_artifact_workflow(
             url=url,
             prompt=final_prompt,
             chat_id=chat_id,
             message_id=msg_id,
             slide_format=slide_format,
-            slide_lang=slide_lang  # 傳遞語言
+            slide_lang=slide_lang,
+            artifact_type="slide_deck"
         )
         if not success:
-            debug_info = f"Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'} | Repo:{os.environ.get('GH_REPO_NAME')}"
+            debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
             await send_telegram_message(
                 chat_id,
                 f"❌ <b>觸發任務失敗</b>\n\n"
-                f"原因：無法連接到 GitHub API。\n"
+                f"原因：無法連接到 GitHub API (Artifact)。\n"
                 f"🔧 <b>除錯資訊</b>：<code>{debug_info}</code>\n"
-                f"請檢查 Vercel 環境變數設定是否正確。"
+                f"請檢查 Vercel 環境變數是否正確。"
             )
     except Exception as e:
         logger.error(f"dispatch_slide_workflow 發生錯誤: {e}")
@@ -312,3 +321,35 @@ async def _handle_slide(chat_id: str, text: str):
             f"錯誤內容：<code>{str(e)[:100]}</code>\n"
             f"請聯繫管理員檢查 Vercel 日誌。"
         )
+
+async def _handle_pic(chat_id: str, text: str):
+    """解析 /pic 指令並生成圖片"""
+    parts = text.split(maxsplit=2)
+    if len(parts) < 2:
+        await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/pic &lt;url&gt; [自訂Prompt]</code>")
+        return
+    url, prompt = parts[1], (parts[2] if len(parts) >= 3 else "")
+    
+    resp = await send_telegram_message(chat_id, f"⏳ <b>正在生成圖片總結...</b>\n🔗 URL: <code>{url[:60]}...</code>")
+    msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
+    
+    success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="infographic")
+    if not success:
+        debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
+        await send_telegram_message(chat_id, f"❌ <b>觸發圖片任務失敗</b>\n除錯資訊：<code>{debug_info}</code>")
+
+async def _handle_note(chat_id: str, text: str):
+    """解析 /note 指令並生成報告"""
+    parts = text.split(maxsplit=2)
+    if len(parts) < 2:
+        await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/note &lt;url&gt; [自訂Prompt]</code>")
+        return
+    url, prompt = parts[1], (parts[2] if len(parts) >= 3 else "")
+
+    resp = await send_telegram_message(chat_id, f"⏳ <b>正在製作總結報告...</b>\n🔗 URL: <code>{url[:60]}...</code>")
+    msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
+    
+    success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="report")
+    if not success:
+        debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
+        await send_telegram_message(chat_id, f"❌ <b>觸發報告任務失敗</b>\n除錯資訊：<code>{debug_info}</code>")
