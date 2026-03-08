@@ -68,112 +68,152 @@ class YouTubeService:
             )
         return durations
 
+    def _get_subscriptions(self, limit=50):
+        """獲取使用者的訂閱頻道清單。"""
+        try:
+            subscriptions = []
+            request = self.service.subscriptions().list(
+                part="snippet,contentDetails",
+                mine=True,
+                maxResults=limit
+            )
+            response = request.execute()
+            for item in response.get("items", []):
+                subscriptions.append({
+                    "id": item["snippet"]["resourceId"]["channelId"],
+                    "title": item["snippet"]["title"]
+                })
+            return subscriptions
+        except Exception as e:
+            print(f"獲取訂閱清單失敗: {e}")
+            return []
+
+    def _get_channels_uploads_playlists(self, channel_ids):
+        """獲取多個頻道的『上傳影片』播放清單 ID。"""
+        if not channel_ids:
+            return {}
+        
+        playlist_map = {}
+        # 批次查詢，每次上限 50 個
+        for i in range(0, len(channel_ids), 50):
+            batch_ids = channel_ids[i:i+50]
+            response = self.service.channels().list(
+                part="contentDetails",
+                id=",".join(batch_ids),
+                maxResults=len(batch_ids)
+            ).execute()
+            
+            for item in response.get("items", []):
+                playlist_map[item["id"]] = item["contentDetails"]["relatedPlaylists"]["uploads"]
+        
+        return playlist_map
+
+    def _get_video_categories(self, video_ids):
+        """批次獲取影片的分類 ID。"""
+        if not video_ids:
+            return {}
+        
+        categories = {}
+        for i in range(0, len(video_ids), 50):
+            batch_ids = video_ids[i:i+50]
+            response = self.service.videos().list(
+                part="snippet",
+                id=",".join(batch_ids),
+                maxResults=len(batch_ids)
+            ).execute()
+            
+            for item in response.get("items", []):
+                categories[item["id"]] = item["snippet"].get("categoryId")
+        return categories
+
     def fetch_new_game_videos(self, last_check_time):
         """
-        /// 使用 activities().list(mine=True) 取得訂閱頻道最新活動
-        /// 再用 videos().list 補抓時長，排除 Shorts，只保留長影片
+        /// 重構版：主動遍歷訂閱頻道，並過濾遊戲類別
+        /// 1. 獲取訂閱清單
+        /// 2. 檢查每個頻道最新上傳
+        /// 3. 過濾 Gaming (ID: 20)
         """
         new_videos = []
         try:
-            response = self.service.activities().list(
-                part="snippet,contentDetails",
-                mine=True,
-                maxResults=50,
-            ).execute()
+            # 1. 獲取訂閱清單 (前 50 個)
+            subscriptions = self._get_subscriptions(50)
+            if not subscriptions:
+                print("未找到訂閱頻道。")
+                return []
+            
+            print(f"開始掃描 {len(subscriptions)} 個訂閱頻道的更新...")
+
+            # 2. 獲取所有頻道的上傳播放清單 ID
+            channel_ids = [s["id"] for s in subscriptions]
+            uploads_playlists = self._get_channels_uploads_playlists(channel_ids)
+
+            # 3. 遍歷每個播放清單，抓取最近 2 個影片 (減少配額消耗)
+            all_candidate_videos = []
+            for channel in subscriptions:
+                playlist_id = uploads_playlists.get(channel["id"])
+                if not playlist_id:
+                    continue
+                
+                try:
+                    items_res = self.service.playlistItems().list(
+                        part="snippet,contentDetails",
+                        playlistId=playlist_id,
+                        maxResults=2
+                    ).execute()
+                    
+                    for item in items_res.get("items", []):
+                        published_at = item["snippet"]["publishedAt"]
+                        pub_time = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+                        
+                        # 時間過濾與噪音抑制
+                        is_old = pub_time <= last_check_time
+                        if is_old:
+                            continue
+                            
+                        all_candidate_videos.append({
+                            "video_id": item["contentDetails"]["videoId"],
+                            "title": item["snippet"]["title"],
+                            "channel": item["snippet"]["videoOwnerChannelTitle"] or item["snippet"]["channelTitle"],
+                            "time": pub_time,
+                            "url": f"https://www.youtube.com/watch?v={item['contentDetails']['videoId']}"
+                        })
+                except Exception:
+                    continue # 略過私有或有問題的播放清單
+
+            if not all_candidate_videos:
+                print("所有訂閱頻道均無新上傳。")
+                return []
+
+            # 4. 批次檢查類別與時長
+            video_ids = [v["video_id"] for v in all_candidate_videos]
+            categories = self._get_video_categories(video_ids)
+            durations = self._fetch_video_durations(video_ids)
 
             keywords = Config.get_keywords()
-            all_items = response.get("items", [])
-            upload_items = [
-                item for item in all_items if item.get("snippet", {}).get("type") == "upload"
-            ]
-
-            print(f"本輪共取得 {len(all_items)} 筆動態，其中 upload 類型 {len(upload_items)} 筆。")
-
-            recent_candidates = []
-            time_filtered = 0
-            keyword_filtered = 0
-            missing_video_id = 0
-
-            for item in upload_items:
-                snippet = item.get("snippet", {})
-                published_at = snippet.get("publishedAt")
-                title = snippet.get("title", "Unknown")
-                channel = snippet.get("channelTitle", "Unknown")
-
-                if not published_at:
-                    print(f"略過影片：{title}，原因：缺少 publishedAt。")
-                    continue
-
-                pub_time = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+            
+            for video in all_candidate_videos:
+                vid_id = video["video_id"]
+                category_id = categories.get(vid_id)
+                duration_seconds = durations.get(vid_id, 0)
                 
-                # 計算與上次檢查時間的差距
-                is_old = pub_time <= last_check_time
-                is_near_past = not is_old or (last_check_time - pub_time).total_seconds() < 3600
-
-                # 只有當是新影片或是「近期」的舊影片時，才顯示掃描日誌，減少長期雜訊
-                if not is_old or is_near_past:
-                    print(
-                        f"檢查 upload：{title} | 頻道：{channel} | 發布時間："
-                        f"{format_taipei_time(pub_time)}（台北時間）"
-                    )
-
-                if is_old:
-                    time_filtered += 1
-                    # 只有在時間非常接近（1小時內）時才輸出略過訊息
-                    if is_near_past:
-                        print(
-                            f"略過影片：{title}，原因：發布時間早於或等於上次檢查時間 "
-                            f"{format_taipei_time(last_check_time)}。"
-                        )
-                    continue
-
-                if keywords and not any(keyword in title.lower() for keyword in keywords):
-                    keyword_filtered += 1
-                    print(f"略過影片：{title}，原因：未命中關鍵字 {keywords}。")
-                    continue
-
-                video_id = item.get("contentDetails", {}).get("upload", {}).get("videoId")
-                if not video_id:
-                    missing_video_id += 1
-                    print(f"略過影片：{title}，原因：缺少 videoId。")
-                    continue
-
-                recent_candidates.append(
-                    {
-                        "video_id": video_id,
-                        "url": f"https://www.youtube.com/watch?v={video_id}",
-                        "title": title,
-                        "time": pub_time,
-                        "channel": channel,
-                    }
-                )
-                print(f"通過前置篩選：{title}")
-
-            durations = self._fetch_video_durations(
-                [candidate["video_id"] for candidate in recent_candidates]
-            )
-
-            shorts_skipped = 0
-            for candidate in recent_candidates:
-                duration_seconds = durations.get(candidate["video_id"], 0)
+                # 類別過濾：只保留 Gaming (20)
+                if category_id != "20":
+                    continue # 非遊戲類，直接略過
+                
+                # 時長過濾：排除 Shorts
                 if duration_seconds <= Config.SHORTS_MAX_SECONDS:
-                    shorts_skipped += 1
-                    print(f"略過 Shorts 或短片：{candidate['title']}（{duration_seconds} 秒）")
+                    continue
+                
+                # 關鍵字過濾
+                if keywords and not any(keyword in video["title"].lower() for keyword in keywords):
                     continue
 
-                candidate["duration_seconds"] = duration_seconds
-                new_videos.append(candidate)
-                print(f"保留長影片：{candidate['title']}（{duration_seconds} 秒）")
+                video["duration_seconds"] = duration_seconds
+                new_videos.append(video)
+                print(f"發現新遊戲影片：{video['title']} | 頻道：{video['channel']}（{duration_seconds} 秒）")
 
-            print(
-                f"前置篩選結果：時間略過 {time_filtered} 支，"
-                f"關鍵字略過 {keyword_filtered} 支，缺少 videoId {missing_video_id} 支，"
-                f"進入 Shorts 檢查 {len(recent_candidates)} 支。"
-            )
-            print(
-                f"Shorts 篩選結果：略過 Shorts/短片 {shorts_skipped} 支，"
-                f"最終保留長影片 {len(new_videos)} 支。"
-            )
+            print(f"掃描完成，本輪共發現 {len(new_videos)} 支符合條件的新遊戲影片。")
+            
         except Exception as error:
             print(f"YouTube 抓取失敗：{error}")
 
