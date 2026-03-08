@@ -105,15 +105,22 @@ class YouTubeService:
                     continue
 
                 pub_time = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
-                print(
-                    f"檢查 upload：{title} | 頻道：{channel} | 發布時間："
-                    f"{format_taipei_time(pub_time)}（台北時間）"
-                )
+                
+                # 計算與上次檢查時間的差距
+                is_old = pub_time <= last_check_time
+                is_near_past = not is_old or (last_check_time - pub_time).total_seconds() < 3600
 
-                if pub_time <= last_check_time:
+                # 只有當是新影片或是「近期」的舊影片時，才顯示掃描日誌，減少長期雜訊
+                if not is_old or is_near_past:
+                    print(
+                        f"檢查 upload：{title} | 頻道：{channel} | 發布時間："
+                        f"{format_taipei_time(pub_time)}（台北時間）"
+                    )
+
+                if is_old:
                     time_filtered += 1
-                    # 只有在時間非常接近（1小時內）時才輸出略過訊息，減少舊影片產生的雜訊
-                    if (last_check_time - pub_time).total_seconds() < 3600:
+                    # 只有在時間非常接近（1小時內）時才輸出略過訊息
+                    if is_near_past:
                         print(
                             f"略過影片：{title}，原因：發布時間早於或等於上次檢查時間 "
                             f"{format_taipei_time(last_check_time)}。"
