@@ -99,8 +99,8 @@ async def external_dispatch(
             # 對於 LINE 來的請求，將來如果要支援推播檔案，需要解決 public url 的問題
             await dispatch_slide_workflow(url=url, prompt=prompt, chat_id=chat_id)
         else:
-            from api.utils.github_dispatch import dispatch_nlm_workflow
-            await dispatch_nlm_workflow(url=url, prompt=prompt, chat_id=chat_id)
+            from api.utils.github_dispatch import dispatch_scheduled_summary_workflow
+            await dispatch_scheduled_summary_workflow(url=url, prompt=prompt, chat_id=chat_id)
         
         return JSONResponse(content={"ok": True})
     except Exception as e:
