@@ -13,7 +13,7 @@ GH_BRANCH = os.environ.get("GH_REPO_BRANCH", "main")
 
 async def dispatch_nlm_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = ""):
     """
-    /// 觸發 GitHub Actions 的 YT Summary 工作流
+    /// 觸發 GitHub Actions 的隨選 NLM 查詢工作流 (nlm-on-demand.yml)
     """
     if not all([GH_PAT, GH_OWNER, GH_REPO]):
         logger.error("缺少 GitHub 環境變數：GH_PAT_WORKFLOW, GH_REPO_OWNER, GH_REPO_NAME")
@@ -34,6 +34,26 @@ async def dispatch_nlm_workflow(url: str, prompt: str = "", chat_id: str = "", m
         return True
     except Exception as e:
         logger.error(f"GitHub API 請求異常: {e}")
+        return False
+
+async def dispatch_scheduled_summary_workflow(url: str, prompt: str = "", chat_id: str = ""):
+    """
+    /// 觸發 GitHub Actions 的定時/外部摘要工作流 (yt-summary.yml)
+    """
+    if not all([GH_PAT, GH_OWNER, GH_REPO]):
+        return False
+
+    workflow_file = "yt-summary.yml"
+    api_url = (f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/{workflow_file}/dispatches")
+    payload = {"ref": GH_BRANCH, "inputs": {"url": url, "prompt": prompt, "chat_id": str(chat_id)}}
+    headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(api_url, json=payload, headers=headers)
+        return response.status_code == 204
+    except Exception as e:
+        logger.error(f"GitHub API 請求異常 (Scheduled): {e}")
         return False
 
 async def dispatch_artifact_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = "", slide_format: str = "pdf", slide_lang: str = "zh-TW", artifact_type: str = "slide_deck"):

@@ -94,13 +94,22 @@ async def external_dispatch(
                 return JSONResponse(content={"ok": False, "error": "Permission denied"}, status_code=403)
 
         # 3. 觸發 GitHub Actions
-        if command == "slide":
-            from api.utils.github_dispatch import dispatch_slide_workflow
-            # 對於 LINE 來的請求，將來如果要支援推播檔案，需要解決 public url 的問題
-            await dispatch_slide_workflow(url=url, prompt=prompt, chat_id=chat_id)
+        if command in ["slide", "pic", "note"]:
+            from api.utils.github_dispatch import dispatch_artifact_workflow
+            # 映射指令到 artifact_type
+            art_map = {"slide": "slide_deck", "pic": "infographic", "note": "report"}
+            art_type = art_map.get(command, "slide_deck")
+            
+            # 外部調度預設不帶 message_id (因為外部機器人可能無法處理 Telegram 的刪除邏輯)
+            await dispatch_artifact_workflow(
+                url=url, 
+                prompt=prompt, 
+                chat_id=chat_id, 
+                artifact_type=art_type
+            )
         else:
-            from api.utils.github_dispatch import dispatch_nlm_workflow
-            await dispatch_nlm_workflow(url=url, prompt=prompt, chat_id=chat_id)
+            from api.utils.github_dispatch import dispatch_scheduled_summary_workflow
+            await dispatch_scheduled_summary_workflow(url=url, prompt=prompt, chat_id=chat_id)
         
         return JSONResponse(content={"ok": True})
     except Exception as e:

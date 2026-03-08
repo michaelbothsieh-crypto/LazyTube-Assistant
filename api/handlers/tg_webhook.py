@@ -333,7 +333,6 @@ async def _handle_pic(chat_id: str, text: str):
     resp = await send_telegram_message(chat_id, f"⏳ <b>正在生成圖片總結...</b>\n🔗 URL: <code>{url[:60]}...</code>")
     msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
     
-    from api.utils.github_dispatch import dispatch_artifact_workflow
     success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="infographic")
     if not success:
         debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
@@ -350,8 +349,7 @@ async def _handle_note(chat_id: str, text: str):
     resp = await send_telegram_message(chat_id, f"⏳ <b>正在製作總結報告...</b>\n🔗 URL: <code>{url[:60]}...</code>")
     msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
     
-    from api.utils.github_dispatch import dispatch_artifact_workflow
     success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="report")
     if not success:
         debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
-        await send_telegram_message(chat_id, f"❌ <b>觸發報告任務失敗</b>\n除測資訊：<code>{debug_info}</code>")
+        await send_telegram_message(chat_id, f"❌ <b>觸發報告任務失敗</b>\n除錯資訊：<code>{debug_info}</code>")
