@@ -27,6 +27,7 @@ class Config:
 
     # 預設過濾關鍵字（留空代表不進行過濾，抓取所有影片）
     DEFAULT_KEYWORDS = ""
+    MAX_VIDEO_SECONDS = int(os.environ.get("MAX_VIDEO_SECONDS", 3600))
     FILTER_KEYWORDS = os.environ.get("FILTER_KEYWORDS", DEFAULT_KEYWORDS)
 
     # 白名單使用者 ID（逗號分隔）
