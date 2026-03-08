@@ -129,7 +129,7 @@ async def _handle_help(chat_id: str):
         "<b>範例：</b>\n"
         "<code>/pic https://youtu.be/xxxxx</code>\n"
         "<code>/note https://youtu.be/xxxxx</code>\n"
-        "<code>/slide https://youtu.be/xxxxx _ zh-TW pptx</code>"
+        "<code>/slide https://youtu.be/xxxxx _ zh-TW/en pptx/pdf</code> (預設是 zh-TW/pdf)"
     )
     await send_telegram_message(chat_id, help_text)
 
