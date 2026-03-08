@@ -1,0 +1,33 @@
+name: Notebook Clean Up
+
+on:
+  schedule:
+    # 每天凌晨 00:00 (UTC) 執行，約台北時間 08:00
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 支援手動觸發
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install httpx notebooklm-mcp-cli requests typer rich
+
+      - name: Run Cleanup Script
+        env:
+          NLM_CONFIG_DIR: ${{ github.workspace }}/.nlm_config
+        run: |
+          mkdir -p .nlm_config
+          # 使用預先配置好的 NLM 驗證資訊 (假設已存在於加密變數)
+          echo '${{ secrets.NLM_AUTH_JSON }}' > .nlm_config/auth.json
+          python cleanup_notebooks.py

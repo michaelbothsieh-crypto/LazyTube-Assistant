@@ -17,45 +17,71 @@ def main():
     prompt = os.environ.get("INPUT_PROMPT") or ""
     slide_format = "pdf"
     slide_lang = "zh-TW"
+    artifact_type = "slide_deck"
 
-    # 解析嵌入在 Prompt 中的元數據 (格式: __META:lang,format__Prompt)
+    # 解析嵌入在 Prompt 中的元數據 (格式: __META:lang,format,type__Prompt)
     if prompt.startswith("__META:"):
         import re
-        # 更加強健的正規表示式，抓取直到 __ 結尾的部分
-        match = re.match(r"^__META:([^,]+),([^__]+)__", prompt)
+        # 支援 2 或 3 個參數的元數據
+        match = re.match(r"^__META:([^,]+),([^,^__]+)(?:,([^__]+))?__", prompt)
         if match:
             slide_lang = match.group(1)
             slide_format = match.group(2)
+            if match.group(3):
+                artifact_type = match.group(3)
             # 找到第一個 __ 之後的內容
             prompt = prompt[prompt.find("__", 7) + 2:]
     
-    print(f"--- 🚀 隨選簡報生成任務啟動: {url} ---")
+    print(f"--- 🚀 隨選內容生成任務啟動: {url} ---")
     print(f"📝 Prompt: {prompt}")
-    print(f"📄 Format: {slide_format}")
+    print(f"📄 Type: {artifact_type}")
+    print(f"📄 Format/Ext: {slide_format}")
     print(f"🌐 Lang: {slide_lang}")
 
     # 1. 認證環境佈署
     if not AuthManager.deploy_credentials():
         sys.exit(1)
 
-    # 2. 處理影片並生成簡報
+    # 2. 處理影片並生成內容
     nlm = NotebookService()
 
-    pdf_path = nlm.process_slide(url, "On-Demand Slide", custom_prompt=prompt, slide_format=slide_format, slide_lang=slide_lang)
+    # 調用新的通用的處理方法
+    file_path = nlm.process_artifact(
+        url, 
+        "On-Demand Content", 
+        artifact_type=artifact_type,
+        custom_prompt=prompt, 
+        slide_format=slide_format, 
+        slide_lang=slide_lang,
+        language=slide_lang, # 給 infographic/report 用
+        orientation="portrait", # 下面這兩個是圖片預設
+        detail="detailed"
+    )
 
-    if pdf_path and os.path.exists(pdf_path):
-        # 3. 通知 (目前僅實作 Telegram 傳送檔案)
-        print(f"📡 正在發送簡報至 {chat_id}...")
+    if file_path and os.path.exists(file_path):
+        # 3. 通知 (傳送檔案)
+        print(f"📡 正在發送內容至 {chat_id}...")
         
-        caption = f"🎥 簡報已生成！\n🔗 來源：{url}"
-        success = Notifier.send_document(target_chat_id=chat_id, file_path=pdf_path, caption=caption)
+        type_name = {
+            "slide_deck": "📊 簡報",
+            "infographic": "🖼️ 圖片總結",
+            "report": "📝 完整報告"
+        }.get(artifact_type, "📄 內容檔案")
+
+        caption = f"{type_name}已生成！\n🔗 來源：{url}"
+        
+        # 若是圖片則使用 send_photo (假設 Notifier 支援，否則沿用 send_document)
+        if artifact_type == "infographic":
+            success = Notifier.send_photo(target_chat_id=chat_id, file_path=file_path, caption=caption)
+        else:
+            success = Notifier.send_document(target_chat_id=chat_id, file_path=file_path, caption=caption)
         
         if success:
-            print("✅ 簡報發送成功")
+            print("✅ 發送成功")
         else:
-            print("❌ 簡報發送失敗 (Notifier 回報失敗)")
+            print("❌ 發送失敗 (Notifier 回報失敗)")
     else:
-        print("❌ 簡報生成流程失敗，未取得 PDF 檔案")
+        print(f"❌ {artifact_type} 生成流程失敗，未取得檔案")
         sys.exit(1)
         
         # 4. 刪除處理中訊息 (僅限 Telegram)

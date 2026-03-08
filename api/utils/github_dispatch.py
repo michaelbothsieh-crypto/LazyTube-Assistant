@@ -19,7 +19,7 @@ async def dispatch_nlm_workflow(url: str, prompt: str = "", chat_id: str = "", m
         logger.error("缺少 GitHub 環境變數：GH_PAT_WORKFLOW, GH_REPO_OWNER, GH_REPO_NAME")
         return False
 
-    workflow_file = "yt-summary.yml"
+    workflow_file = "nlm-on-demand.yml"
     api_url = (f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/{workflow_file}/dispatches")
     payload = {"ref": GH_BRANCH, "inputs": {"url": url, "prompt": prompt, "chat_id": str(chat_id), "message_id": str(message_id)}}
     headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
@@ -27,23 +27,27 @@ async def dispatch_nlm_workflow(url: str, prompt: str = "", chat_id: str = "", m
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(api_url, json=payload, headers=headers)
-        return response.status_code == 204
+        
+        if response.status_code != 204:
+            logger.error(f"GitHub API 錯誤 ({response.status_code}): {response.text[:200]}")
+            return False
+        return True
     except Exception as e:
         logger.error(f"GitHub API 請求異常: {e}")
         return False
 
-async def dispatch_slide_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = "", slide_format: str = "pdf", slide_lang: str = "zh-TW"):
+async def dispatch_artifact_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = "", slide_format: str = "pdf", slide_lang: str = "zh-TW", artifact_type: str = "slide_deck"):
     """
-    /// 觸發 GitHub Actions slide-on-demand.yml
+    /// 觸發 GitHub Actions slide-on-demand.yml (通用版)
+    /// artifact_type: 'slide_deck', 'infographic', 'report'
     """
     if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
 
     slide_workflow_file = "slide-on-demand.yml"
     api_url = (f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/{slide_workflow_file}/dispatches")
     
-    # 為了繞過限制，我們將格式與語言都嵌入在 Prompt 中
-    # 格式: __META:lang,format__真實Prompt
-    meta_prefix = f"__META:{slide_lang},{slide_format}__"
+    # 元數據格式: __META:lang,format,type__真實Prompt
+    meta_prefix = f"__META:{slide_lang},{slide_format},{artifact_type}__"
     effective_prompt = f"{meta_prefix}{prompt}"
 
     payload = {"ref": GH_BRANCH, "inputs": {"url": url, "prompt": effective_prompt, "chat_id": str(chat_id), "message_id": str(message_id)}}
