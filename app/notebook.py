@@ -3,6 +3,7 @@ import uuid
 import re
 import json
 import os
+import time
 
 class NotebookService:
     """
@@ -25,8 +26,13 @@ class NotebookService:
         
         if verbose and res.returncode != 0:
             print(f"❌ 指令執行失敗: {' '.join(cmd)}")
-            if res.stdout: print(f"STDOUT: {res.stdout.strip()}")
-            if res.stderr: print(f"STDERR: {res.stderr.strip()}")
+            if res.stderr: 
+                print(f"--- 🛑 系統錯誤輸出 (STDERR) ---")
+                print(res.stderr.strip())
+            if res.stdout:
+                # 即使失敗，有時原因會寫在 stdout 中 (例如: Failed to add url source)
+                print(f"--- 💡 指令回傳訊息 (STDOUT) ---")
+                print(res.stdout.strip())
         return res
 
     def process_video(self, url, title, custom_prompt=None):
@@ -50,7 +56,26 @@ class NotebookService:
             
             # 2. 新增來源
             print(f"🔗 正在新增來源: {url}...")
-            self.run_nlm("source", "add", nb_id, "--url", url)
+            res_add = self.run_nlm("source", "add", nb_id, "--url", url)
+            
+            # [自動繞過] 多重代理重試邏輯
+            if res_add.returncode != 0:
+                # 嘗試 1: Jina Reader (適合大部分網站)
+                print("⚠️ 直接新增來源失敗，嘗試透過 Jina Reader 代理繞過...")
+                proxy_url = f"https://r.jina.ai/{url}"
+                res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url)
+                
+                # 嘗試 2: Google Translate Proxy (針對 Yahoo 等極嚴格反爬蟲)
+                if res_add.returncode != 0:
+                    print("⚠️ Jina 代理亦失敗，嘗試使用 Google Translate Proxy...")
+                    # 預設翻譯為繁中以穿透內容牆
+                    gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={url}"
+                    res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url)
+                
+                if res_add.returncode == 0:
+                    print("✅ 透過代理繞過成功")
+                else:
+                    print("❌ 所有代理嘗試均失敗，請檢查網址或嘗試手動下載 PDF 上傳")
             
             # 3. 產出摘要
             print("📝 正在產出摘要...")
@@ -75,7 +100,6 @@ class NotebookService:
         /// 完整處理一個影片的 Artifact 生成流程 (Slide, Infographic, Report)
         /// artifact_type: 'slide_deck', 'infographic', 'report'
         """
-        import time
         prefix = artifact_type.upper()
         nb_name = f"{prefix}_{uuid.uuid4().hex[:4].upper()}"
         nb_id = None
@@ -94,7 +118,25 @@ class NotebookService:
             
             # 2. 新增來源並等待處理完成
             print(f"🔗 正在新增來源並等待處理: {url}...")
-            self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
+            res_add = self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
+            
+            # [自動繞過] 多重代理重試邏輯
+            if res_add.returncode != 0:
+                # 嘗試 1: Jina Reader
+                print("⚠️ 直接新增來源失敗，嘗試透過 Jina Reader 代理繞過...")
+                proxy_url = f"https://r.jina.ai/{url}"
+                res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url, "--wait")
+                
+                # 嘗試 2: Google Translate Proxy (針對 Yahoo/Medium 等)
+                if res_add.returncode != 0:
+                    print("⚠️ Jina 代理亦失敗，嘗試使用 Google Translate Proxy...")
+                    gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={url}"
+                    res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url, "--wait")
+                
+                if res_add.returncode == 0:
+                    print("✅ 透過代理繞過成功")
+                else:
+                    print("❌ 所有代理嘗試均失敗，建議將該網頁轉為 PDF 後手動上傳")
             
             # 3. 觸發生成指令
             print(f"🎨 正在請求生成 {artifact_type}...")
@@ -173,7 +215,7 @@ class NotebookService:
                     except BaseException as e:
                         print(f"  ({i+1}/60) 解析失敗: {e}")
                 else:
-                    print(f"  ({i+1}/60) 正在獲起狀態...")
+                    print(f"  ({i+1}/60) 正在獲取狀態...")
             
             # 5. 下載檔案
             if artifact_id:
@@ -203,7 +245,7 @@ class NotebookService:
                     target_path = out_path
                     print("✅ 下載成功")
                 else:
-                    print("❌ 檔案載入失敗")
+                    print("❌ 檔案下載失敗")
             else:
                 print("⏰ 製作超時")
 

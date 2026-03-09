@@ -46,6 +46,7 @@ jobs:
     - name: Run Slide On-Demand Generator
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
