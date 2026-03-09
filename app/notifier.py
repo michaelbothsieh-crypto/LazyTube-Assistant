@@ -50,7 +50,7 @@ class Notifier:
             return cls._send_to_telegram(chat_id, text)
 
         if not Config.TG_BOT_TOKEN:
-            print("??蝻箏? Telegram Token")
+            print("❌ 缺少 Telegram Token")
             return False
 
         endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendMessage"
@@ -63,7 +63,7 @@ class Notifier:
             }, timeout=15)
             return resp.status_code == 200
         except Exception as e:
-            print(f"??Telegram ?冽憭望?: {e}")
+            print(f"❌ Telegram 發送異常: {e}")
             return False
 
     @staticmethod
@@ -145,68 +145,48 @@ class Notifier:
             return False
 
     @staticmethod
-    def _publish_file_to_github(file_path: str, target_chat_id: str, artifact_kind: str) -> Optional[str]:
+    def _upload_to_vercel_blob(file_path: str, target_chat_id: str) -> Optional[str]:
         """
-        Publish a generated artifact into the public repository and return a raw URL.
-        This bridges LINE delivery, because LINE push messages require public URLs.
+        將檔案上傳至 Vercel Blob 並取得公開網址。
+        取代原本上傳至 GitHub 的舊邏輯。
         """
-        github_token = os.environ.get("GITHUB_TOKEN")
-        github_repo = os.environ.get("GITHUB_REPOSITORY")
-        github_branch = os.environ.get("GITHUB_REF_NAME", "main")
-
-        if not all([github_token, github_repo, github_branch]):
-            print("❌ 缺少 GitHub 發佈所需環境變數")
+        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if not token:
+            print("❌ 缺少 BLOB_READ_WRITE_TOKEN，無法上傳至 Vercel Blob")
             return None
 
-        if "/" not in github_repo:
-            print("❌ GITHUB_REPOSITORY 格式錯誤")
-            return None
-
-        owner, repo = github_repo.split("/", 1)
-        safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(target_chat_id))[:80]
-        ext = os.path.splitext(file_path)[1].lower()
-        remote_path = f"generated/line/{safe_chat_id}/{artifact_kind}{ext}"
-
+        filename = os.path.basename(file_path)
+        # 移除檔名中的特殊字元避免上傳失敗
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-").strip()
+        safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(target_chat_id))[:50]
+        # 使用時間戳與 ChatID 建立唯一路徑
+        blob_path = f"artifacts/{safe_chat_id}/{int(time.time())}_{safe_filename}"
+        
+        # Vercel Blob REST API 端點
+        api_url = f"https://blob.vercel-storage.com/v1/upload/{blob_path}"
+        
         try:
+            file_size = os.path.getsize(file_path)
+            print(f"☁️ 正在上傳至 Vercel Blob: {safe_filename} ({file_size} bytes)...")
+            
             with open(file_path, "rb") as f:
-                encoded = base64.b64encode(f.read()).decode("ascii")
-        except Exception as e:
-            print(f"❌ 讀取檔案失敗: {e}")
-            return None
-
-        api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{remote_path}"
-        headers = {
-            "Authorization": f"Bearer {github_token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-
-        sha = None
-        existing = requests.get(api_url, headers=headers, params={"ref": github_branch}, timeout=30)
-        if existing.status_code == 200:
-            sha = existing.json().get("sha")
-
-        payload = {
-            "message": f"chore: publish LINE artifact ({artifact_kind}) [skip ci]",
-            "content": encoded,
-            "branch": github_branch,
-        }
-        if sha:
-            payload["sha"] = sha
-
-        try:
-            resp = requests.put(api_url, headers=headers, json=payload, timeout=30)
-            if resp.status_code not in (200, 201):
-                print(f"❌ GitHub 發佈失敗: {resp.status_code} {resp.text}")
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "x-api-version": "1",
+                }
+                # 使用 PUT 方法直接上傳二進位檔案流
+                resp = requests.put(api_url, data=f, headers=headers, timeout=120)
+                
+                if resp.status_code == 200:
+                    url = resp.json().get("url")
+                    print(f"✅ 上傳成功: {url}")
+                    return url
+                
+                print(f"❌ Vercel Blob 上傳失敗: {resp.status_code} {resp.text}")
                 return None
         except Exception as e:
-            print(f"❌ GitHub 發佈異常: {e}")
+            print(f"❌ Vercel Blob 上傳異常: {e}")
             return None
-
-        return (
-            f"https://raw.githubusercontent.com/{owner}/{repo}/{github_branch}/{remote_path}"
-            f"?t={int(time.time())}"
-        )
 
     @classmethod
     def send_error(cls, target_chat_id, error_msg, url=None):
@@ -255,7 +235,7 @@ class Notifier:
 
     @classmethod
     def _send_photo_to_line(cls, chat_id, file_path, caption=None):
-        image_url = cls._publish_file_to_github(file_path, chat_id, "latest-pic")
+        image_url = cls._upload_to_vercel_blob(file_path, chat_id)
         if not image_url:
             fallback = "⚠️ 圖片已生成，但目前無法建立公開網址。"
             if caption:
@@ -305,10 +285,75 @@ class Notifier:
         except Exception:
             return False
 
+    @staticmethod
+    def _upload_to_github(file_path: str, target_chat_id: str) -> Optional[str]:
+        """
+        當 Vercel Blob 失敗時的備援方案：將檔案 Commit 到 GitHub Repo 並取得 Raw 連結。
+        """
+        import subprocess
+        import shutil
+        
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            print("❌ 缺少 GITHUB_TOKEN，無法執行 GitHub 備援上傳")
+            return None
+
+        filename = os.path.basename(file_path)
+        ext = filename.split(".")[-1].lower() if "." in filename else "bin"
+        # 決定目標檔名：latest-file 或 latest-pic (為了保持連結穩定或方便手機快取)
+        target_name = "latest-pic.png" if ext in ["png", "jpg", "jpeg", "gif"] else "latest-file.pdf"
+        if ext not in ["png", "jpg", "jpeg", "gif", "pdf"]:
+            target_name = f"latest-file.{ext}"
+
+        safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(target_chat_id))[:50]
+        rel_dir = os.path.join("generated", "line", safe_chat_id)
+        os.makedirs(rel_dir, exist_ok=True)
+        
+        dest_path = os.path.join(rel_dir, target_name)
+        shutil.copy2(file_path, dest_path)
+        
+        print(f"📦 正在將檔案提交至 GitHub: {dest_path}...")
+        
+        try:
+            # 配置 Git (如果尚未配置)
+            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=False)
+            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], check=False)
+            
+            # 提交並推送到 GitHub
+            subprocess.run(["git", "add", dest_path], check=True)
+            commit_msg = f"chore: publish LINE artifact ({target_name}) [skip ci]"
+            subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+            
+            # 使用 Token 進行推播 (在 GitHub Actions 環境下通常不需要特別處理，但為了保險)
+            subprocess.run(["git", "push"], check=True)
+            
+            # 取得 Repo 資訊
+            repo_info = "michaelbothsieh-crypto/LazyTube-Assistant"
+            try:
+                remote_url = subprocess.check_output(["git", "remote", "get-url", "origin"], text=True).strip()
+                if "github.com" in remote_url:
+                    repo_info = remote_url.split("github.com")[-1].replace(":", "/").lstrip("/").replace(".git", "")
+            except:
+                pass
+            
+            raw_url = f"https://raw.githubusercontent.com/{repo_info}/main/generated/line/{safe_chat_id}/{target_name}?t={int(time.time())}"
+            print(f"✅ GitHub 備援上傳成功: {raw_url}")
+            return raw_url
+            
+        except Exception as e:
+            print(f"❌ GitHub 提交失敗: {e}")
+            return None
+
     @classmethod
     def _send_document_to_line(cls, chat_id, file_path, caption=None):
-        kind = "latest-note" if file_path.lower().endswith(".md") else "latest-file"
-        public_url = cls._publish_file_to_github(file_path, chat_id, kind)
+        # 1. 優先嘗試 Vercel Blob
+        public_url = cls._upload_to_vercel_blob(file_path, chat_id)
+        
+        # 2. 如果 Vercel Blob 失敗 (例如檔案 > 4.5MB)，嘗試 GitHub Fallback
+        if not public_url:
+            print("⚠️ Vercel Blob 上傳失敗，嘗試 GitHub 備援...")
+            public_url = cls._upload_to_github(file_path, chat_id)
+
         if not public_url:
             fallback = "⚠️ 檔案已生成，但目前無法建立公開下載連結。"
             if caption:
@@ -316,14 +361,18 @@ class Notifier:
             return cls._send_to_line(chat_id, fallback)
 
         filename = os.path.basename(file_path)
-        mime_type, _ = mimetypes.guess_type(file_path)
-        label = "檔案下載"
-        if mime_type == "text/markdown" or file_path.lower().endswith(".md"):
-            label = "摘要報告"
-        elif mime_type == "application/pdf":
-            label = "PDF 簡報"
-        elif file_path.lower().endswith(".pptx"):
-            label = "PPTX 簡報"
-
-        text = f"{caption or '檔案已生成'}\n\n{label}: {filename}\n{public_url}"
-        return cls._send_to_line(chat_id, text[:5000])
+        file_size = os.path.getsize(file_path)
+        
+        messages = []
+        if caption:
+            messages.append({"type": "text", "text": caption[:5000]})
+        
+        # 使用 LINE 原生檔案訊息類型 (type: file)
+        messages.append({
+            "type": "file",
+            "title": filename,
+            "fileSize": file_size,
+            "contentUrl": public_url
+        })
+        
+        return cls._push_line_messages(chat_id, messages)
