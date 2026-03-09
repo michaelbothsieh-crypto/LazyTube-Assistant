@@ -324,18 +324,11 @@ class Notifier:
             commit_msg = f"chore: publish LINE artifact ({target_name}) [skip ci]"
             subprocess.run(["git", "commit", "-m", commit_msg], check=True)
             
-            # 使用 Token 進行推播 (在 GitHub Actions 環境下通常不需要特別處理，但為了保險)
+            # 推播至遠端
             subprocess.run(["git", "push"], check=True)
             
             # 取得 Repo 資訊
             repo_info = "michaelbothsieh-crypto/LazyTube-Assistant"
-            try:
-                remote_url = subprocess.check_output(["git", "remote", "get-url", "origin"], text=True).strip()
-                if "github.com" in remote_url:
-                    repo_info = remote_url.split("github.com")[-1].replace(":", "/").lstrip("/").replace(".git", "")
-            except:
-                pass
-            
             raw_url = f"https://raw.githubusercontent.com/{repo_info}/main/generated/line/{safe_chat_id}/{target_name}?t={int(time.time())}"
             print(f"✅ GitHub 備援上傳成功: {raw_url}")
             return raw_url
@@ -346,10 +339,10 @@ class Notifier:
 
     @classmethod
     def _send_document_to_line(cls, chat_id, file_path, caption=None):
-        # 1. 優先嘗試 Vercel Blob
+        # 1. 優先嘗試 Vercel Blob (支援大檔案，連結持久)
         public_url = cls._upload_to_vercel_blob(file_path, chat_id)
         
-        # 2. 如果 Vercel Blob 失敗 (例如檔案 > 4.5MB)，嘗試 GitHub Fallback
+        # 2. 如果 Vercel Blob 失敗，嘗試 GitHub Fallback
         if not public_url:
             print("⚠️ Vercel Blob 上傳失敗，嘗試 GitHub 備援...")
             public_url = cls._upload_to_github(file_path, chat_id)
@@ -362,17 +355,77 @@ class Notifier:
 
         filename = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
+        size_str = f"{file_size / 1024 / 1024:.2f} MB" if file_size > 1024 * 1024 else f"{file_size / 1024:.1f} KB"
         
+        # 根據副檔名顯示不同圖示
+        ext = filename.split(".")[-1].lower() if "." in filename else ""
+        icon = "📊" if ext == "pdf" else "📝" if ext == "md" else "📂"
+        label = "PDF 簡報" if ext == "pdf" else "摘要報告" if ext == "md" else "檔案下載"
+
+        # 使用 Flex Message 繞過 LINE 帳號對 'file' 類型的權限限制
+        flex_contents = {
+            "type": "bubble",
+            "size": "kilo",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": f"{icon} {label}生成完畢",
+                        "weight": "bold",
+                        "color": "#1DB446",
+                        "size": "sm"
+                    }
+                ]
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": filename,
+                        "weight": "bold",
+                        "size": "md",
+                        "wrap": True,
+                        "maxLines": 3
+                    },
+                    {
+                        "type": "text",
+                        "text": size_str,
+                        "size": "xs",
+                        "color": "#aaaaaa",
+                        "margin": "sm"
+                    }
+                ]
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "button",
+                        "action": {
+                            "type": "uri",
+                            "label": "📥 點擊下載檔案",
+                            "uri": public_url
+                        },
+                        "style": "primary",
+                        "color": "#1DB446"
+                    }
+                ]
+            }
+        }
+
         messages = []
         if caption:
             messages.append({"type": "text", "text": caption[:5000]})
         
-        # 使用 LINE 原生檔案訊息類型 (type: file)
         messages.append({
-            "type": "file",
-            "title": filename,
-            "fileSize": file_size,
-            "contentUrl": public_url
+            "type": "flex",
+            "altText": f"📊 {filename} 下載連結",
+            "contents": flex_contents
         })
         
         return cls._push_line_messages(chat_id, messages)
