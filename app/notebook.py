@@ -25,8 +25,13 @@ class NotebookService:
         
         if verbose and res.returncode != 0:
             print(f"❌ 指令執行失敗: {' '.join(cmd)}")
-            if res.stdout: print(f"STDOUT: {res.stdout.strip()}")
-            if res.stderr: print(f"STDERR: {res.stderr.strip()}")
+            if res.stderr: 
+                print(f"--- 🛑 系統錯誤輸出 (STDERR) ---")
+                print(res.stderr.strip())
+            if res.stdout:
+                # 即使失敗，有時原因會寫在 stdout 中 (例如: Failed to add url source)
+                print(f"--- 💡 指令回傳訊息 (STDOUT) ---")
+                print(res.stdout.strip())
         return res
 
     def process_video(self, url, title, custom_prompt=None):
@@ -50,7 +55,17 @@ class NotebookService:
             
             # 2. 新增來源
             print(f"🔗 正在新增來源: {url}...")
-            self.run_nlm("source", "add", nb_id, "--url", url)
+            res_add = self.run_nlm("source", "add", nb_id, "--url", url)
+            
+            # [自動繞過] 若失敗，嘗試透過 Jina Reader 代理
+            if res_add.returncode != 0:
+                print("⚠️ 直接新增來源失敗，嘗試透過 Jina Reader 代理繞過...")
+                proxy_url = f"https://r.jina.ai/{url}"
+                res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url)
+                if res_add.returncode == 0:
+                    print("✅ 透過代理繞過成功")
+                else:
+                    print("❌ 代理繞過亦失敗，請檢查網址或服務狀態")
             
             # 3. 產出摘要
             print("📝 正在產出摘要...")
@@ -94,7 +109,17 @@ class NotebookService:
             
             # 2. 新增來源並等待處理完成
             print(f"🔗 正在新增來源並等待處理: {url}...")
-            self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
+            res_add = self.run_nlm("source", "add", nb_id, "--url", url, "--wait")
+            
+            # [自動繞過] 若失敗，嘗試透過 Jina Reader 代理
+            if res_add.returncode != 0:
+                print("⚠️ 直接新增來源失敗，嘗試透過 Jina Reader 代理繞過...")
+                proxy_url = f"https://r.jina.ai/{url}"
+                res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url, "--wait")
+                if res_add.returncode == 0:
+                    print("✅ 透過代理繞過成功")
+                else:
+                    print("❌ 代理繞過亦失敗，請確認網址是否可存取")
             
             # 3. 觸發生成指令
             print(f"🎨 正在請求生成 {artifact_type}...")
