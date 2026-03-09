@@ -156,7 +156,7 @@ class YouTubeService:
                     items_res = self.service.playlistItems().list(
                         part="snippet,contentDetails",
                         playlistId=playlist_id,
-                        maxResults=2,
+                        maxResults=5,
                     ).execute()
 
                     for item in items_res.get("items", []):

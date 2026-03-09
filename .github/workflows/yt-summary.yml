@@ -41,25 +41,29 @@ jobs:
         run: |
           python main.py
 
-      - name: Commit last_check.txt
+      - name: Commit state files
         shell: bash
         run: |
-          git config user.name "michael"
-          git config user.email "michaelbothsieh@gmail.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          NEW_LAST_CHECK="$(cat last_check.txt)"
+          # 備份新的狀態文字
+          NEW_LAST_CHECK="$(cat last_check.txt 2>/dev/null || echo '')"
+          NEW_PROCESSED="$(cat processed_videos.txt 2>/dev/null || echo '')"
 
           git fetch origin main
           git checkout main
           git reset --hard origin/main
 
-          printf "%s\n" "$NEW_LAST_CHECK" > last_check.txt
+          # 還原狀態文字
+          [ -n "$NEW_LAST_CHECK" ] && printf "%s\n" "$NEW_LAST_CHECK" > last_check.txt
+          [ -n "$NEW_PROCESSED" ] && printf "%s\n" "$NEW_PROCESSED" > processed_videos.txt
 
-          if git diff --quiet -- last_check.txt; then
-            echo "last_check.txt 沒有變更，略過提交。"
+          if git diff --quiet -- last_check.txt processed_videos.txt; then
+            echo "狀態檔案無變更，略過提交。"
             exit 0
           fi
 
-          git add last_check.txt
-          git commit -m "Update last_check.txt [skip ci]"
+          git add last_check.txt processed_videos.txt
+          git commit -m "chore: update summarizer state [skip ci]"
           git push origin HEAD:main

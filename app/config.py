@@ -20,6 +20,7 @@ class Config:
     NLM_COOKIE_BASE64 = os.environ.get("NLM_COOKIE_BASE64", "")
 
     LAST_CHECK_FILE = "last_check.txt"
+    PROCESSED_VIDEOS_FILE = "processed_videos.txt"
     MAX_VIDEOS = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
 
     # 超過這個秒數才視為長影片，60 秒以下視為 Shorts/短片
