@@ -75,7 +75,9 @@ class NotebookService:
                 if res_add.returncode == 0:
                     print("✅ 透過代理繞過成功")
                 else:
-                    print("❌ 所有代理嘗試均失敗，請檢查網址或嘗試手動下載 PDF 上傳")
+                    msg = "❌ 所有代理嘗試均失敗，無法讀取網址內容。這通常是因為來源網站阻擋了自動化抓取，建議嘗試手動將網頁存為 PDF 後上傳。"
+                    print(msg)
+                    return msg
             
             # 3. 產出摘要
             print("📝 正在產出摘要...")
@@ -136,7 +138,8 @@ class NotebookService:
                 if res_add.returncode == 0:
                     print("✅ 透過代理繞過成功")
                 else:
-                    print("❌ 所有代理嘗試均失敗，建議將該網頁轉為 PDF 後手動上傳")
+                    print("❌ 所有代理嘗試均失敗，無法讀取網址內容，無法生成 Artifact。")
+                    return None
             
             # 3. 觸發生成指令
             print(f"🎨 正在請求生成 {artifact_type}...")
