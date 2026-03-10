@@ -1,7 +1,7 @@
 def build_help_text(html: bool = False) -> str:
     if html:
         return (
-            "🤖 <b>LazyTube NotebookLM 查詢機器人</b>\n\n"
+            "🤖 <b>LazyTube 摘要查詢機器人</b>\n\n"
             "<b>指令說明：</b> (問號?代表有預設值)\n"
             "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt?&gt;</code> (1-3分)\n"
             "  → 獲取來源的文字摘要\n\n"
@@ -18,7 +18,7 @@ def build_help_text(html: bool = False) -> str:
         )
 
     return (
-        "🤖 LazyTube NotebookLM 查詢機器人\n\n"
+        "🤖 LazyTube 摘要查詢機器人\n\n"
         "指令說明： (問號?代表有預設值)\n"
         "📌 /nlm <url> <自訂Prompt?> (1-3分)\n"
         "  → 獲取來源的文字摘要\n\n"

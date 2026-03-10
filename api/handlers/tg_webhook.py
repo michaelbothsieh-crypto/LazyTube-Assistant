@@ -106,7 +106,7 @@ async def _handle_start(chat_id: str):
     """回傳歡迎詞"""
     welcome_text = (
         "👋 <b>你好！我是 LazyTube 摘要助理</b>\n\n"
-        "我可以幫你把冗長的 YouTube 影片或網頁內容，透過 Google NotebookLM 轉化為精簡的重點摘要。\n\n"
+        "我可以幫你把冗長的 YouTube 影片或網頁內容，轉化為精簡的重點摘要。\n\n"
         "🚀 <b>快速開始：</b>\n"
         "直接輸入 <code>/nlm &lt;網址&gt;</code> 即可！\n\n"
         "使用 /help 查看更多進階指令。"
@@ -115,11 +115,11 @@ async def _handle_start(chat_id: str):
 
 
 async def _handle_help(chat_id: str):
-    """回傳使用說明"""
+    """回傳說明文件"""
     await send_telegram_message(chat_id, build_help_text(html=True))
     return
     help_text = (
-        "🤖 <b>LazyTube NotebookLM 查詢機器人</b>\n\n"
+        "🤖 <b>LazyTube 查詢機器人</b>\n\n"
         "<b>指令說明：</b> (問號?代表有預設值)\n"
         "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt?&gt;</code> (1-3分)\n"
         "  → 獲取來源的文字摘要\n\n"
@@ -142,7 +142,7 @@ async def _handle_status(chat_id: str):
     await send_telegram_message(
         chat_id,
         "✅ <b>LazyTube-Assistant 服務正常運行中</b>\n"
-        "版本：<code>v1.1.0-fix</code>\n"
+        "版本：<code>v1.1.1</code>\n"
         "使用 /help 查看可用指令。"
     )
 
@@ -187,7 +187,7 @@ async def _handle_nlm(chat_id: str, text: str):
         f"⏳ <b>已收到任務，處理中...</b>\n\n"
         f"🔗 URL：<code>{url[:100]}</code>\n"
         f"📝 Prompt：{custom_prompt[:80]}{'...' if len(custom_prompt) > 80 else ''}\n\n"
-        f"<i>NotebookLM 正在分析，完成後將自動回傳結果（約 1-3 分鐘）。</i>"
+        f"<i>AI 正在分析，完成後將自動回傳結果（約 1-3 分鐘）。</i>"
     )
     
     msg_id = ""
