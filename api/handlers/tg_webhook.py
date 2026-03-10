@@ -142,6 +142,7 @@ async def _handle_status(chat_id: str):
     await send_telegram_message(
         chat_id,
         "✅ <b>LazyTube-Assistant 服務正常運行中</b>\n"
+        "版本：<code>v1.1.0-fix</code>\n"
         "使用 /help 查看可用指令。"
     )
 

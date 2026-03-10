@@ -119,12 +119,14 @@ async def external_dispatch(
                 artifact_type=art_map.get(command, "slide_deck"),
             )
         else:
-            from api.utils.github_dispatch import dispatch_scheduled_summary_workflow
+            from api.utils.github_dispatch import dispatch_nlm_workflow
 
-            await dispatch_scheduled_summary_workflow(
+            # 外部 Hook 同樣觸發隨選 NLM 流程
+            await dispatch_nlm_workflow(
                 url=url,
                 prompt=prompt,
                 chat_id=chat_id,
+                message_id=data.get("message_id", "")
             )
 
         return JSONResponse(content={"ok": True})
