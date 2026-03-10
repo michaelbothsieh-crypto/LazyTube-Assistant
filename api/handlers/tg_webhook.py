@@ -115,7 +115,7 @@ async def _handle_start(chat_id: str):
 
 
 async def _handle_help(chat_id: str):
-    """回傳說明文件"""
+    """回傳服務說明"""
     await send_telegram_message(chat_id, build_help_text(html=True))
     return
     help_text = (
