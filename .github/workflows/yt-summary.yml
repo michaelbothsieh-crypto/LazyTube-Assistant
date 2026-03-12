@@ -12,7 +12,6 @@ jobs:
     permissions:
       contents: write
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout code
