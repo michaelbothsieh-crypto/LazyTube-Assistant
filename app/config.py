@@ -35,6 +35,24 @@ class Config:
     ALLOWED_USERS = os.environ.get("ALLOWED_USERS", "")
 
     @classmethod
+    def validate(cls) -> bool:
+        """
+        /// 驗證必填設定是否完整
+        /// 在啟動時呼叫，提早偵測缺少的憑證
+        """
+        missing = []
+        for field in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN"):
+            if not getattr(cls, field):
+                missing.append(field)
+        has_notifier = cls.TG_BOT_TOKEN or cls.LINE_CHANNEL_ACCESS_TOKEN
+        if not has_notifier:
+            missing.append("TELEGRAM_BOT_TOKEN 或 LINE_CHANNEL_ACCESS_TOKEN")
+        if missing:
+            print(f"❌ 缺少必填設定：{', '.join(missing)}")
+            return False
+        return True
+
+    @classmethod
     def get_allowed_users(cls):
         """取得授權使用者清單"""
         if not cls.ALLOWED_USERS:
