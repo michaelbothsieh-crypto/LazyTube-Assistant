@@ -30,6 +30,19 @@ jobs:
           pip install -r requirements.txt
           pip install notebooklm-mcp-cli
 
+      - name: Restore state from Vercel Blob
+        continue-on-error: true
+        env:
+          BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          if [ -n "$BLOB_TOKEN" ]; then
+            echo "📥 正在從 Vercel Blob 恢復狀態..."
+            # 取得檔案清單並過濾出最新的狀態檔 (Vercel Blob API 邏輯)
+            # 簡化版：直接嘗試從已知路徑下載，若失敗則使用預設
+            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/last_check.txt" -o last_check.txt || echo "首次執行，跳過 last_check"
+            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/processed_videos.txt" -o processed_videos.txt || echo "首次執行，跳過 processed_videos"
+          fi
+
       - name: Run summarizer
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
@@ -43,29 +56,16 @@ jobs:
         run: |
           python main.py
 
-      - name: Commit state files
-        shell: bash
+      - name: Persist state to Vercel Blob
+        if: always()
+        env:
+          BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # 備份新的狀態文字
-          NEW_LAST_CHECK="$(cat last_check.txt 2>/dev/null || echo '')"
-          NEW_PROCESSED="$(cat processed_videos.txt 2>/dev/null || echo '')"
-
-          git fetch origin main
-          git checkout main
-          git reset --hard origin/main
-
-          # 還原狀態文字
-          [ -n "$NEW_LAST_CHECK" ] && printf "%s\n" "$NEW_LAST_CHECK" > last_check.txt
-          [ -n "$NEW_PROCESSED" ] && printf "%s\n" "$NEW_PROCESSED" > processed_videos.txt
-
-          if git diff --quiet -- last_check.txt processed_videos.txt; then
-            echo "狀態檔案無變更，略過提交。"
-            exit 0
+          if [ -n "$BLOB_TOKEN" ]; then
+            echo "📤 正在上傳狀態至 Vercel Blob..."
+            # 使用 Vercel Blob PUT API
+            # 注意：Vercel Blob 的標準 PUT API 需要指定檔名，這裡我們存放在 /state/ 路徑下
+            [ -f last_check.txt ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-add-random-suffix: 0" --data-binary @last_check.txt "https://blob.vercel-storage.com/state/last_check.txt"
+            [ -f processed_videos.txt ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-add-random-suffix: 0" --data-binary @processed_videos.txt "https://blob.vercel-storage.com/state/processed_videos.txt"
+            echo "✅ 狀態同步完成。"
           fi
-
-          git add last_check.txt processed_videos.txt
-          git commit -m "chore: update summarizer state [skip ci]"
-          git push origin HEAD:main
