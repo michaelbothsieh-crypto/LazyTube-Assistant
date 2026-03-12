@@ -81,6 +81,13 @@
 ### 3. 設定 GitHub Secrets
 前往 GitHub `Settings > Secrets and variables > Actions`，對照 **`.env`** 填入內容。
 
+### 4. 故障排除 (認證診斷)
+若 GitHub Actions 噴出 `invalid_grant` 錯誤，可以使用診斷工具檢查：
+```bash
+python debug_yt_auth.py
+```
+這會協助您判斷是 Token 過期、Client ID 錯誤，還是 Google Cloud 專案未設定為 Production 模式。
+
 ## 🛠️ 運作原理
 
 | 組件 | 角色說明 |
