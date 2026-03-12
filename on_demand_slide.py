@@ -2,6 +2,7 @@ import sys
 import os
 import re
 from app.auth import AuthManager
+from app.config import Config
 from app.notebook import NotebookService
 from app.notifier import Notifier
 
@@ -34,6 +35,8 @@ def main():
     print(f"📄 Type: {artifact_type}")
     print(f"📄 Format/Ext: {slide_format}")
     print(f"🌐 Lang: {slide_lang}")
+
+    Config.validate()
 
     if not AuthManager.deploy_credentials():
         sys.exit(1)
@@ -74,6 +77,7 @@ def main():
             print("❌ 發送失敗 (Notifier 回報失敗)")
     else:
         print(f"❌ {artifact_type} 生成流程失敗，未取得檔案")
+        Notifier.send_error(chat_id, f"{artifact_type} 生成失敗，請稍後再試或確認影片連結是否有效。", url=url)
 
     Notifier.delete_pending_message(chat_id, message_id)
 

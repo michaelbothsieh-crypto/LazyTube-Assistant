@@ -1,6 +1,7 @@
 import sys
 import os
 from app.auth import AuthManager
+from app.config import Config
 from app.notebook import NotebookService
 from app.notifier import Notifier
 
@@ -17,6 +18,8 @@ def main():
 
     print(f"--- 🚀 隨選摘要任務啟動: {url} ---")
 
+    Config.validate()
+
     if not AuthManager.deploy_credentials():
         sys.exit(1)
 
@@ -28,6 +31,9 @@ def main():
         success = Notifier.send_summary("隨選摘要結果", url, "手動觸發", summary, target_chat_id=chat_id)
         if success:
             print("✅ 通知發送成功")
+    else:
+        print("❌ 摘要生成失敗，發送錯誤通知...")
+        Notifier.send_error(chat_id, "摘要生成失敗，請稍後再試或確認影片連結是否有效。", url=url)
 
     Notifier.delete_pending_message(chat_id, message_id)
 
