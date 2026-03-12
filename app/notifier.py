@@ -361,7 +361,6 @@ class Notifier:
 
         filename = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
-<<<<<<< HEAD
         size_str = f"{file_size / 1024 / 1024:.2f} MB" if file_size > 1024 * 1024 else f"{file_size / 1024:.1f} KB"
         
         # 根據副檔名顯示不同圖示
