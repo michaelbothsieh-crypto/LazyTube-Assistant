@@ -30,6 +30,38 @@
 **「看到好片，直接丟給 AI。」** 直接在 Telegram 對話框貼上任何 YouTube 網址，機器人會立即針對該影片進行深度分析並回傳重點。
 > **核心價值：** 臨時看到感興趣的長影片，幾秒鐘內就能掌握核心精華。
 
+---
+
+## 📸 實際效果展示
+
+### 📝 `/nlm` — AI 文字摘要
+在 Telegram 輸入 `/nlm <YouTube 連結>`，機器人會呼叫 NotebookLM 分析影片內容，並以條列重點的方式回傳 AI 摘要。
+
+| 指令輸入 | 摘要結果 |
+|:---:|:---:|
+| ![/nlm 指令](docs/images/cmd-nlm.png) | ![AI 摘要結果](docs/images/result-summary.png) |
+
+---
+
+### 🖼️ `/pic` — 圖解 Infographic
+在 Telegram 輸入 `/pic <YouTube 連結>`，機器人會自動生成一張視覺化資訊圖，將影片重點以圖文並茂的方式呈現。
+
+| 指令輸入 | Infographic 結果 |
+|:---:|:---:|
+| ![/pic 指令](docs/images/cmd-pic.png) | ![Infographic 結果](docs/images/result-infographic.png) |
+
+---
+
+### 📊 `/slide` — 簡報 PDF
+在 Telegram 輸入 `/slide <YouTube 連結>`，機器人會將影片內容整理成一份可下載的簡報 PDF，適合分享與存檔。
+
+| 指令輸入 | 簡報 PDF 結果 |
+|:---:|:---:|
+| ![/slide 指令](docs/images/cmd-slide.png) | ![簡報 PDF 結果](docs/images/result-slide.png) |
+
+---
+
+
 ## 📦 快速上手
 
 ### 1. 點擊 Fork
