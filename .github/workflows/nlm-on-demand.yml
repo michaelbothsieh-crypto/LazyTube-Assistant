@@ -37,6 +37,14 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
@@ -54,5 +62,4 @@ jobs:
         YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         INPUT_MSG_ID: ${{ inputs.message_id }}
       run: |
-        # 直接執行模組化的 Python 腳本
         python on_demand.py "${{ inputs.url }}" "${{ inputs.chat_id }}" "${{ inputs.prompt }}"

@@ -188,6 +188,31 @@ class Notifier:
             print(f"❌ Vercel Blob 上傳異常: {e}")
             return None
 
+    @staticmethod
+    def delete_pending_message(chat_id: str, message_id: str) -> None:
+        """
+        /// 刪除 Telegram「處理中」的等待提示訊息
+        /// 僅對 Telegram 使用者生效（LINE 使用者略過）
+        """
+        if not message_id or str(chat_id).startswith(("U", "C", "R")):
+            return
+        if not Config.TG_BOT_TOKEN:
+            return
+
+        import requests as _requests
+        del_url = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/deleteMessage"
+        try:
+            del_resp = _requests.post(del_url, json={
+                "chat_id": chat_id,
+                "message_id": int(message_id)
+            }, timeout=10)
+            if del_resp.status_code == 200:
+                print("✅ 訊息刪除成功")
+            else:
+                print(f"⚠️ 訊息刪除失敗: {del_resp.status_code} {del_resp.text}")
+        except Exception as e:
+            print(f"❌ 刪除訊息發生異常: {e}")
+
     @classmethod
     def send_error(cls, target_chat_id, error_msg, url=None):
         """
