@@ -477,6 +477,7 @@ async def _handle_clear(chat_id: str):
     from api.utils.github_dispatch import delete_group_workflow
     from app.state_manager import StateManager
     from app.notifier import Notifier
+    from app.config import Config
     import json
     import os
 
