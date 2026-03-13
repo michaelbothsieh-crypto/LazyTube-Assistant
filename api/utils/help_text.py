@@ -9,6 +9,8 @@ def build_help_text(html: bool = False) -> str:
             "  → 生成 <b>Portrait/Detailed</b> 圖片總結 (PNG)\n\n"
             "📌 <code>/note &lt;url&gt; &lt;自訂Prompt?&gt;</code> (3-5分)\n"
             "  → 生成詳細的 <b>Markdown</b> 總結報告檔案\n\n"
+            "📌 <code>/batch &lt;url1,url2,...&gt; &lt;整合Prompt?&gt;</code> (3-8分)\n"
+            "  → 一次匯入最多 20 個網址並產出<b>整合摘要</b>\n\n"
             "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt?&gt; &lt;語言?&gt; &lt;格式?&gt;</code> (5-10分)\n"
             "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報\n\n"
             "📌 <b>群組頻道訂閱：</b> (定時自動發送新片摘要)\n"
@@ -16,8 +18,8 @@ def build_help_text(html: bool = False) -> str:
             "  → <code>/list</code>：查看目前追蹤清單\n"
             "  → <code>/unsub &lt;序號&gt;</code>：取消訂閱並移除排程\n\n"
             "<b>範例：</b>\n"
+            "<code>/batch https://youtu.be/A, https://youtu.be/B 整合比較</code>\n"
             "<code>/sub https://youtube.com/@老高 9</code> (每天 09:00 檢查)\n"
-            "<code>/sub https://youtube.com/@泛科學 請列出重點 14</code> (每天 14:00 檢查)\n"
             "<code>/nlm https://youtu.be/xxxxx</code>"
         )
 
@@ -30,6 +32,8 @@ def build_help_text(html: bool = False) -> str:
         "  → 生成 Portrait/Detailed 圖片總結 (PNG)\n\n"
         "📌 /note <url> <自訂Prompt?> (3-5分)\n"
         "  → 生成詳細的 Markdown 總結報告檔案\n\n"
+        "📌 /batch <url1,url2,...> <整合Prompt?> (3-8分)\n"
+        "  → 一次匯入最多 20 個網址並產出整合摘要\n\n"
         "📌 /slide <url> <自訂Prompt?> <語言?> <格式?> (5-10分)\n"
         "  → 產生繁體中文 PDF (預設) 或 PPTX 簡報\n\n"
         "📌 群組頻道訂閱： (定時自動發送新片摘要)\n"
@@ -37,7 +41,7 @@ def build_help_text(html: bool = False) -> str:
         "  → /list：查看目前追蹤清單\n"
         "  → /unsub <序號>：取消訂閱並移除排程\n\n"
         "範例：\n"
+        "/batch https://youtu.be/A, https://youtu.be/B 整合比較\n"
         "/sub https://youtube.com/@老高 9\n"
-        "/sub https://youtube.com/@泛科學 請列出重點 14\n"
         "/nlm https://youtu.be/xxxxx"
     )
