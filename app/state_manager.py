@@ -57,7 +57,6 @@ class StateManager:
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return False
         
-        # 決定本地路徑
         local_path = ""
         if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
         elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
@@ -65,10 +64,13 @@ class StateManager:
         else: local_path = filename
 
         try:
-            url = f"https://blob.vercel-storage.com/state/{filename}"
+            # 加上時間戳防止緩存
+            url = f"https://blob.vercel-storage.com/state/{filename}?t={int(datetime.now().timestamp())}"
+            headers = {"Authorization": f"Bearer {token}"}
             async with httpx.AsyncClient() as client:
-                resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+                resp = await client.get(url, headers=headers, timeout=15.0)
                 if resp.status_code == 200:
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True) if os.path.dirname(local_path) else None
                     with open(local_path, "wb") as f:
                         f.write(resp.content)
                     return True
@@ -83,7 +85,6 @@ class StateManager:
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return False
         
-        # 決定本地路徑
         local_path = ""
         if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
         elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
@@ -96,12 +97,15 @@ class StateManager:
             url = f"https://blob.vercel-storage.com/state/{filename}"
             with open(local_path, "rb") as f:
                 data = f.read()
+            
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "x-api-version": "1", # 補齊版本號
+                "x-add-random-suffix": "0",
+                "content-type": "application/octet-stream"
+            }
             async with httpx.AsyncClient() as client:
-                resp = await client.put(url, content=data, headers={
-                    "Authorization": f"Bearer {token}",
-                    "x-add-random-suffix": "0",
-                    "content-type": "application/octet-stream"
-                })
+                resp = await client.put(url, content=data, headers=headers, timeout=30.0)
                 return resp.status_code == 200
         except Exception: pass
         return False

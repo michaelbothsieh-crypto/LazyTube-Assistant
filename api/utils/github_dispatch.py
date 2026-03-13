@@ -85,8 +85,9 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/processed_videos.txt" -o processed_videos.txt || true
-            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/subscriptions.json" -o subscriptions.json || true
+            TIMESTAMP=$(date +%s)
+            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/processed_videos.txt?t=$TIMESTAMP" -o processed_videos.txt || echo "" > processed_videos.txt
+            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/subscriptions.json?t=$TIMESTAMP" -o subscriptions.json || echo "{}" > subscriptions.json
           fi
 
       - name: Run group task
