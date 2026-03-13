@@ -31,7 +31,7 @@ jobs:
         continue-on-error: true
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-        run: python sync_helper.py restore "${{ inputs.chat_id }}"
+        run: python jobs/sync_helper.py restore "${{ inputs.chat_id }}"
 
       - name: Run group task
         env:
@@ -41,10 +41,10 @@ jobs:
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
-        run: python on_demand_group.py "${{ inputs.chat_id }}"
+        run: python jobs/on_demand_group.py "${{ inputs.chat_id }}"
 
       - name: Persist state to Vercel Blob
         if: always()
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-        run: python sync_helper.py persist
+        run: python jobs/sync_helper.py persist

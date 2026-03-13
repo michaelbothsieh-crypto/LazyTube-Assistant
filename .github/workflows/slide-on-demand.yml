@@ -66,4 +66,4 @@ jobs:
         INPUT_MSG_ID: ${{ inputs.message_id }}
         INPUT_PROMPT: ${{ inputs.prompt }}
       run: |
-        python on_demand_slide.py "${{ inputs.url }}" "${{ inputs.chat_id }}"
+        python jobs/on_demand_slide.py "${{ inputs.url }}" "${{ inputs.chat_id }}"

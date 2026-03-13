@@ -28,7 +28,7 @@ jobs:
         continue-on-error: true
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-        run: python sync_helper.py restore
+        run: python jobs/sync_helper.py restore
 
       - name: Run Master Scheduler
         env:
@@ -37,4 +37,4 @@ jobs:
           GH_REPO_OWNER: ${{ secrets.GH_REPO_OWNER }}
           GH_REPO_NAME: ${{ secrets.GH_REPO_NAME }}
           GH_REPO_BRANCH: ${{ secrets.GH_REPO_BRANCH || 'main' }}
-        run: python master_scheduler.py
+        run: python jobs/master_scheduler.py

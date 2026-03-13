@@ -42,4 +42,4 @@ jobs:
         env:
           NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
         run: |
-          python cleanup_notebooks.py
+          python jobs/cleanup_notebooks.py

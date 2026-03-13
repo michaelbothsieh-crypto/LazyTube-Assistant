@@ -46,7 +46,7 @@ jobs:
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          python sync_helper.py restore
+          python jobs/sync_helper.py restore
 
       - name: Run summarizer
         env:
@@ -59,11 +59,11 @@ jobs:
           NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
           MAX_VIDEOS_PER_RUN: ${{ vars.MAX_VIDEOS_PER_RUN || 10 }}
         run: |
-          python main.py
+          python jobs/main.py
 
       - name: Persist state to Vercel Blob
         if: always()
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          python sync_helper.py persist
+          python jobs/sync_helper.py persist
