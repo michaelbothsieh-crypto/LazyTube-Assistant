@@ -177,6 +177,7 @@ class NotebookService:
                     "--language", slide_lang,
                     "--format", "presenter_slides",
                     "--length", "short",
+                    "--wait", "--json",
                     "--confirm"
                 ]
                 if custom_prompt:
@@ -190,6 +191,7 @@ class NotebookService:
                     "--language", lang,
                     "--orientation", orientation,
                     "--detail", detail,
+                    "--wait", "--json",
                     "--confirm"
                 ]
                 if custom_prompt:
@@ -200,6 +202,7 @@ class NotebookService:
                     "report", "create", nb_id,
                     "--language", lang,
                     "--format", "Create Your Own",
+                    "--wait", "--json",
                     "--confirm"
                 ]
                 cmd_args.extend(["--prompt", custom_prompt or "請用繁體中文提供詳細的內容摘要報告"])
@@ -210,38 +213,18 @@ class NotebookService:
                 print(f"❌ {artifact_type} 生成請求失敗")
                 return None
 
+            # 解析生成的 Artifact ID
             artifact_id = None
-            print(f"⏳ 正在等待 {artifact_type} 製作完成...")
-            for i in range(60):
-                time.sleep(20)
-                status_res = self.run_nlm("studio", "status", nb_id, "--json", verbose=False)
-                raw_out = status_res.stdout.strip() if status_res.stdout else ""
-
-                if status_res.returncode == 0 and raw_out:
-                    try:
-                        status_data = json.loads(raw_out)
-                        if not isinstance(status_data, list):
-                            continue
-
-                        current_status = "UNKNOWN"
-                        for art in status_data:
-                            if art.get("type") == artifact_type:
-                                current_status = art.get("status")
-                                if current_status == "completed":
-                                    artifact_id = art.get("id")
-                                    print(f"✨ 製作完成! ID: {artifact_id}")
-                                    break
-                                elif current_status == "failed":
-                                    print(f"❌ 製作失敗: {art.get('error_message', '原因不明')}")
-                                    return None
-
-                        if artifact_id:
-                            break
-                        print(f"  ({i+1}/60) 目前狀態: {current_status}...")
-                    except BaseException as e:
-                        print(f"  ({i+1}/60) 解析失敗: {e}")
-                else:
-                    print(f"  ({i+1}/60) 正在獲取狀態...")
+            try:
+                out_data = json.loads(create_res.stdout)
+                artifact_id = out_data.get("id") or out_data.get("artifact_id")
+                if not artifact_id and isinstance(out_data, dict):
+                    # 嘗試從文字中解析 (防備 JSON 結構變動)
+                    match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", create_res.stdout)
+                    artifact_id = match.group(1) if match else None
+            except:
+                match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", create_res.stdout)
+                artifact_id = match.group(1) if match else None
 
             if artifact_id:
                 if artifact_type == "slide_deck":
