@@ -41,7 +41,7 @@
 2. 执行设置助手：
    ```bash
    pip install google-auth-oauthlib requests
-   python setup_helper.py
+   python tools/setup_helper.py
    ```
    *(Windows 用户？请参阅 [Windows 指南](WINDOWS_GUIDE.md))*
 3. 脚本会自动完成授权并产出一个 **`.env`** 文件。
@@ -61,7 +61,7 @@
 ## ⚠️ 风险声明与限制
 
 - **非官方通讯协议**：本项目依赖模拟浏览器行为。若 Google 修改 NotebookLM 网页结构，本工具可能需更新。
-- **凭证时效性**：Cookie 通常维持 **2 至 4 周**。失效时请重新执行 `setup_helper.py`。
+- **凭证时效性**：Cookie 通常维持 **2 至 4 周**。失效时请重新执行 `tools/setup_helper.py`。
 - **100% 隐私保护**：所有数据皆在隔离环境处理并直接发送至 Google。
 
 ## ❤️ 特别鸣謝

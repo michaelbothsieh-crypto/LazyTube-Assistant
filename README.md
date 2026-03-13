@@ -73,7 +73,7 @@
 2. 執行設定助手：
    ```bash
    pip install google-auth-oauthlib requests
-   python setup_helper.py
+   python tools/setup_helper.py
    ```
    *(Windows 使用者？請參閱 [Windows 指南](WINDOWS_GUIDE.md))*
 3. 腳本會自動完成授權並產出 **`.env`** 檔案。
@@ -84,7 +84,7 @@
 ### 4. 故障排除 (認證診斷)
 若 GitHub Actions 噴出 `invalid_grant` 錯誤，可以使用診斷工具檢查：
 ```bash
-python debug_yt_auth.py
+python tools/debug_yt_auth.py
 ```
 這會協助您判斷是 Token 過期、Client ID 錯誤，還是 Google Cloud 專案未設定為 Production 模式。
 
@@ -100,7 +100,7 @@ python debug_yt_auth.py
 ## ⚠️ 風險聲明與限制
 
 - **非官方通訊協議**：本專案依賴模擬瀏覽器行為。若 Google 修改 NotebookLM 網頁結構，本工具可能需更新。
-- **憑證時效性**：Cookie 通常維持 **2 至 4 週**。失效時請重新執行 `setup_helper.py`。
+- **憑證時效性**：Cookie 通常維持 **2 至 4 週**。失效時請重新執行 `tools/setup_helper.py`。
 - **100% 隱私保護**：所有數據皆在隔離環境處理並直接傳送至 Google。
 
 ## ❤️ 特別鳴謝

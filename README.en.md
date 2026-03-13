@@ -41,7 +41,7 @@ We provide a cross-platform helper to solve the trickiest auth steps:
 2. Run the setup helper:
    ```bash
    pip install google-auth-oauthlib requests
-   python setup_helper.py
+   python tools/setup_helper.py
    ```
    *(Windows user? See [Windows Guide](WINDOWS_GUIDE.md))*
 3. The script will complete the OAuth flow and generate a **`.env`** file.
@@ -61,7 +61,7 @@ Go to GitHub `Settings > Secrets and variables > Actions`, and fill in the secre
 ## ⚠️ Risk & Limitations
 
 - **Non-official Protocol**: This project relies on simulated browser behavior. If Google changes NotebookLM's structure, an update may be required.
-- **Credential TTL**: Cookies typically last **2-4 weeks**. Re-run `setup_helper.py` when auth fails.
+- **Credential TTL**: Cookies typically last **2-4 weeks**. Re-run `tools/setup_helper.py` when auth fails.
 - **100% Privacy**: Data is processed in isolated containers and sent directly to Google.
 
 ## ❤️ Acknowledgements
