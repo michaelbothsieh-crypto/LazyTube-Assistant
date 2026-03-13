@@ -54,6 +54,7 @@ def main():
     if action == "restore":
         target_chat_id = sys.argv[2] if len(sys.argv) > 2 else ""
         dl('processed_videos.txt', '')
+        dl('last_check.txt', '')
         for i in range(5):
             success = dl('subscriptions.json', '{}')
             if not target_chat_id and success:
@@ -67,8 +68,9 @@ def main():
             time.sleep(10)
 
     elif action == "persist":
-        # 1. 直接上傳已處理影片清單 (這部分通常不衝突)
+        # 1. 直接上傳已處理影片清單與上次檢查時間
         up('processed_videos.txt', 'processed_videos.txt')
+        up('last_check.txt', 'last_check.txt')
         
         # 2. 訂閱清單採用「下載-合併-上傳」策略
         local_file = 'subscriptions.json'

@@ -44,13 +44,9 @@ jobs:
       - name: Restore state from Vercel Blob
         continue-on-error: true
         env:
-          BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          if [ -n "$BLOB_TOKEN" ]; then
-            echo "📥 正在從 Vercel Blob 恢復狀態..."
-            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/last_check.txt" -o last_check.txt || echo "首次執行，跳過 last_check"
-            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/processed_videos.txt" -o processed_videos.txt || echo "首次執行，跳過 processed_videos"
-          fi
+          python sync_helper.py restore
 
       - name: Run summarizer
         env:
@@ -68,11 +64,6 @@ jobs:
       - name: Persist state to Vercel Blob
         if: always()
         env:
-          BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          if [ -n "$BLOB_TOKEN" ]; then
-            echo "📤 正在上傳狀態至 Vercel Blob..."
-            [ -f last_check.txt ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-add-random-suffix: 0" --data-binary @last_check.txt "https://blob.vercel-storage.com/state/last_check.txt"
-            [ -f processed_videos.txt ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-add-random-suffix: 0" --data-binary @processed_videos.txt "https://blob.vercel-storage.com/state/processed_videos.txt"
-            echo "✅ 狀態同步完成。"
-          fi
+          python sync_helper.py persist
