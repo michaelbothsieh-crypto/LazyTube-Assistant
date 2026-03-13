@@ -462,9 +462,14 @@ async def _handle_unsub(chat_id: str, text: str):
     res = await vm.unsubscribe(chat_id, parts[1])
     
     if res["success"]:
-        await StateManager.sync_to_blob("subscriptions.json")
-    
-    await send_telegram_message(chat_id, res["message"])
+        # 關鍵：驗證雲端儲存是否成功
+        ok = await StateManager.sync_to_blob("subscriptions.json")
+        if ok:
+            await send_telegram_message(chat_id, res["message"])
+        else:
+            await send_telegram_message(chat_id, "⚠️ <b>取消成功但雲端同步失敗</b>\n請稍後使用 <code>/list</code> 確認狀態。")
+    else:
+        await send_telegram_message(chat_id, res["message"])
 
 
 async def _handle_list(chat_id: str):

@@ -7,7 +7,7 @@ import json
 class StateManager:
     """
     /// 狀態管理模組
-    /// 負責狀態檔案的同步與讀寫邏輯
+    /// 負責狀態檔案的同步與讀寫邏輯 (具備防快取機制)
     """
 
     @staticmethod
@@ -44,6 +44,7 @@ class StateManager:
 
     @staticmethod
     def clear_local(filename: str):
+        """強制移除本地暫存檔，確保下次從雲端重新下載"""
         local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
         if os.path.exists(local_path):
             try: os.remove(local_path)
@@ -51,16 +52,23 @@ class StateManager:
 
     @staticmethod
     async def sync_from_blob(filename: str) -> bool:
-        """從 Vercel Blob 下載狀態檔案"""
+        """從 Vercel Blob 下載最新狀態 (防快取模式)"""
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return False
         
         local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
+        # 強制清理舊的本地檔案
+        StateManager.clear_local(filename)
 
         try:
-            headers = {"Authorization": f"Bearer {token}"}
-            # 修正：移除 /v1，正確端點為根目錄
-            list_url = f"https://blob.vercel-storage.com?prefix=state/{filename}"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Cache-Control": "no-cache" # 告知 Vercel 不要給快取
+            }
+            # URL 加入隨機數確保穿透快取
+            t = int(datetime.now().timestamp())
+            list_url = f"https://blob.vercel-storage.com?prefix=state/{filename}&t={t}"
+            
             async with httpx.AsyncClient() as client:
                 resp = await client.get(list_url, headers=headers, timeout=10.0)
                 if resp.status_code != 200: return False
@@ -68,8 +76,8 @@ class StateManager:
                 blobs = resp.json().get("blobs", [])
                 if not blobs: return False
                 
-                # 下載內容
-                file_resp = await client.get(blobs[0]["url"], timeout=15.0)
+                # 取得最新的 blob URL 並下載
+                file_resp = await client.get(f"{blobs[0]['url']}?t={t}", timeout=15.0)
                 if file_resp.status_code == 200:
                     os.makedirs(os.path.dirname(local_path), exist_ok=True) if os.path.dirname(local_path) else None
                     with open(local_path, "wb") as f:
@@ -80,7 +88,7 @@ class StateManager:
 
     @staticmethod
     async def sync_to_blob(filename: str) -> bool:
-        """上傳狀態檔案至 Vercel Blob"""
+        """上傳狀態至 Vercel Blob 並確保覆蓋"""
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return False
         
@@ -92,7 +100,6 @@ class StateManager:
                 data = f.read()
             if len(data) == 0: data = b"\n"
 
-            # 統一路徑格式
             url = f"https://blob.vercel-storage.com/state/{filename}"
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -102,6 +109,12 @@ class StateManager:
             }
             async with httpx.AsyncClient() as client:
                 resp = await client.put(url, content=data, headers=headers, timeout=30.0)
-                return resp.status_code == 200
-        except Exception: pass
+                if resp.status_code == 200:
+                    print(f"✅ Blob '{filename}' updated successfully.")
+                    return True
+                else:
+                    print(f"❌ Blob update failed: {resp.status_code} {resp.text}")
+                    return False
+        except Exception as e:
+            print(f"❌ Blob sync exception: {e}")
         return False
