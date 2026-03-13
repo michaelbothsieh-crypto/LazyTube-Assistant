@@ -36,21 +36,18 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     path = f".github/workflows/{file_name}"
     
     crons = set()
-    times_list = []
     for sub in group_subs:
         pref_time = sub.get("preferred_time")
         if pref_time:
             crons.add(tw_time_to_utc_cron(pref_time))
-            times_list.append(pref_time)
     
     if not crons:
         crons.add("0 0,12 * * *")
-        times_list.append("12h-Interval")
     
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
-    display_times = ",".join(sorted(times_list))
 
-    yaml_content = f"""name: Task - {hashed_id} ({display_times})
+    # 名稱改回簡潔的格式，不再包含變動的時間清單
+    yaml_content = f"""name: Task - Group {hashed_id}
 
 on:
   schedule:
@@ -108,7 +105,7 @@ jobs:
             resp_get = await client.get(api_url, headers=headers)
             if resp_get.status_code == 200: sha = resp_get.json().get("sha")
             payload = {
-                "message": f"chore: update subscription workflow for task {hashed_id}",
+                "message": f"chore: update subscription workflow for group {hashed_id}",
                 "content": base64.b64encode(yaml_content.encode("utf-8")).decode("utf-8"),
                 "branch": GH_BRANCH
             }
@@ -140,7 +137,7 @@ async def delete_group_workflow(chat_id: str) -> bool:
             resp_get = await client.get(api_url, headers=headers)
             if resp_get.status_code != 200: return True
             sha = resp_get.json().get("sha")
-            payload = {"message": f"chore: delete task workflow {hashed_id}", "sha": sha, "branch": GH_BRANCH}
+            payload = {"message": f"chore: delete group workflow {hashed_id}", "sha": sha, "branch": GH_BRANCH}
             resp_del = await client.request("DELETE", api_url, json=payload, headers=headers)
             return resp_del.status_code == 200
     except Exception: return False
