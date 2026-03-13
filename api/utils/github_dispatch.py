@@ -14,24 +14,17 @@ GH_REPO = os.environ.get("GH_REPO_NAME")
 GH_BRANCH = os.environ.get("GH_REPO_BRANCH", "main")
 
 def tw_time_to_utc_cron(tw_time: str) -> str:
-    """將台灣時間 HH:mm 轉換為 UTC 格式的 cron (mm HH * * *)"""
+    """將台灣時間 HH:mm 轉換為 UTC 格式的 cron"""
     try:
         h, m = map(int, tw_time.split(":"))
         utc_h = (h - 8) % 24
         return f"{m} {utc_h} * * *"
-    except Exception:
-        return "0 0 * * *"
+    except Exception: return "0 0 * * *"
 
 async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) -> bool:
-    """
-    /// 為特定的 chat_id 建立或更新獨立的 Group Workflow 檔案
-    """
-    if not all([GH_PAT, GH_OWNER, GH_REPO]):
-        logger.error("缺少 GitHub 環境變數，無法建立 Workflow")
-        return False
-
-    if not group_subs:
-        return await delete_group_workflow(chat_id)
+    """為特定的 chat_id 建立或更新獨立的 Group Workflow 檔案"""
+    if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
+    if not group_subs: return await delete_group_workflow(chat_id)
 
     safe_chat_id = str(chat_id).replace("-", "n")
     file_name = f"sub-group-{safe_chat_id}.yml"
@@ -41,7 +34,6 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     for sub in group_subs:
         pref_time = sub.get("preferred_time")
         if pref_time: crons.add(tw_time_to_utc_cron(pref_time))
-    
     if not crons: crons.add("0 0,12 * * *")
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
 
@@ -77,7 +69,6 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            # 使用增強型 Python 下載腳本，具備重試機制解決秒級延遲
             python -c "
             import os, json, time, urllib.request as r
             def dl(name, default, retry=3):
@@ -88,17 +79,16 @@ jobs:
                         with r.urlopen(req) as resp:
                             data = json.loads(resp.read().decode())
                             if data.get('blobs'):
-                                f_resp = r.urlopen(data['blobs'][0]['url'])
-                                content = f_resp.read()
+                                url = data['blobs'][0]['url']
+                                content = r.urlopen(url).read()
                                 if name == 'subscriptions.json':
                                     s = json.loads(content.decode())
-                                    if not s or '{chat_id}' not in s: 
-                                        if i < retry - 1:
-                                            print(f'Sync delay, retrying {{i+1}}...'); time.sleep(5); continue
+                                    if '{chat_id}' not in s:
+                                        print(f'Sync delay for {chat_id}, retrying {{i+1}}...'); time.sleep(5); continue
                                 with open(name, 'wb') as f: f.write(content)
-                                return
-                    except: pass
-                    if i < retry - 1: time.sleep(5)
+                                print(f'Successfully downloaded {{name}}'); return
+                    except Exception as e: print(f'Retry {{i+1}} failed: {{e}}')
+                    time.sleep(5)
                 with open(name, 'w') as f: f.write(default)
             dl('processed_videos.txt', '')
             dl('subscriptions.json', '{{}}')
@@ -122,9 +112,9 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            # 修正上傳 URL 路徑並加入版本號
-            [ -f processed_videos.txt ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @processed_videos.txt \"https://blob.vercel-storage.com/state/processed_videos.txt\"
-            [ -f subscriptions.json ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @subscriptions.json \"https://blob.vercel-storage.com/state/subscriptions.json\"
+            [ -f processed_videos.txt ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @processed_videos.txt \"https://blob.vercel-storage.com/v1/upload/state/processed_videos.txt\" > /dev/null
+            [ -f subscriptions.json ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @subscriptions.json \"https://blob.vercel-storage.com/v1/upload/state/subscriptions.json\" > /dev/null
+            echo \"✅ State persistence completed.\"
           fi
 """
     
@@ -136,7 +126,6 @@ jobs:
             sha = None
             resp_get = await client.get(api_url, headers=headers)
             if resp_get.status_code == 200: sha = resp_get.json().get("sha")
-
             payload = {
                 "message": f"chore: update subscription workflow for group {chat_id}",
                 "content": base64.b64encode(yaml_content.encode("utf-8")).decode("utf-8"),

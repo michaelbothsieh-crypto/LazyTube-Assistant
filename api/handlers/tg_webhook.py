@@ -424,8 +424,10 @@ async def _handle_sub(chat_id: str, text: str):
 
             await send_telegram_message(chat_id, res["message"])
             
-            # 改回 await：確保指令確實發送給 GitHub 
+            # 延長等待至 10 秒：確保 Vercel Blob 索引已更新
             from api.utils.github_dispatch import dispatch_group_workflow
+            import asyncio
+            await asyncio.sleep(10)
             await dispatch_group_workflow(chat_id)
         else:
             if msg_id:

@@ -117,8 +117,8 @@ class StateManager:
                     test_data = json.load(f)
                     if "error" in test_data and len(test_data) == 1: return False
 
-            # 修正：正確的 Vercel Blob PUT URL
-            url = f"https://blob.vercel-storage.com/state/{filename}"
+            # 修正：Vercel Blob REST API 正確的上傳端點
+            url = f"https://blob.vercel-storage.com/v1/upload/state/{filename}"
             with open(local_path, "rb") as f:
                 data = f.read()
             
