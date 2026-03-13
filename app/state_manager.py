@@ -10,7 +10,7 @@ class StateManager:
 
     @staticmethod
     def get_last_check_time() -> datetime:
-        """讀取上次檢查時間，若遺失則回看最近 2 小時。"""
+        """讀取上次檢查時間，若遺失則回看最近 24 小時。"""
         try:
             import os
             if os.path.exists(Config.LAST_CHECK_FILE):
@@ -18,7 +18,7 @@ class StateManager:
                     return datetime.fromisoformat(f.read().strip())
         except Exception:
             pass
-        return datetime.now(timezone.utc) - timedelta(hours=2)
+        return datetime.now(timezone.utc) - timedelta(hours=24)
 
     @staticmethod
     def save_check_time(check_time: datetime) -> None:
