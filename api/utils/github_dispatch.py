@@ -90,14 +90,14 @@ jobs:
             import os, httpx, json
             def dl(name, default):
                 try:
-                    headers = {'Authorization': f'Bearer {os.environ[\"BLOB_TOKEN\"]}'}
-                    resp = httpx.get(f'https://blob.vercel-storage.com/v1?prefix=state/{name}', headers=headers)
+                    headers = {{'Authorization': f'Bearer {{os.environ[\"BLOB_TOKEN\"]}}'}}
+                    resp = httpx.get(f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}', headers=headers)
                     url = resp.json()['blobs'][0]['url']
                     with open(name, 'wb') as f: f.write(httpx.get(url).content)
                 except:
                     with open(name, 'w') as f: f.write(default)
             dl('processed_videos.txt', '')
-            dl('subscriptions.json', '{}')
+            dl('subscriptions.json', '{{}}')
             "
           fi
 
