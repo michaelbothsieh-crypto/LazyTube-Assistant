@@ -35,87 +35,106 @@ class NotebookService:
                 print(res.stdout.strip())
         return res
 
-    def _prepare_notebook(self, url: str, prefix: str = "YT", wait: bool = False):
+    def _add_source_with_proxy(self, nb_id, url, wait=False):
         """
-        /// 共用的筆記本準備流程
-        /// 建立筆記本並以多重代理策略新增來源
-        /// 回傳 (nb_id, effective_url)，失敗時回傳 (None, None)
+        /// 核心代理匯入邏輯：套用多重代理策略確保成功率
+        /// 回傳 True/False
         """
-        nb_name = f"{prefix}_{uuid.uuid4().hex[:4].upper()}"
-        nb_id = None
-
-        print(f"📁 正在建立筆記本: {nb_name}...")
-        res = self.run_nlm("notebook", "create", nb_name)
-        if res.returncode != 0:
-            return None, None
-        match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
-        nb_id = match.group(1) if match else nb_name
-        print(f"✅ 筆記本建立成功 (ID: {nb_id})")
-
         wait_flag = ["--wait"] if wait else []
-
-        # 網域智能路由：已知的高防護網站直接跳過直連，交給強大代理
         hard_domains = ["forum.gamer.com.tw", "ptt.cc", "bilibili.com", "x.com", "twitter.com"]
         is_hard_domain = any(domain in url for domain in hard_domains)
-
         success = False
 
-        # 策略 1: 直接連線 (若非高防護網域)
+        # 策略 1: 直接連線
         if not is_hard_domain:
-            print(f"🔗 正在新增來源 (直連): {url}...")
             res_add = self.run_nlm("source", "add", nb_id, "--url", url, *wait_flag)
-            if res_add.returncode == 0:
-                success = True
-            else:
-                print("⚠️ 直接新增來源失敗。")
-        else:
-            print(f"🛡️ 偵測到高防護網域，跳過直連，直接啟用代理策略...")
+            if res_add.returncode == 0: success = True
 
-        # 策略 2: Jina Reader 代理
+        # 策略 2: Jina Reader
         if not success:
-            print("🔄 嘗試透過 Jina Reader 代理讀取...")
             proxy_url = f"https://r.jina.ai/{url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url, *wait_flag)
-            if res_add.returncode == 0:
-                print("✅ 透過 Jina 代理讀取成功")
-                success = True
+            if res_add.returncode == 0: success = True
 
-        # 策略 3: 自建 Cloudflare 代理
+        # 策略 3: Cloudflare Proxy
         if not success:
-            print("⚠️ Jina 代理失敗，嘗試透過自建 Cloudflare 代理提取文字...")
             import requests
             cf_worker_url = "https://lazypipe-worker.hsieh130.workers.dev/"
             try:
                 cf_res = requests.get(f"{cf_worker_url}?url={url}", timeout=30)
                 cf_data = cf_res.json()
-                
                 if cf_data.get("success") and cf_data.get("content"):
                     tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
                     with open(tmp_txt, "w", encoding="utf-8") as f:
-                        f.write(f"標題: {cf_data.get('title', '未知')}\n\n")
-                        f.write(cf_data.get("content"))
-                    
+                        f.write(f"標題: {cf_data.get('title', '未知')}\n\n{cf_data.get('content')}")
                     res_add = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
-                    if res_add.returncode == 0:
-                        print("✅ 透過 Cloudflare 代理成功提取純文字")
-                        success = True
-            except Exception as e:
-                print(f"⚠️ Cloudflare 代理提取失敗: {e}")
+                    if res_add.returncode == 0: success = True
+            except: pass
 
-        # 策略 4: Google Translate Proxy (最後手段)
+        # 策略 4: Google Translate Proxy
         if not success:
-            print("⚠️ Cloudflare 代理亦失敗，嘗試使用 Google Translate Proxy...")
             gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url, *wait_flag)
-            if res_add.returncode == 0:
-                print("✅ 透過 Google Translate 代理成功")
-                success = True
+            if res_add.returncode == 0: success = True
+            
+        return success
 
-        if success:
+    def _prepare_notebook(self, url: str, prefix: str = "YT", wait: bool = False):
+        """
+        /// 共用的筆記本準備流程
+        """
+        nb_name = f"{prefix}_{uuid.uuid4().hex[:4].upper()}"
+        print(f"📁 正在建立筆記本: {nb_name}...")
+        res = self.run_nlm("notebook", "create", nb_name)
+        if res.returncode != 0: return None, None
+        
+        match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
+        nb_id = match.group(1) if match else nb_name
+        print(f"✅ 筆記本建立成功 (ID: {nb_id})")
+
+        if self._add_source_with_proxy(nb_id, url, wait=wait):
             return nb_id, url
         else:
             print("❌ 所有代理嘗試均失敗。")
             return nb_id, None
+
+    def process_batch(self, urls: list, custom_prompt: str = None):
+        """
+        /// 完整處理批次網址的摘要流程
+        """
+        nb_id = None
+        try:
+            nb_name = f"BATCH_{uuid.uuid4().hex[:4].upper()}"
+            res = self.run_nlm("notebook", "create", nb_name)
+            match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
+            nb_id = match.group(1) if match else nb_name
+            
+            success_count = 0
+            for url in urls:
+                url = url.strip()
+                if not url: continue
+                print(f"🔗 正在批次加入來源: {url}...")
+                if self._add_source_with_proxy(nb_id, url, wait=False):
+                    success_count += 1
+            
+            if success_count == 0:
+                return "❌ 所有網址匯入均失敗。"
+
+            print(f"📝 正在產出整合摘要 (成功數: {success_count})...")
+            prompt = custom_prompt or "請用繁體中文根據以上所有來源，整理出一份完整的整合摘要與核心重點對比。"
+            res = self.run_nlm("query", "notebook", nb_id, prompt)
+            
+            summary = res.stdout.strip()
+            if res.returncode == 0:
+                try:
+                    data = json.loads(res.stdout)
+                    summary = data.get("value", {}).get("answer", res.stdout)
+                except: pass
+            return summary
+        finally:
+            if nb_id:
+                print(f"🧹 正在刪除暫存筆記本: {nb_id}...")
+                self.run_nlm("notebook", "delete", nb_id, "--confirm")
 
     def process_video(self, url, title, custom_prompt=None):
         """

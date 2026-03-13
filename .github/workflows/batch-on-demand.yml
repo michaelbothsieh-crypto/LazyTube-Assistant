@@ -1,0 +1,50 @@
+name: NotebookLM Batch Processor
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: '以逗號分隔的網址清單'
+        required: true
+      prompt:
+        description: '自訂整合 Prompt'
+        required: false
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+      message_id:
+        description: 'Telegram Message ID to delete'
+        required: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  batch_process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install notebooklm-mcp-cli==0.4.6
+
+      - name: Run Batch Processor
+        env:
+          URLS: ${{ github.event.inputs.urls }}
+          CUSTOM_PROMPT: ${{ github.event.inputs.prompt }}
+          TELEGRAM_CHAT_ID: ${{ github.event.inputs.chat_id }}
+          TELEGRAM_MESSAGE_ID: ${{ github.event.inputs.message_id }}
+          NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python jobs/on_demand_batch.py

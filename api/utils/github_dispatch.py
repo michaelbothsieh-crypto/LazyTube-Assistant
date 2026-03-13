@@ -51,3 +51,28 @@ async def dispatch_artifact_workflow(url: str, prompt: str = "", chat_id: str = 
             resp = await client.post(api_url, json=payload, headers=headers)
         return resp.status_code == 204
     except Exception: return False
+
+async def dispatch_batch_workflow(urls: str, prompt: str = "", chat_id: str = "", message_id: str = ""):
+    """觸發批次處理工作流"""
+    if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
+    api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/batch-on-demand.yml/dispatches"
+    payload = {
+        "ref": GH_BRANCH,
+        "inputs": {
+            "urls": urls,
+            "prompt": prompt,
+            "chat_id": str(chat_id),
+            "message_id": str(message_id)
+        }
+    }
+    headers = {
+        "Authorization": f"Bearer {GH_PAT}",
+        "Accept": "application/vnd.github+json"
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(api_url, json=payload, headers=headers)
+        return resp.status_code == 204
+    except Exception as e:
+        logger.error(f"dispatch_batch_workflow error: {e}")
+        return False
