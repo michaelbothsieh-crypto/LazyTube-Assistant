@@ -27,7 +27,7 @@ def tw_time_to_utc_cron(tw_time: str) -> str:
     except Exception: return "0 0 * * *"
 
 async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) -> bool:
-    """為特定的 chat_id 建立或更新獨立的 Group Workflow 檔案 (使用雜湊 ID 保護隱私)"""
+    """為特定的 chat_id 建立或更新獨立的 Group Workflow 檔案"""
     if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
     if not group_subs: return await delete_group_workflow(chat_id)
 
@@ -42,7 +42,7 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     if not crons: crons.add("0 0,12 * * *")
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
 
-    # 注意：在 YAML 與腳本參數中均使用 hashed_id 以保護隱私
+    # 建立 YAML 內容 (使用 sed 移除 Python 代碼前的縮排以維持語法正確)
     yaml_content = f"""name: Task - {hashed_id}
 
 on:
@@ -75,32 +75,32 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            cat << 'INNER_EOF' > sync_state.py
-import os, json, time, urllib.request as r, hashlib
-def get_h(cid): return hashlib.sha256(str(cid).encode()).hexdigest()[:12]
-def dl(name, default, retry=3):
-    headers = {{'Authorization': f'Bearer {{os.environ.get("BLOB_TOKEN")}}', 'x-api-version': '1'}}
-    for i in range(retry):
-        try:
-            list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}'
-            req = r.Request(list_url, headers=headers)
-            with r.urlopen(req) as resp:
-                data = json.loads(resp.read().decode())
-                if data.get('blobs'):
-                    url = data['blobs'][0]['url']
-                    content = r.urlopen(url).read()
-                    if name == 'subscriptions.json':
-                        s = json.loads(content.decode())
-                        # 檢查 JSON 中是否有任何群組 ID 雜湊後與當前 hashed_id 匹配
-                        if not any(get_h(k) == '{hashed_id}' for k in s.keys()):
-                            print(f'Sync delay for {hashed_id}, retrying {{i+1}}...'); time.sleep(5); continue
-                    with open(name, 'wb') as f: f.write(content)
-                    print(f'Successfully downloaded {{name}}'); return
-        except Exception as e: print(f'Retry failed: {{e}}')
-        time.sleep(5)
-    with open(name, 'w') as f: f.write(default)
-dl('processed_videos.txt', '')
-dl('subscriptions.json', '{{}}')
+            cat << 'INNER_EOF' | sed 's/^            //' > sync_state.py
+            import os, json, time, urllib.request as r, hashlib
+            def get_h(cid): return hashlib.sha256(str(cid).encode()).hexdigest()[:12]
+            def dl(name, default, retry=3):
+                headers = {{'Authorization': f'Bearer {{os.environ.get("BLOB_TOKEN")}}', 'x-api-version': '1'}}
+                for i in range(retry):
+                    try:
+                        list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}'
+                        req = r.Request(list_url, headers=headers)
+                        with r.urlopen(req) as resp:
+                            data = json.loads(resp.read().decode())
+                            if data.get('blobs'):
+                                url = data['blobs'][0]['url']
+                                content = r.urlopen(url).read()
+                                if name == 'subscriptions.json':
+                                    s = json.loads(content.decode())
+                                    if not any(get_h(k) == '{hashed_id}' for k in s.keys()):
+                                        print(f'Sync delay for {hashed_id}, retrying {{i+1}}...'); time.sleep(5); continue
+                                with open(name, 'wb') as f: f.write(content)
+                                print(f'Successfully downloaded {{name}}'); return
+                    except Exception as e: print(f'Retry failed: {{e}}')
+                    time.sleep(5)
+                print(f'Fallback to default for {{name}}')
+                with open(name, 'w') as f: f.write(default)
+            dl('processed_videos.txt', '')
+            dl('subscriptions.json', '{{}}')
 INNER_EOF
             python sync_state.py
           fi
@@ -114,7 +114,6 @@ INNER_EOF
           TELEGRAM_BOT_TOKEN: ${{{{ secrets.TELEGRAM_BOT_TOKEN }}}}
           NLM_COOKIE_BASE64: ${{{{ secrets.NLM_COOKIE_BASE64 }}}}
         run: |
-          # 傳入雜湊後的 ID
           python on_demand_group.py "{hashed_id}"
 
       - name: Persist state to Vercel Blob
@@ -148,7 +147,6 @@ INNER_EOF
     except Exception: return False
 
 async def dispatch_group_workflow(chat_id: str) -> bool:
-    """主動觸發特定群組的 Workflow Action (使用雜湊 ID)"""
     if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
     hashed_id = get_hashed_id(chat_id)
     workflow_file = f"sub-group-{hashed_id}.yml"
@@ -162,7 +160,6 @@ async def dispatch_group_workflow(chat_id: str) -> bool:
     except Exception: return False
 
 async def delete_group_workflow(chat_id: str) -> bool:
-    """刪除整個群組的 Workflow 檔案 (使用雜湊 ID)"""
     hashed_id = get_hashed_id(chat_id)
     path = f".github/workflows/sub-group-{hashed_id}.yml"
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/contents/{path}"
