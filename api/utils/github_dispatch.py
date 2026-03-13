@@ -42,7 +42,7 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     if not crons: crons.add("0 0,12 * * *")
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
 
-    # 建立 YAML 內容 (使用 sed 移除 Python 代碼前的縮排以維持語法正確)
+    # 建立極度簡化的 YAML 內容
     yaml_content = f"""name: Task - {hashed_id}
 
 on:
@@ -72,38 +72,8 @@ jobs:
       - name: Restore state from Vercel Blob
         continue-on-error: true
         env:
-          BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
-        run: |
-          if [ -n "$BLOB_TOKEN" ]; then
-            cat << 'INNER_EOF' | sed 's/^            //' > sync_state.py
-            import os, json, time, urllib.request as r, hashlib
-            def get_h(cid): return hashlib.sha256(str(cid).encode()).hexdigest()[:12]
-            def dl(name, default, retry=3):
-                headers = {{'Authorization': f'Bearer {{os.environ.get("BLOB_TOKEN")}}', 'x-api-version': '1'}}
-                for i in range(retry):
-                    try:
-                        list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}'
-                        req = r.Request(list_url, headers=headers)
-                        with r.urlopen(req) as resp:
-                            data = json.loads(resp.read().decode())
-                            if data.get('blobs'):
-                                url = data['blobs'][0]['url']
-                                content = r.urlopen(url).read()
-                                if name == 'subscriptions.json':
-                                    s = json.loads(content.decode())
-                                    if not any(get_h(k) == '{hashed_id}' for k in s.keys()):
-                                        print(f'Sync delay for {hashed_id}, retrying {{i+1}}...'); time.sleep(5); continue
-                                with open(name, 'wb') as f: f.write(content)
-                                print(f'Successfully downloaded {{name}}'); return
-                    except Exception as e: print(f'Retry failed: {{e}}')
-                    time.sleep(5)
-                print(f'Fallback to default for {{name}}')
-                with open(name, 'w') as f: f.write(default)
-            dl('processed_videos.txt', '')
-            dl('subscriptions.json', '{{}}')
-INNER_EOF
-            python sync_state.py
-          fi
+          BLOB_READ_WRITE_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
+        run: python sync_helper.py restore "{hashed_id}"
 
       - name: Run group task
         env:
@@ -113,19 +83,13 @@ INNER_EOF
           YT_REFRESH_TOKEN: ${{{{ secrets.YT_REFRESH_TOKEN }}}}
           TELEGRAM_BOT_TOKEN: ${{{{ secrets.TELEGRAM_BOT_TOKEN }}}}
           NLM_COOKIE_BASE64: ${{{{ secrets.NLM_COOKIE_BASE64 }}}}
-        run: |
-          python on_demand_group.py "{hashed_id}"
+        run: python on_demand_group.py "{hashed_id}"
 
       - name: Persist state to Vercel Blob
         if: always()
         env:
-          BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
-        run: |
-          if [ -n "$BLOB_TOKEN" ]; then
-            [ -f processed_videos.txt ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-api-version: 1" -H "x-add-random-suffix: 0" --data-binary @processed_videos.txt "https://blob.vercel-storage.com/v1/upload/state/processed_videos.txt" > /dev/null
-            [ -f subscriptions.json ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-api-version: 1" -H "x-add-random-suffix: 0" --data-binary @subscriptions.json "https://blob.vercel-storage.com/v1/upload/state/subscriptions.json" > /dev/null
-            echo "✅ State persistence completed."
-          fi
+          BLOB_READ_WRITE_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
+        run: python sync_helper.py persist
 """
     
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/contents/{path}"
