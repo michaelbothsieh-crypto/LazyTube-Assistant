@@ -17,6 +17,7 @@
 - **💸 Zero Operating Cost**: Fully powered by GitHub Actions free tier. No server required.
 - **📦 Serverless Architecture**: No databases, no complex setups. Just Fork and Run.
 - **🧠 Deep AI Insights**: Leveraging Google NotebookLM for logic-driven, context-aware summaries.
+- **🛡️ Anti-Bot Bypass**: Built-in smart routing and multi-layer proxies (Jina Reader & Cloudflare Browser Rendering) for strict forums and news sites to ensure NotebookLM always gets clean text sources.
 - **🎯 Smart Filtering**: Automatically identifies relevant content (e.g., PoE Builds, League Guides) based on your interests.
 - **🛡️ Privacy by Design**: Credentials stay in isolated containers. Data is sent directly to Google.
 
