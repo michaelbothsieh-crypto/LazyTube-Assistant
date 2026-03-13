@@ -92,8 +92,12 @@ jobs:
                 try:
                     headers = {{'Authorization': f'Bearer {{os.environ[\"BLOB_TOKEN\"]}}'}}
                     resp = httpx.get(f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}', headers=headers)
-                    url = resp.json()['blobs'][0]['url']
-                    with open(name, 'wb') as f: f.write(httpx.get(url).content)
+                    blobs = resp.json().get('blobs', [])
+                    if blobs:
+                        url = blobs[0]['url']
+                        with open(name, 'wb') as f: f.write(httpx.get(url).content)
+                    else:
+                        with open(name, 'w') as f: f.write(default)
                 except:
                     with open(name, 'w') as f: f.write(default)
             dl('processed_videos.txt', '')
@@ -153,10 +157,10 @@ async def dispatch_group_workflow(chat_id: str) -> bool:
     safe_chat_id = str(chat_id).replace("-", "n")
     workflow_file = f"sub-group-{safe_chat_id}.yml"
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/{workflow_file}/dispatches"
-    payload = {"ref": GH_BRANCH, "inputs": {}} # 群組模式不需 Inputs，會讀 JSON
+    payload = {"ref": GH_BRANCH, "inputs": {}}
     headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json"}
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(api_url, json=payload, headers=headers)
         return resp.status_code == 204
     except Exception: return False

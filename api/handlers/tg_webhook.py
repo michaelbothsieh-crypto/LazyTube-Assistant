@@ -424,9 +424,9 @@ async def _handle_sub(chat_id: str, text: str):
 
             await send_telegram_message(chat_id, res["message"])
             
-            # 異步嘗試觸發 Action (不等待，避免超時)
+            # 改回 await：確保指令確實發送給 GitHub 
             from api.utils.github_dispatch import dispatch_group_workflow
-            asyncio.create_task(dispatch_group_workflow(chat_id))
+            await dispatch_group_workflow(chat_id)
         else:
             if msg_id:
                 from app.notifier import Notifier
@@ -488,17 +488,20 @@ async def _handle_clear(chat_id: str):
     
     # 2. 清理紀錄
     await StateManager.sync_from_blob("subscriptions.json")
-    if os.path.exists("subscriptions.json"):
+    if os.path.exists(Config.SUBSCRIPTIONS_FILE):
         try:
-            with open("subscriptions.json", "r") as f:
+            with open(Config.SUBSCRIPTIONS_FILE, "r") as f:
                 subs = json.load(f)
             if chat_id in subs:
                 del subs[chat_id]
-                with open("subscriptions.json", "w") as f:
+                with open(Config.SUBSCRIPTIONS_FILE, "w") as f:
                     json.dump(subs, f)
                 await StateManager.sync_to_blob("subscriptions.json")
         except:
             pass
+    
+    # 強制移除本地快取，防止殘留
+    StateManager.clear_local("subscriptions.json")
 
     # 刪除「處理中」訊息
     if msg_id:

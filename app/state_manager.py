@@ -43,6 +43,19 @@ class StateManager:
             for vid in trimmed: f.write(f"{vid}\n")
 
     @staticmethod
+    def clear_local(filename: str):
+        """移除本地快取的狀態檔案"""
+        local_path = ""
+        if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
+        elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
+        elif filename == "processed_videos.txt": local_path = Config.PROCESSED_VIDEOS_FILE
+        else: local_path = filename
+        
+        if os.path.exists(local_path):
+            try: os.remove(local_path)
+            except: pass
+
+    @staticmethod
     async def sync_from_blob(filename: str) -> bool:
         """從 Vercel Blob 尋找並下載最新的狀態檔案"""
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
