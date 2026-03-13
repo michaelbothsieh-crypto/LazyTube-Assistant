@@ -117,14 +117,15 @@ class StateManager:
                     test_data = json.load(f)
                     if "error" in test_data and len(test_data) == 1: return False
 
-            url = f"https://blob.vercel-storage.com/v1/upload/state/{filename}"
+            # 修正：正確的 Vercel Blob PUT URL
+            url = f"https://blob.vercel-storage.com/state/{filename}"
             with open(local_path, "rb") as f:
                 data = f.read()
             
             headers = {
                 "Authorization": f"Bearer {token}",
                 "x-api-version": "1",
-                "x-add-random-suffix": "0", # 禁止隨機後綴以保持路徑穩定
+                "x-add-random-suffix": "0",
                 "content-type": "application/octet-stream"
             }
             async with httpx.AsyncClient() as client:

@@ -123,8 +123,8 @@ jobs:
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
             # 修正上傳 URL 路徑並加入版本號
-            [ -f processed_videos.txt ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @processed_videos.txt \"https://blob.vercel-storage.com/v1/upload/state/processed_videos.txt\"
-            [ -f subscriptions.json ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @subscriptions.json \"https://blob.vercel-storage.com/v1/upload/state/subscriptions.json\"
+            [ -f processed_videos.txt ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @processed_videos.txt \"https://blob.vercel-storage.com/state/processed_videos.txt\"
+            [ -f subscriptions.json ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @subscriptions.json \"https://blob.vercel-storage.com/state/subscriptions.json\"
           fi
 """
     
