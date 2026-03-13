@@ -135,6 +135,20 @@ jobs:
         logger.error(f"GitHub API 異常: {e}")
         return False
 
+async def dispatch_group_workflow(chat_id: str) -> bool:
+    """主動觸發特定群組的 Workflow Action (原生模式)"""
+    if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
+    safe_chat_id = str(chat_id).replace("-", "n")
+    workflow_file = f"sub-group-{safe_chat_id}.yml"
+    api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/{workflow_file}/dispatches"
+    payload = {"ref": GH_BRANCH, "inputs": {}} # 群組模式不需 Inputs，會讀 JSON
+    headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(api_url, json=payload, headers=headers)
+        return resp.status_code == 204
+    except Exception: return False
+
 async def delete_group_workflow(chat_id: str) -> bool:
     """刪除整個群組的 Workflow 檔案"""
     safe_chat_id = str(chat_id).replace("-", "n")

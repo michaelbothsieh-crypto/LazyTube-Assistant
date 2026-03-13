@@ -48,20 +48,22 @@ class SubscriptionViewModel:
             return {"success": False, "message": f"您已經訂閱過「{channel_info['title']}」了。"}
 
         # 更新記憶體中的資料
+        # 初始檢查時間回溯 24 小時，以便訂閱後能立刻掃描到最近的新片
+        last_check_time = datetime.now(timezone.utc) - timedelta(hours=24)
         new_sub = {
             "channel_id": channel_info["id"],
             "channel_title": channel_info["title"],
             "custom_prompt": custom_prompt,
             "preferred_time": preferred_time,
-            "last_check": datetime.now(timezone.utc).isoformat(),
+            "last_check": last_check_time.isoformat(),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
         if chat_id not in subs: subs[chat_id] = []
         subs[chat_id].append(new_sub)
 
-        # 1. 同步建立/更新 GitHub 群組 Workflow (原生 Action)
-        from api.utils.github_dispatch import update_group_workflow
+        # 1. 同步建立/更新 GitHub 群組 Workflow
+        from api.utils.github_dispatch import update_group_workflow, dispatch_group_workflow
         success = await update_group_workflow(chat_id, subs[chat_id])
         
         if not success:
@@ -70,13 +72,18 @@ class SubscriptionViewModel:
         # 2. 儲存至檔案
         self._save_subs(subs)
         
+        # 3. 自動觸發第一次執行 (稍等幾秒讓 GitHub 索引新檔案)
+        # 這裡不 await，直接在背景嘗試觸發
+        import asyncio
+        asyncio.create_task(dispatch_group_workflow(chat_id))
+
         time_msg = f"\n定時檢查：<code>{preferred_time}</code>" if preferred_time else "\n定時檢查：<code>預設 (每 12 小時)</code>"
         return {
             "success": True, 
             "message": f"✅ 已成功訂閱「{channel_info['title']}」！\n"
                        f"客製化 Prompt：{custom_prompt if custom_prompt else '（使用預設）'}"
                        f"{time_msg}\n\n"
-                       f"<i>該群組的獨立 Action 檔案已更新，摘要將在指定時間自動發送。</i>"
+                       f"🚀 <b>已自動啟動第一次掃描</b>，若過去 24 小時內有新片，稍後將發送摘要。"
         }
 
     async def unsubscribe(self, chat_id: str, channel_id_or_index: str) -> Dict[str, Any]:
