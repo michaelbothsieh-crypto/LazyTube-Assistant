@@ -56,13 +56,8 @@ async def handle_telegram_update(update: dict):
             if text.startswith("/"):
                 await send_telegram_message(chat_id, f"⚠️ <b>權限不足</b>\n您的 ID (<code>{user_id}</code>) 不在授權名單中。")
             return
-    else:
-        # 重要：如果完全沒設定 ALLOWED_USERS，為了安全起見，預設拒絕所有外部指令 (除了 /start)
-        # 除非您希望公開使用，否則請務必填寫 ID
-        if not text.startswith("/start"):
-            logger.warning("未設定 ALLOWED_USERS，已攔截潛在的未授權請求")
-            return
-
+    # 注意：如果完全沒設定 ALLOWED_USERS，則視為公開使用，不進行攔截
+    
     # 3. 處理群組指令格式 (e.g. /nlm@LazyTubeBot -> /nlm)
     if "@" in text:
         text = text.split("@")[0] if text.startswith("/") else text
@@ -429,11 +424,9 @@ async def _handle_sub(chat_id: str, text: str):
 
             await send_telegram_message(chat_id, res["message"])
             
-            # 最後才啟動 Action (給 GitHub 3秒索引時間)
+            # 異步嘗試觸發 Action (不等待，避免超時)
             from api.utils.github_dispatch import dispatch_group_workflow
-            import asyncio
-            await asyncio.sleep(3)
-            await dispatch_group_workflow(chat_id)
+            asyncio.create_task(dispatch_group_workflow(chat_id))
         else:
             if msg_id:
                 from app.notifier import Notifier
