@@ -11,6 +11,7 @@ if project_root not in sys.path:
 from app.notebook import NotebookService
 from app.notifier import Notifier
 from app.config import Config
+from app.auth import AuthManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,6 +30,11 @@ def main():
     urls = [u.strip() for u in urls_str.split(",") if u.strip()]
     
     print(f"🚀 開始批次處理 {len(urls)} 個網址...")
+    
+    # 部署認證
+    if not AuthManager.deploy_credentials():
+        logger.error("❌ 部署 NLM 認證失敗")
+        return
     
     nb_service = NotebookService()
     summary = nb_service.process_batch(urls, custom_prompt)
