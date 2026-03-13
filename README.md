@@ -76,7 +76,7 @@
    pip install google-auth-oauthlib requests
    python tools/setup_helper.py
    ```
-   *(Windows 使用者？請參閱 [Windows 指南](WINDOWS_GUIDE.md))*
+   *(Windows 使用者？請參閱 [Windows 指南](docs/WINDOWS_GUIDE.md))*
 3. 腳本會自動完成授權並產出 **`.env`** 檔案。
 
 ### 3. 設定 GitHub Secrets

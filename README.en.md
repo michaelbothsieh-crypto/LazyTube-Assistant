@@ -44,7 +44,7 @@ We provide a cross-platform helper to solve the trickiest auth steps:
    pip install google-auth-oauthlib requests
    python tools/setup_helper.py
    ```
-   *(Windows user? See [Windows Guide](WINDOWS_GUIDE.md))*
+   *(Windows user? See [Windows Guide](docs/WINDOWS_GUIDE.md))*
 3. The script will complete the OAuth flow and generate a **`.env`** file.
 
 ### 3. Set Secrets
