@@ -417,9 +417,27 @@ async def _handle_sub(chat_id: str, text: str):
             msg_id = "" # 防止重複刪除
 
         if res["success"]:
+            # 關鍵：先將更新後的 subscriptions.json 上傳至 Blob
             await StateManager.sync_to_blob("subscriptions.json")
-        
-        await send_telegram_message(chat_id, res["message"])
+            
+            # 刪除「處理中」訊息
+            if msg_id:
+                from app.notifier import Notifier
+                Notifier.delete_pending_message(chat_id, msg_id)
+                msg_id = ""
+
+            await send_telegram_message(chat_id, res["message"])
+            
+            # 最後才啟動 Action (給 GitHub 3秒索引時間)
+            from api.utils.github_dispatch import dispatch_group_workflow
+            import asyncio
+            await asyncio.sleep(3)
+            await dispatch_group_workflow(chat_id)
+        else:
+            if msg_id:
+                from app.notifier import Notifier
+                Notifier.delete_pending_message(chat_id, msg_id)
+            await send_telegram_message(chat_id, res["message"])
 
     except Exception as e:
         # 發生任何異常也要清理訊息

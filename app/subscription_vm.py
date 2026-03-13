@@ -73,20 +73,13 @@ class SubscriptionViewModel:
         # 2. 儲存至檔案
         self._save_subs(subs)
         
-        # 3. 自動觸發第一次執行
-        # 注意：剛建立的檔案 GitHub 需要幾秒鐘索引，這裡稍作等待後觸發
-        from api.utils.github_dispatch import dispatch_group_workflow
-        import asyncio
-        await asyncio.sleep(3) # 等待 3 秒確保 GitHub 索引完成
-        await dispatch_group_workflow(chat_id)
-
         time_msg = f"\n定時檢查：<code>{preferred_time}</code>" if preferred_time else "\n定時檢查：<code>預設 (每 12 小時)</code>"
         return {
             "success": True, 
             "message": f"✅ 已成功訂閱「{channel_info['title']}」！\n"
                        f"客製化 Prompt：{custom_prompt if custom_prompt else '（使用預設）'}"
                        f"{time_msg}\n\n"
-                       f"🚀 <b>已自動啟動第一次掃描</b>，若過去 24 小時內有新片，稍後將發送摘要。"
+                       f"🚀 <b>正在同步排程...</b> 稍後將自動啟動第一次掃描。"
         }
 
     async def unsubscribe(self, chat_id: str, channel_id_or_index: str) -> Dict[str, Any]:
