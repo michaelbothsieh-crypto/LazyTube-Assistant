@@ -85,20 +85,21 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            # 透過 Python 腳本來執行安全的下載，避免 curl 直接寫入錯誤訊息
             python -c "
-            import os, httpx, json
+            import os, json, urllib.request as r
             def dl(name, default):
                 try:
-                    headers = {{'Authorization': f'Bearer {{os.environ[\"BLOB_TOKEN\"]}}'}}
-                    resp = httpx.get(f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}', headers=headers)
-                    blobs = resp.json().get('blobs', [])
-                    if blobs:
-                        url = blobs[0]['url']
-                        with open(name, 'wb') as f: f.write(httpx.get(url).content)
-                    else:
-                        with open(name, 'w') as f: f.write(default)
-                except:
+                    req = r.Request(f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}', headers={{'Authorization': f'Bearer {{os.environ[\"BLOB_TOKEN\"]}}'}})
+                    with r.urlopen(req) as resp:
+                        data = json.loads(resp.read().decode())
+                        if data.get('blobs'):
+                            url = data['blobs'][0]['url']
+                            with r.urlopen(url) as f_resp:
+                                with open(name, 'wb') as f: f.write(f_resp.read())
+                        else:
+                            with open(name, 'w') as f: f.write(default)
+                except Exception as e:
+                    print(f'Download {{name}} failed: {{e}}')
                     with open(name, 'w') as f: f.write(default)
             dl('processed_videos.txt', '')
             dl('subscriptions.json', '{{}}')
