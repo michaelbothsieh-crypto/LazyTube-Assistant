@@ -54,25 +54,68 @@ class NotebookService:
 
         wait_flag = ["--wait"] if wait else []
 
-        print(f"🔗 正在新增來源: {url}...")
-        res_add = self.run_nlm("source", "add", nb_id, "--url", url, *wait_flag)
+        # 網域智能路由：已知的高防護網站直接跳過直連，交給強大代理
+        hard_domains = ["forum.gamer.com.tw", "ptt.cc", "bilibili.com", "x.com", "twitter.com"]
+        is_hard_domain = any(domain in url for domain in hard_domains)
 
-        if res_add.returncode != 0:
-            print("⚠️ 直接新增來源失敗，嘗試透過 Jina Reader 代理繞過...")
+        success = False
+
+        # 策略 1: 直接連線 (若非高防護網域)
+        if not is_hard_domain:
+            print(f"🔗 正在新增來源 (直連): {url}...")
+            res_add = self.run_nlm("source", "add", nb_id, "--url", url, *wait_flag)
+            if res_add.returncode == 0:
+                success = True
+            else:
+                print("⚠️ 直接新增來源失敗。")
+        else:
+            print(f"🛡️ 偵測到高防護網域，跳過直連，直接啟用代理策略...")
+
+        # 策略 2: Jina Reader 代理
+        if not success:
+            print("🔄 嘗試透過 Jina Reader 代理讀取...")
             proxy_url = f"https://r.jina.ai/{url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url, *wait_flag)
-
-            if res_add.returncode != 0:
-                print("⚠️ Jina 代理亦失敗，嘗試使用 Google Translate Proxy...")
-                gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={url}"
-                res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url, *wait_flag)
-
             if res_add.returncode == 0:
-                print("✅ 透過代理繞過成功")
-            else:
-                return nb_id, None
+                print("✅ 透過 Jina 代理讀取成功")
+                success = True
 
-        return nb_id, url
+        # 策略 3: 自建 Cloudflare 代理
+        if not success:
+            print("⚠️ Jina 代理失敗，嘗試透過自建 Cloudflare 代理提取文字...")
+            import requests
+            cf_worker_url = "https://lazypipe-worker.hsieh130.workers.dev/"
+            try:
+                cf_res = requests.get(f"{cf_worker_url}?url={url}", timeout=30)
+                cf_data = cf_res.json()
+                
+                if cf_data.get("success") and cf_data.get("content"):
+                    tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
+                    with open(tmp_txt, "w", encoding="utf-8") as f:
+                        f.write(f"標題: {cf_data.get('title', '未知')}\n\n")
+                        f.write(cf_data.get("content"))
+                    
+                    res_add = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
+                    if res_add.returncode == 0:
+                        print("✅ 透過 Cloudflare 代理成功提取純文字")
+                        success = True
+            except Exception as e:
+                print(f"⚠️ Cloudflare 代理提取失敗: {e}")
+
+        # 策略 4: Google Translate Proxy (最後手段)
+        if not success:
+            print("⚠️ Cloudflare 代理亦失敗，嘗試使用 Google Translate Proxy...")
+            gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={url}"
+            res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url, *wait_flag)
+            if res_add.returncode == 0:
+                print("✅ 透過 Google Translate 代理成功")
+                success = True
+
+        if success:
+            return nb_id, url
+        else:
+            print("❌ 所有代理嘗試均失敗。")
+            return nb_id, None
 
     def process_video(self, url, title, custom_prompt=None):
         """

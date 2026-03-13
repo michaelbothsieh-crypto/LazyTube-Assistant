@@ -126,7 +126,7 @@ class YouTubeService:
     @retry(max_attempts=3)
     def _fetch_video_details(self, video_ids: list) -> dict:
         if not video_ids: return {}
-        details = {"durations": {}, "categories": {}}
+        details = {"durations": {}, "categories": {}, "live_status": {}}
         for i in range(0, len(video_ids), 50):
             batch_ids = video_ids[i : i + 50]
             response = self.service.videos().list(
@@ -139,6 +139,7 @@ class YouTubeService:
                 duration_text = item.get("contentDetails", {}).get("duration", "")
                 details["durations"][vid] = self._parse_duration_seconds(duration_text)
                 details["categories"][vid] = item["snippet"].get("categoryId")
+                details["live_status"][vid] = item["snippet"].get("liveBroadcastContent")
         return details
 
     def _parse_duration_seconds(self, duration_text: str) -> int:
@@ -178,8 +179,14 @@ class YouTubeService:
             details = self._fetch_video_details(vids)
             for v in candidate_videos:
                 vid = v["video_id"]
-                if details["categories"].get(vid) == "20": # 遊戲
+                # 僅處理類別為遊戲且非直播/預定直播的影片
+                is_game = details["categories"].get(vid) == "20"
+                is_standard_video = details["live_status"].get(vid) == "none"
+                
+                if is_game and is_standard_video:
                     new_videos.append(v)
+                elif not is_standard_video:
+                    print(f"⏩ 略過直播/預約影片：{v['title']} (狀態: {details['live_status'].get(vid)})")
         except Exception as e:
             print(f"全域掃描異常: {e}")
         return sorted(new_videos, key=lambda x: x["time"])
