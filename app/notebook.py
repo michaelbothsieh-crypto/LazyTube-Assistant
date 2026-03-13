@@ -121,9 +121,15 @@ class NotebookService:
                 return "❌ 所有網址匯入均失敗。"
 
             print(f"📝 正在產出整合摘要 (成功數: {success_count})...")
-            # 強化 Prompt 指令，防止模型輸出思考過程 (Thinking)
-            base_prompt = "請根據以上所有來源，整理出一份完整的整合摘要與核心重點對比。"
-            final_prompt = f"{custom_prompt or base_prompt}\n\n[指令: 請嚴格以繁體中文回答。直接輸出回答內容，嚴禁包含任何思考過程、解釋、標題、'Selecting the Ideal Summary' 或任何 meta 評論。]"
+            # 使用「前置指令」策略，這在 LLM 中權重最高
+            system_rules = (
+                "【強制指令】\n"
+                "1. 必須完全以「繁體中文」回答。\n"
+                "2. 嚴禁輸出任何思考過程、步驟說明或 meta 評論 (如 **Thinking** 或 **Summarizing**)。\n"
+                "3. 嚴禁包含任何前言或結語。\n"
+                "4. 僅輸出最終的摘要內容，並嚴格遵守使用者的字數限制。\n\n"
+            )
+            final_prompt = f"{system_rules}使用者要求如下：\n{custom_prompt or '請整理以上來源的整合摘要。'}"
             
             res = self.run_nlm("query", "notebook", nb_id, final_prompt)
             
@@ -134,10 +140,14 @@ class NotebookService:
                     summary = data.get("value", {}).get("answer", res.stdout)
                 except: pass
             
-            # 後置處理：移除可能的 Thinking 區塊 (例如 **Selecting...** 這種標記)
-            if "**" in summary and ("Thinking" in summary or "Selecting" in summary):
-                summary = re.sub(r'\*\*.*?\*\*\n?', '', summary).strip()
+            # 強力過濾：移除所有被 ** 包裹的區塊 (通常是模型自帶的標題或思考過程)
+            # 範例: **Summarizing...** -> 移除
+            summary = re.sub(r'\*\*.*?\*\*', '', summary).strip()
             
+            # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
+            if len(summary) > 20 and not re.search(r'[\u4e00-\u9fa5]', summary) and ("I am" in summary or "distilling" in summary):
+                summary = "❌ AI 回傳了無效的思考過程而非內容。這通常發生在來源過於破碎時，請嘗試減少網址數量或更換 Prompt。"
+
             return summary
         finally:
             if nb_id:
