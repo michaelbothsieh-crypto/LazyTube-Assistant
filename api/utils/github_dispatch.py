@@ -87,7 +87,7 @@ jobs:
           if [ -n "$BLOB_TOKEN" ]; then
             TIMESTAMP=$(date +%s)
             curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/processed_videos.txt?t=$TIMESTAMP" -o processed_videos.txt || echo "" > processed_videos.txt
-            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/subscriptions.json?t=$TIMESTAMP" -o subscriptions.json || echo "{}" > subscriptions.json
+            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/subscriptions.json?t=$TIMESTAMP" -o subscriptions.json || echo "{{}}" > subscriptions.json
           fi
 
       - name: Run group task
