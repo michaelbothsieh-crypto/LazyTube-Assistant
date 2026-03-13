@@ -121,8 +121,11 @@ class NotebookService:
                 return "❌ 所有網址匯入均失敗。"
 
             print(f"📝 正在產出整合摘要 (成功數: {success_count})...")
-            prompt = custom_prompt or "請用繁體中文根據以上所有來源，整理出一份完整的整合摘要與核心重點對比。"
-            res = self.run_nlm("query", "notebook", nb_id, prompt)
+            # 強化 Prompt 指令，防止模型輸出思考過程 (Thinking)
+            base_prompt = "請根據以上所有來源，整理出一份完整的整合摘要與核心重點對比。"
+            final_prompt = f"{custom_prompt or base_prompt}\n\n[指令: 請嚴格以繁體中文回答。直接輸出回答內容，嚴禁包含任何思考過程、解釋、標題、'Selecting the Ideal Summary' 或任何 meta 評論。]"
+            
+            res = self.run_nlm("query", "notebook", nb_id, final_prompt)
             
             summary = res.stdout.strip()
             if res.returncode == 0:
@@ -130,6 +133,11 @@ class NotebookService:
                     data = json.loads(res.stdout)
                     summary = data.get("value", {}).get("answer", res.stdout)
                 except: pass
+            
+            # 後置處理：移除可能的 Thinking 區塊 (例如 **Selecting...** 這種標記)
+            if "**" in summary and ("Thinking" in summary or "Selecting" in summary):
+                summary = re.sub(r'\*\*.*?\*\*\n?', '', summary).strip()
+            
             return summary
         finally:
             if nb_id:

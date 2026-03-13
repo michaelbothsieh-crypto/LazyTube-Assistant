@@ -523,45 +523,51 @@ async def _handle_clear(chat_id: str):
 async def _handle_batch(chat_id: str, text: str):
     """
     解析 /batch 指令並觸發 GitHub Actions
-    格式: /batch <url1,url2,...> [自訂prompt]
+    格式: /batch <url1, url2, ...> [自訂prompt]
     """
     from api.utils.github_dispatch import dispatch_batch_workflow
-    
-    parts = text.split(maxsplit=2)  # ['/batch', 'urls', 'prompt?']
+    import re
 
+    # 1. 取得指令後的所有內容
+    parts = text.split(maxsplit=1)
     if len(parts) < 2:
         await send_telegram_message(
             chat_id,
-            "❌ <b>格式錯誤</b>\n使用方法：<code>/batch &lt;網址1,網址2,...&gt; [整合Prompt]</code>\n\n最多支援 20 個網址，請以逗號分隔。"
+            "❌ <b>格式錯誤</b>\n使用方法：<code>/batch &lt;網址1, 網址2,...&gt; [整合Prompt]</code>"
         )
         return
 
-    urls_raw = parts[1]
-    custom_prompt = parts[2] if len(parts) >= 3 else ""
-    
-    # 支援半形或全形逗號
-    url_list = [u.strip() for u in urls_raw.replace("，", ",").split(",") if u.strip()]
-    
-    if len(url_list) > 20:
-        await send_telegram_message(chat_id, "⚠️ <b>網址過多</b>\n單次批次處理上限為 20 個網址，已自動忽略後續內容。")
-        url_list = url_list[:20]
+    content = parts[1]
 
+    # 2. 使用正則表達式提取所有網址
+    url_list = re.findall(r'https?://[^\s,()（）]+', content)
+    
     if not url_list:
         await send_telegram_message(chat_id, "❌ <b>找不到有效網址</b>。")
         return
 
-    # 立即回應「處理中」
+    if len(url_list) > 20:
+        await send_telegram_message(chat_id, "⚠️ <b>網址過多</b>\n單次上限為 20 個，已截斷。")
+        url_list = url_list[:20]
+
+    # 3. 剩下的內容就是 Prompt
+    custom_prompt = content
+    for u in url_list:
+        custom_prompt = custom_prompt.replace(u, "")
+    
+    # 清理 Prompt 中殘留的逗號、括號與空格
+    custom_prompt = re.sub(r'^[ ,，()（）]+', '', custom_prompt).strip()
+
+    # 4. 立即回應「處理中」
     resp_data = await send_telegram_message(
         chat_id,
         f"⏳ <b>已收到批次任務 ({len(url_list)} 個來源)</b>\n\n"
-        f"正在啟動後端分析，這可能需要幾分鐘時間，完成後將回傳整合報告。"
+        f"正在啟動分析，完成後將回傳整合報告。"
     )
     
-    msg_id = ""
-    if resp_data and resp_data.get("ok"):
-        msg_id = str(resp_data.get("result", {}).get("message_id", ""))
+    msg_id = str(resp_data.get("result", {}).get("message_id", "")) if resp_data and resp_data.get("ok") else ""
 
-    # 觸發 GitHub Actions
+    # 5. 觸發 Workflow
     success = await dispatch_batch_workflow(
         urls=",".join(url_list),
         prompt=custom_prompt,
@@ -570,4 +576,4 @@ async def _handle_batch(chat_id: str, text: str):
     )
     
     if not success:
-        await send_telegram_message(chat_id, "❌ <b>觸發批次任務失敗</b>\n請檢查系統設定。")
+        await send_telegram_message(chat_id, "❌ <b>觸發批次任務失敗</b>。")
