@@ -79,6 +79,15 @@ async def handle_telegram_update(update: dict):
     elif text.startswith("/status"):
         await _handle_status(chat_id)
 
+    elif text.startswith("/sub"):
+        await _handle_sub(chat_id, text)
+
+    elif text.startswith("/unsub"):
+        await _handle_unsub(chat_id, text)
+
+    elif text.startswith("/list"):
+        await _handle_list(chat_id)
+
     elif text.startswith("/nlm"):
         await _handle_nlm(chat_id, text)
 
@@ -357,3 +366,75 @@ async def _handle_note(chat_id: str, text: str):
     if not success:
         debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
         await send_telegram_message(chat_id, f"❌ <b>觸發報告任務失敗</b>\n除錯資訊：<code>{debug_info}</code>")
+
+
+# --- 頻道訂閱指令處理 ---
+
+async def _handle_sub(chat_id: str, text: str):
+    """處理 /sub 指令"""
+    from app.subscription_vm import SubscriptionViewModel
+    from app.state_manager import StateManager
+    import re
+    
+    parts = text.split() # ['/sub', 'url', 'prompt...', 'time?']
+    if len(parts) < 2:
+        await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/sub &lt;頻道網址&gt; [客製化Prompt] [時間(HH:mm)?]</code>\n\n範例：\n<code>/sub https://youtube.com/@... 09:30</code>")
+        return
+
+    url = parts[1]
+    custom_prompt = ""
+    preferred_time = ""
+
+    # 解析最後一個參數是否為時間 (如 09:30)
+    if len(parts) >= 3:
+        last_part = parts[-1]
+        if re.match(r"^\d{1,2}:\d{2}$", last_part):
+            preferred_time = last_part
+            if len(preferred_time.split(":")[0]) == 1: # 補 0 (9:30 -> 09:30)
+                preferred_time = f"0{preferred_time}"
+            custom_prompt = " ".join(parts[2:-1])
+        else:
+            custom_prompt = " ".join(parts[2:])
+
+    # 先從 Blob 下載訂閱清單
+    await StateManager.sync_from_blob("subscriptions.json")
+    
+    vm = SubscriptionViewModel()
+    await send_telegram_message(chat_id, "⏳ 正在分析頻道資訊並建立 GitHub 獨立排程...")
+    res = await vm.subscribe(chat_id, url, custom_prompt, preferred_time)
+    
+    if res["success"]:
+        await StateManager.sync_to_blob("subscriptions.json")
+    
+    await send_telegram_message(chat_id, res["message"])
+
+
+async def _handle_unsub(chat_id: str, text: str):
+    """處理 /unsub 指令"""
+    from app.subscription_vm import SubscriptionViewModel
+    from app.state_manager import StateManager
+
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/unsub &lt;序號或頻道ID&gt;</code>\n可用 <code>/list</code> 查看序號。")
+        return
+
+    await StateManager.sync_from_blob("subscriptions.json")
+    vm = SubscriptionViewModel()
+    res = await vm.unsubscribe(chat_id, parts[1])
+    
+    if res["success"]:
+        await StateManager.sync_to_blob("subscriptions.json")
+    
+    await send_telegram_message(chat_id, res["message"])
+
+
+async def _handle_list(chat_id: str):
+    """處理 /list 指令"""
+    from app.subscription_vm import SubscriptionViewModel
+    from app.state_manager import StateManager
+
+    await StateManager.sync_from_blob("subscriptions.json")
+    vm = SubscriptionViewModel()
+    msg = vm.list_subscriptions(chat_id)
+    await send_telegram_message(chat_id, msg)

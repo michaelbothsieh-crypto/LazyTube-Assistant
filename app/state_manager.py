@@ -48,3 +48,42 @@ class StateManager:
         with open(Config.PROCESSED_VIDEOS_FILE, "w", encoding="utf-8") as f:
             for vid in trimmed:
                 f.write(f"{vid}\n")
+
+    @staticmethod
+    async def sync_from_blob(filename: str) -> bool:
+        """從 Vercel Blob 下載指定的狀態檔案"""
+        import os
+        import httpx
+        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if not token: return False
+        try:
+            url = f"https://blob.vercel-storage.com/state/{filename}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+                if resp.status_code == 200:
+                    with open(filename, "wb") as f:
+                        f.write(resp.content)
+                    return True
+        except Exception: pass
+        return False
+
+    @staticmethod
+    async def sync_to_blob(filename: str) -> bool:
+        """將本地檔案同步上傳至 Vercel Blob"""
+        import os
+        import httpx
+        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if not token or not os.path.exists(filename): return False
+        try:
+            url = f"https://blob.vercel-storage.com/state/{filename}"
+            with open(filename, "rb") as f:
+                data = f.read()
+            async with httpx.AsyncClient() as client:
+                resp = await client.put(url, content=data, headers={
+                    "Authorization": f"Bearer {token}",
+                    "x-add-random-suffix": "0",
+                    "content-type": "application/octet-stream"
+                })
+                return resp.status_code == 200
+        except Exception: pass
+        return False

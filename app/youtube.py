@@ -192,6 +192,34 @@ class YouTubeService:
         return sorted(new_videos, key=lambda x: x["time"])
 
     @retry(max_attempts=2)
+    def _get_playlist_items(self, playlist_id: str, limit: int = 5) -> list:
+        """獲取播放清單項目的最新影片。"""
+        try:
+            res = self.service.playlistItems().list(
+                part="snippet,contentDetails",
+                playlistId=playlist_id,
+                maxResults=limit
+            ).execute()
+            return res.get("items", [])
+        except Exception as e:
+            print(f"取得播放清單項目失敗: {e}")
+            return []
+
+    @retry(max_attempts=2)
+    def _get_playlist_items(self, playlist_id: str, limit: int = 5) -> list:
+        """獲取播放清單項目的最新影片。"""
+        try:
+            res = self.service.playlistItems().list(
+                part="snippet,contentDetails",
+                playlistId=playlist_id,
+                maxResults=limit
+            ).execute()
+            return res.get("items", [])
+        except Exception as e:
+            print(f"取得播放清單項目失敗: {e}")
+            return []
+
+    @retry(max_attempts=2)
     def _get_uploads_playlist_ids(self, channel_ids: list) -> dict:
         """獲取頻道的上傳播放清單 ID。"""
         mapping = {}

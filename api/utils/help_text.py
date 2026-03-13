@@ -11,10 +11,14 @@ def build_help_text(html: bool = False) -> str:
             "  → 生成詳細的 <b>Markdown</b> 總結報告檔案\n\n"
             "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt?&gt; &lt;語言?&gt; &lt;格式?&gt;</code> (5-10分)\n"
             "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報\n\n"
+            "📌 <b>群組頻道訂閱：</b> (定時自動發送新片摘要)\n"
+            "  → <code>/sub &lt;頻道網址&gt; [Prompt?] [HH:mm?]</code>\n"
+            "  → <code>/list</code>：查看目前追蹤清單\n"
+            "  → <code>/unsub &lt;序號&gt;</code>：取消訂閱並移除排程\n\n"
             "<b>範例：</b>\n"
-            "<code>/pic https://youtu.be/xxxxx</code>\n"
-            "<code>/note https://youtu.be/xxxxx</code>\n"
-            "<code>/slide https://youtu.be/xxxxx _ zh-TW/en pptx/pdf</code> (預設是 zh-TW/pdf)"
+            "<code>/sub https://youtube.com/@老高 09:30</code> (每天 09:30 檢查)\n"
+            "<code>/sub https://youtube.com/@泛科學 請列出重點 10:00</code>\n"
+            "<code>/nlm https://youtu.be/xxxxx</code>"
         )
 
     return (
@@ -28,8 +32,12 @@ def build_help_text(html: bool = False) -> str:
         "  → 生成詳細的 Markdown 總結報告檔案\n\n"
         "📌 /slide <url> <自訂Prompt?> <語言?> <格式?> (5-10分)\n"
         "  → 產生繁體中文 PDF (預設) 或 PPTX 簡報\n\n"
+        "📌 群組頻道訂閱： (定時自動發送新片摘要)\n"
+        "  → /sub <頻道網址> [Prompt?] [HH:mm?]\n"
+        "  → /list：查看目前追蹤清單\n"
+        "  → /unsub <序號>：取消訂閱並移除排程\n\n"
         "範例：\n"
-        "/pic https://youtu.be/xxxxx\n"
-        "/note https://youtu.be/xxxxx\n"
-        "/slide https://youtu.be/xxxxx _ zh-TW/en pptx/pdf (預設是 zh-TW/pdf)"
+        "/sub https://youtube.com/@老高 09:30\n"
+        "/sub https://youtube.com/@泛科學 請列出重點 10:00\n"
+        "/nlm https://youtu.be/xxxxx"
     )
