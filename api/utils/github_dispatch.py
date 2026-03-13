@@ -85,9 +85,20 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            TIMESTAMP=$(date +%s)
-            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/processed_videos.txt?t=$TIMESTAMP" -o processed_videos.txt || echo "" > processed_videos.txt
-            curl -s -H "Authorization: Bearer $BLOB_TOKEN" "https://blob.vercel-storage.com/state/subscriptions.json?t=$TIMESTAMP" -o subscriptions.json || echo "{{}}" > subscriptions.json
+            # 透過 Python 腳本來執行安全的下載，避免 curl 直接寫入錯誤訊息
+            python -c "
+            import os, httpx, json
+            def dl(name, default):
+                try:
+                    headers = {'Authorization': f'Bearer {os.environ[\"BLOB_TOKEN\"]}'}
+                    resp = httpx.get(f'https://blob.vercel-storage.com/v1?prefix=state/{name}', headers=headers)
+                    url = resp.json()['blobs'][0]['url']
+                    with open(name, 'wb') as f: f.write(httpx.get(url).content)
+                except:
+                    with open(name, 'w') as f: f.write(default)
+            dl('processed_videos.txt', '')
+            dl('subscriptions.json', '{}')
+            "
           fi
 
       - name: Run group task

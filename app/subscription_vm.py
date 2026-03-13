@@ -23,7 +23,11 @@ class SubscriptionViewModel:
             return {}
         try:
             with open(self.subs_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                # 安全性檢查：如果資料不是字典，或者是包含 API 報錯的內容
+                if not isinstance(data, dict) or "error" in data:
+                    return {}
+                return data
         except Exception:
             return {}
 
