@@ -384,11 +384,13 @@ async def _handle_sub(chat_id: str, text: str):
     custom_prompt = ""
     preferred_time = ""
 
-    # 解析最後一個參數是否為小時 (如 9, 09, 14)
+    # 解析最後一個參數是否為小時 (如 9, 09, 14, 14:00)
     if len(parts) >= 3:
         last_part = parts[-1]
-        if re.match(r"^\d{1,2}$", last_part):
-            hour = int(last_part)
+        # 支援純數字或 HH:00 的格式
+        match = re.match(r"^(\d{1,2})(?::00)?$", last_part)
+        if match:
+            hour = int(match.group(1))
             if 0 <= hour <= 23:
                 preferred_time = f"{hour:02d}:00"
                 custom_prompt = " ".join(parts[2:-1])
