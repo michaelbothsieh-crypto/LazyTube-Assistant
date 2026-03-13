@@ -406,17 +406,27 @@ async def _handle_sub(chat_id: str, text: str):
     resp = await send_telegram_message(chat_id, "⏳ 正在分析頻道資訊並建立 GitHub 獨立排程...")
     msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
     
-    res = await vm.subscribe(chat_id, url, custom_prompt, preferred_time)
-    
-    if res["success"]:
-        await StateManager.sync_to_blob("subscriptions.json")
-    
-    # 刪除「處理中」訊息
-    if msg_id:
-        from app.notifier import Notifier
-        Notifier.delete_pending_message(chat_id, msg_id)
+    try:
+        # 執行訂閱 (這包含 GitHub API 呼叫)
+        res = await vm.subscribe(chat_id, url, custom_prompt, preferred_time)
         
-    await send_telegram_message(chat_id, res["message"])
+        # 只要執行完畢，無論成功失敗，第一時間嘗試刪除「⏳」訊息
+        if msg_id:
+            from app.notifier import Notifier
+            Notifier.delete_pending_message(chat_id, msg_id)
+            msg_id = "" # 防止重複刪除
+
+        if res["success"]:
+            await StateManager.sync_to_blob("subscriptions.json")
+        
+        await send_telegram_message(chat_id, res["message"])
+
+    except Exception as e:
+        # 發生任何異常也要清理訊息
+        if msg_id:
+            from app.notifier import Notifier
+            Notifier.delete_pending_message(chat_id, msg_id)
+        await send_telegram_message(chat_id, f"❌ <b>設定失敗</b>\n發生非預期錯誤：<code>{str(e)[:100]}</code>")
 
 
 async def _handle_unsub(chat_id: str, text: str):
