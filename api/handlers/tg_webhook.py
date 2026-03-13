@@ -403,12 +403,19 @@ async def _handle_sub(chat_id: str, text: str):
     await StateManager.sync_from_blob("subscriptions.json")
     
     vm = SubscriptionViewModel()
-    await send_telegram_message(chat_id, "⏳ 正在分析頻道資訊並建立 GitHub 獨立排程...")
+    resp = await send_telegram_message(chat_id, "⏳ 正在分析頻道資訊並建立 GitHub 獨立排程...")
+    msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
+    
     res = await vm.subscribe(chat_id, url, custom_prompt, preferred_time)
     
     if res["success"]:
         await StateManager.sync_to_blob("subscriptions.json")
     
+    # 刪除「處理中」訊息
+    if msg_id:
+        from app.notifier import Notifier
+        Notifier.delete_pending_message(chat_id, msg_id)
+        
     await send_telegram_message(chat_id, res["message"])
 
 
@@ -447,15 +454,17 @@ async def _handle_clear(chat_id: str):
     """處理 /clear 指令，強制移除該群組的所有 GitHub 排程"""
     from api.utils.github_dispatch import delete_group_workflow
     from app.state_manager import StateManager
+    from app.notifier import Notifier
     import json
     import os
 
-    await send_telegram_message(chat_id, "🧹 正在強制清理 GitHub 排程檔案...")
+    resp = await send_telegram_message(chat_id, "🧹 正在強制清理 GitHub 排程檔案...")
+    msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
     
     # 1. 強制刪除 GitHub 檔案
     success = await delete_group_workflow(chat_id)
     
-    # 2. 清理本地與 Blob 的訂閱紀錄
+    # 2. 清理紀錄
     await StateManager.sync_from_blob("subscriptions.json")
     if os.path.exists("subscriptions.json"):
         try:
@@ -468,6 +477,10 @@ async def _handle_clear(chat_id: str):
                 await StateManager.sync_to_blob("subscriptions.json")
         except:
             pass
+
+    # 刪除「處理中」訊息
+    if msg_id:
+        Notifier.delete_pending_message(chat_id, msg_id)
 
     if success:
         await send_telegram_message(chat_id, "✅ 已成功移除該群組的所有 GitHub Actions 排程檔案與訂閱紀錄。")
