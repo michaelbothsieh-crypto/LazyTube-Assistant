@@ -84,7 +84,7 @@ class YouTubeService:
         channel_url = urllib.parse.unquote(channel_url)
         handle = None
         if "/@" in channel_url:
-            handle = channel_url.split("/@")[1].split("/")[0]
+            handle = "@" + channel_url.split("/@")[1].split("/")[0]
         elif "youtube.com/" in channel_url:
             parts = channel_url.split("youtube.com/")[1].split("/")
             if len(parts) > 0:
