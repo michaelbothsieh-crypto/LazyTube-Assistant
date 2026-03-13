@@ -88,6 +88,9 @@ async def handle_telegram_update(update: dict):
     elif text.startswith("/list"):
         await _handle_list(chat_id)
 
+    elif text.startswith("/clear"):
+        await _handle_clear(chat_id)
+
     elif text.startswith("/nlm"):
         await _handle_nlm(chat_id, text)
 
@@ -438,3 +441,35 @@ async def _handle_list(chat_id: str):
     vm = SubscriptionViewModel()
     msg = vm.list_subscriptions(chat_id)
     await send_telegram_message(chat_id, msg)
+
+
+async def _handle_clear(chat_id: str):
+    """處理 /clear 指令，強制移除該群組的所有 GitHub 排程"""
+    from api.utils.github_dispatch import delete_group_workflow
+    from app.state_manager import StateManager
+    import json
+    import os
+
+    await send_telegram_message(chat_id, "🧹 正在強制清理 GitHub 排程檔案...")
+    
+    # 1. 強制刪除 GitHub 檔案
+    success = await delete_group_workflow(chat_id)
+    
+    # 2. 清理本地與 Blob 的訂閱紀錄
+    await StateManager.sync_from_blob("subscriptions.json")
+    if os.path.exists("subscriptions.json"):
+        try:
+            with open("subscriptions.json", "r") as f:
+                subs = json.load(f)
+            if chat_id in subs:
+                del subs[chat_id]
+                with open("subscriptions.json", "w") as f:
+                    json.dump(subs, f)
+                await StateManager.sync_to_blob("subscriptions.json")
+        except:
+            pass
+
+    if success:
+        await send_telegram_message(chat_id, "✅ 已成功移除該群組的所有 GitHub Actions 排程檔案與訂閱紀錄。")
+    else:
+        await send_telegram_message(chat_id, "⚠️ 清理過程發生部分錯誤（可能檔案已被手動刪除），請檢查 GitHub Actions 分頁。")
