@@ -121,15 +121,16 @@ class NotebookService:
                 return "❌ 所有網址匯入均失敗。"
 
             print(f"📝 正在產出整合摘要 (成功數: {success_count})...")
-            # 使用「前置指令」策略，這在 LLM 中權重最高
-            system_rules = (
-                "【強制指令】\n"
-                "1. 必須完全以「繁體中文」回答。\n"
-                "2. 嚴禁輸出任何思考過程、步驟說明或 meta 評論 (如 **Thinking** 或 **Summarizing**)。\n"
-                "3. 嚴禁包含任何前言或結語。\n"
-                "4. 僅輸出最終的摘要內容，並嚴格遵守使用者的字數限制。\n\n"
+            
+            # 使用與 /nlm 相同的預設 Prompt
+            default_prompt = "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
+            user_intent = custom_prompt or default_prompt
+            
+            # 格式強制指令僅作為輔助後綴，不覆蓋使用者意圖
+            format_rules = (
+                "\n\n【回答規範：請完全以「繁體中文」回答。直接輸出回答內容，嚴禁包含任何思考過程、步驟說明或 meta 評論 (如 **Thinking** 或 **Summarizing**)。嚴禁包含任何前言或結語。】"
             )
-            final_prompt = f"{system_rules}使用者要求如下：\n{custom_prompt or '請整理以上來源的整合摘要。'}"
+            final_prompt = f"{user_intent}{format_rules}"
             
             res = self.run_nlm("query", "notebook", nb_id, final_prompt)
             
