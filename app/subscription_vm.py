@@ -73,10 +73,12 @@ class SubscriptionViewModel:
         # 2. 儲存至檔案
         self._save_subs(subs)
         
-        # 3. 自動觸發第一次執行 (稍等幾秒讓 GitHub 索引新檔案)
-        # 這裡不 await，直接在背景嘗試觸發
+        # 3. 自動觸發第一次執行
+        # 注意：剛建立的檔案 GitHub 需要幾秒鐘索引，這裡稍作等待後觸發
+        from api.utils.github_dispatch import dispatch_group_workflow
         import asyncio
-        asyncio.create_task(dispatch_group_workflow(chat_id))
+        await asyncio.sleep(3) # 等待 3 秒確保 GitHub 索引完成
+        await dispatch_group_workflow(chat_id)
 
         time_msg = f"\n定時檢查：<code>{preferred_time}</code>" if preferred_time else "\n定時檢查：<code>預設 (每 12 小時)</code>"
         return {
