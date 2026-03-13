@@ -106,6 +106,12 @@ def main():
             
             sub_vm.update_last_check(real_chat_id, channel_id, datetime.now(timezone.utc))
             
+            # 清理訂閱成功訊息 (保持群組乾淨)
+            signup_msg_id = sub.get("signup_msg_id")
+            if signup_msg_id:
+                print(f"🧹 正在清理訂閱通知訊息：{signup_msg_id}")
+                Notifier.delete_pending_message(real_chat_id, signup_msg_id)
+            
         except Exception as e:
             print(f"❌ 處理頻道 {channel_title} 時發生錯誤: {e}")
 

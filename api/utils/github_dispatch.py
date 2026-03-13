@@ -36,14 +36,21 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     path = f".github/workflows/{file_name}"
     
     crons = set()
+    times_list = []
     for sub in group_subs:
         pref_time = sub.get("preferred_time")
-        if pref_time: crons.add(tw_time_to_utc_cron(pref_time))
-    if not crons: crons.add("0 0,12 * * *")
+        if pref_time:
+            crons.add(tw_time_to_utc_cron(pref_time))
+            times_list.append(pref_time)
+    
+    if not crons:
+        crons.add("0 0,12 * * *")
+        times_list.append("12h-Interval")
+    
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
+    display_times = ",".join(sorted(times_list))
 
-    # 建立極度簡化的 YAML 內容
-    yaml_content = f"""name: Task - {hashed_id}
+    yaml_content = f"""name: Task - {hashed_id} ({display_times})
 
 on:
   schedule:

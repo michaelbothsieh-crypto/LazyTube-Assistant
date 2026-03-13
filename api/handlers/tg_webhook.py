@@ -422,12 +422,16 @@ async def _handle_sub(chat_id: str, text: str):
                 Notifier.delete_pending_message(chat_id, msg_id)
                 msg_id = ""
 
-            await send_telegram_message(chat_id, res["message"])
+            # 發送成功訊息並取得其 ID
+            resp_success = await send_telegram_message(chat_id, res["message"])
+            success_msg_id = str(resp_success.get("result", {}).get("message_id", "")) if resp_success.get("ok") else ""
             
-            # 延長等待至 10 秒：確保 Vercel Blob 索引已更新
+            if success_msg_id and res.get("channel_id"):
+                vm.update_signup_msg_id(chat_id, res["channel_id"], success_msg_id)
+                await StateManager.sync_to_blob("subscriptions.json")
+            
+            # 啟動 Action
             from api.utils.github_dispatch import dispatch_group_workflow
-            import asyncio
-            await asyncio.sleep(10)
             await dispatch_group_workflow(chat_id)
         else:
             if msg_id:

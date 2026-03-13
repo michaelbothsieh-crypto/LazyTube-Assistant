@@ -80,11 +80,22 @@ class SubscriptionViewModel:
         time_msg = f"\n定時檢查：<code>{preferred_time}</code>" if preferred_time else "\n定時檢查：<code>預設 (每 12 小時)</code>"
         return {
             "success": True, 
+            "channel_id": channel_info["id"], # 回傳 ID 以便後續更新訊息 ID
             "message": f"✅ 已成功訂閱「{channel_info['title']}」！\n"
                        f"客製化 Prompt：{custom_prompt if custom_prompt else '（使用預設）'}"
                        f"{time_msg}\n\n"
                        f"🚀 <b>正在同步排程...</b> 稍後將自動啟動第一次掃描。"
         }
+
+    def update_signup_msg_id(self, chat_id: str, channel_id: str, msg_id: str) -> None:
+        """紀錄訂閱成功訊息的 ID，以便 Action 執行後清理"""
+        subs = self._load_subs()
+        if chat_id in subs:
+            for s in subs[chat_id]:
+                if s["channel_id"] == channel_id:
+                    s["signup_msg_id"] = msg_id
+                    break
+            self._save_subs(subs)
 
     async def unsubscribe(self, chat_id: str, channel_id_or_index: str) -> Dict[str, Any]:
         """
