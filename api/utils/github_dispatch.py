@@ -37,7 +37,7 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     if not crons: crons.add("0 0,12 * * *")
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
 
-    # 注意：在 YAML 多行區塊 (|) 中，不要使用反斜線轉義雙引號
+    # 使用 EOF 方式嵌入 Python 腳本，徹底解決縮進與轉義問題
     yaml_content = f"""name: Sub Group - {chat_id}
 
 on:
@@ -70,34 +70,37 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            python -c "
-            import os, json, time, urllib.request as r
-            def dl(name, default, retry=3):
-                headers = {{'Authorization': f'Bearer {{os.environ[\"BLOB_TOKEN\"]}}'}}
-                for i in range(retry):
-                    try:
-                        list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}'
-                        req = r.Request(list_url, headers=headers)
-                        with r.urlopen(req) as resp:
-                            data = json.loads(resp.read().decode())
-                            if data.get('blobs'):
-                                url = data['blobs'][0]['url']
-                                content = r.urlopen(url).read()
-                                if name == 'subscriptions.json':
-                                    s = json.loads(content.decode())
-                                    if '{chat_id}' not in s:
-                                        print(f'Sync delay for {chat_id}, retrying {{i+1}}...'); time.sleep(5); continue
-                                with open(name, 'wb') as f: f.write(content)
-                                print(f'Successfully downloaded {{name}}'); return
-                            else:
-                                print(f'No blobs found for {{name}}, retry {{i+1}}...')
-                    except Exception as e: print(f'Retry {{i+1}} failed: {{e}}')
-                    time.sleep(5)
-                print(f'Fallback to default for {{name}}'); 
-                with open(name, 'w') as f: f.write(default)
-            dl('processed_videos.txt', '')
-            dl('subscriptions.json', '{{}}')
-            "
+            python << 'EOF'
+import os, json, time, urllib.request as r
+def dl(name, default, retry=3):
+    headers = {{'Authorization': f'Bearer {{os.environ["BLOB_TOKEN"]}}'}}
+    for i in range(retry):
+        try:
+            list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}'
+            req = r.Request(list_url, headers=headers)
+            with r.urlopen(req) as resp:
+                data = json.loads(resp.read().decode())
+                if data.get('blobs'):
+                    url = data['blobs'][0]['url']
+                    content = r.urlopen(url).read()
+                    if name == 'subscriptions.json':
+                        s = json.loads(content.decode())
+                        if '{chat_id}' not in s:
+                            print(f'ID {chat_id} not in JSON, retry {{i+1}}...')
+                            time.sleep(5); continue
+                    with open(name, 'wb') as f: f.write(content)
+                    print(f'Successfully downloaded {{name}}')
+                    return
+                else:
+                    print(f'No blobs found for {{name}}, retry {{i+1}}...')
+        except Exception as e: print(f'Retry {{i+1}} failed: {{e}}')
+        time.sleep(5)
+    print(f'Fallback to default for {{name}}')
+    with open(name, 'w') as f: f.write(default)
+
+dl('processed_videos.txt', '')
+dl('subscriptions.json', '{{}}')
+EOF
           fi
 
       - name: Run group task
@@ -117,10 +120,9 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            # 修正：直接在 YAML 裡使用引號，不要加反斜線轉義
-            [ -f processed_videos.txt ] && curl -s -X PUT -H 'Authorization: Bearer '$BLOB_TOKEN -H 'x-api-version: 1' -H 'x-add-random-suffix: 0' --data-binary @processed_videos.txt 'https://blob.vercel-storage.com/v1/upload/state/processed_videos.txt' > /dev/null
-            [ -f subscriptions.json ] && curl -s -X PUT -H 'Authorization: Bearer '$BLOB_TOKEN -H 'x-api-version: 1' -H 'x-add-random-suffix: 0' --data-binary @subscriptions.json 'https://blob.vercel-storage.com/v1/upload/state/subscriptions.json' > /dev/null
-            echo '✅ State persistence completed.'
+            [ -f processed_videos.txt ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-api-version: 1" -H "x-add-random-suffix: 0" --data-binary @processed_videos.txt "https://blob.vercel-storage.com/v1/upload/state/processed_videos.txt" > /dev/null
+            [ -f subscriptions.json ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-api-version: 1" -H "x-add-random-suffix: 0" --data-binary @subscriptions.json "https://blob.vercel-storage.com/v1/upload/state/subscriptions.json" > /dev/null
+            echo "✅ State persistence completed."
           fi
 """
     
