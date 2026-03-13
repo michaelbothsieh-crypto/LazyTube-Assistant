@@ -59,8 +59,8 @@ class StateManager:
 
         try:
             headers = {"Authorization": f"Bearer {token}"}
-            # 透過 List API 尋找檔案
-            list_url = f"https://blob.vercel-storage.com/v1?prefix=state/{filename}"
+            # 修正：移除 /v1，正確端點為根目錄
+            list_url = f"https://blob.vercel-storage.com?prefix=state/{filename}"
             async with httpx.AsyncClient() as client:
                 resp = await client.get(list_url, headers=headers, timeout=10.0)
                 if resp.status_code != 200: return False
@@ -90,8 +90,6 @@ class StateManager:
         try:
             with open(local_path, "rb") as f:
                 data = f.read()
-            
-            # 防止空檔案導致 400 Bad Request
             if len(data) == 0: data = b"\n"
 
             # 統一路徑格式

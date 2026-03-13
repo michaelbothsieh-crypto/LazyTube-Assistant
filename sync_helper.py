@@ -18,16 +18,16 @@ def dl(name, default):
     token = os.environ.get("BLOB_READ_WRITE_TOKEN")
     if not token: return False
     
-    headers = {'Authorization': f'Bearer {token}', 'x-api-version': '1'}
+    headers = {'Authorization': f'Bearer {token}'}
     try:
-        # 使用 prefix=state/ 進行精確搜尋
-        list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{name}'
+        # 修正：Vercel Blob 列表 API 正確端點為根目錄，不要加 /v1
+        list_url = f'https://blob.vercel-storage.com?prefix=state/{name}'
         req = r.Request(list_url, headers=headers)
         with r.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
             blobs = data.get('blobs', [])
             if blobs:
-                # 下載內容
+                # 找到最匹配的檔案
                 with r.urlopen(blobs[0]['url']) as f_resp:
                     with open(name, 'wb') as f:
                         f.write(f_resp.read())
@@ -35,7 +35,6 @@ def dl(name, default):
     except Exception as e:
         print(f"⚠️ Download {name} failed: {e}")
     
-    # 失敗時建立預設檔案
     with open(name, 'w') as f:
         f.write(default)
     return False
@@ -48,18 +47,20 @@ def main():
         target_hash = sys.argv[2] if len(sys.argv) > 2 else ""
         dl('processed_videos.txt', '')
         
-        for i in range(4): # 增加到 4 次重試 (共 30 秒)
+        print(f"🔍 Searching for subscriptions for {target_hash}...")
+        for i in range(5): # 增加重試次數與時間
             success = dl('subscriptions.json', '{}')
             if success and target_hash:
-                with open('subscriptions.json', 'r') as f:
-                    try:
+                try:
+                    with open('subscriptions.json', 'r') as f:
                         s = json.load(f)
                         if any(get_h(k) == target_hash for k in s.keys()):
-                            print(f"✅ Sync successful for {target_hash}")
+                            print(f"✅ Sync successful! Found {target_hash} in cloud data.")
                             return
-                    except: pass
-            print(f"⏳ Sync delay for {target_hash}, retrying {i+1}...")
+                except: pass
+            print(f"⏳ Cloud data not updated yet, retrying {i+1}/5...")
             time.sleep(10)
+        print("⚠️ Failed to find matching group data after retries.")
 
     elif action == "persist":
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
@@ -70,8 +71,6 @@ def main():
             try:
                 with open(name, 'rb') as f:
                     data = f.read()
-                
-                # 防止空檔案導致 400
                 if len(data) == 0: data = b"\n"
                 
                 url = f"https://blob.vercel-storage.com/state/{name}"
@@ -82,7 +81,7 @@ def main():
                     'content-type': 'application/octet-stream'
                 })
                 r.urlopen(req)
-                print(f"✅ Persisted {name}")
+                print(f"✅ Persisted {name} to cloud.")
             except Exception as e:
                 print(f"❌ Persist {name} failed: {e}")
 
