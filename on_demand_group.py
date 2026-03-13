@@ -31,13 +31,13 @@ def main():
     # 3. 獲取該群組的所有訂閱
     all_subs = sub_vm.get_all_active_subscriptions()
     
-    # 除錯資訊
-    print(f"📊 載入訂閱資料成功，包含群組：{list(all_subs.keys())}")
-    group_subs = all_subs.get(chat_id, [])
+    # 除錯資訊：印出所有存在的群組 ID 與其類型
+    print(f"📊 載入訂閱資料成功")
+    print(f"   目標 Chat ID: {chat_id} (type: {type(chat_id)})")
+    print(f"   資料庫中群組: {[{'id': k, 'type': str(type(k))} for k in all_subs.keys()]}")
     
-    if not group_subs:
-        # 再嘗試一次：萬一 chat_id 類型不匹配
-        group_subs = all_subs.get(str(chat_id), []) or all_subs.get(int(chat_id) if str(chat_id).isdigit() else None, [])
+    # 強制轉型匹配
+    group_subs = all_subs.get(str(chat_id)) or all_subs.get(int(chat_id) if str(chat_id).lstrip('-').isdigit() else None)
     
     if not group_subs:
         print(f"📭 群組 {chat_id} 目前沒有訂閱。")

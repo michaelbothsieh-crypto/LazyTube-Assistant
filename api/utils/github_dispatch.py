@@ -17,7 +17,6 @@ def tw_time_to_utc_cron(tw_time: str) -> str:
     """將台灣時間 HH:mm 轉換為 UTC 格式的 cron (mm HH * * *)"""
     try:
         h, m = map(int, tw_time.split(":"))
-        # 這裡不處理日期，只處理時分偏移
         utc_h = (h - 8) % 24
         return f"{m} {utc_h} * * *"
     except Exception:
@@ -26,7 +25,6 @@ def tw_time_to_utc_cron(tw_time: str) -> str:
 async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) -> bool:
     """
     /// 為特定的 chat_id 建立或更新獨立的 Group Workflow 檔案
-    /// 檔案名稱: sub-group-[chat_id].yml
     """
     if not all([GH_PAT, GH_OWNER, GH_REPO]):
         logger.error("缺少 GitHub 環境變數，無法建立 Workflow")
@@ -39,20 +37,14 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     file_name = f"sub-group-{safe_chat_id}.yml"
     path = f".github/workflows/{file_name}"
     
-    # 彙整所有時間點
     crons = set()
     for sub in group_subs:
         pref_time = sub.get("preferred_time")
-        if pref_time:
-            crons.add(tw_time_to_utc_cron(pref_time))
+        if pref_time: crons.add(tw_time_to_utc_cron(pref_time))
     
-    # 若完全沒時間點，預設每 12 小時 (UTC 0, 12)
-    if not crons:
-        crons.add("0 0,12 * * *")
-
+    if not crons: crons.add("0 0,12 * * *")
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
 
-    # 建立 YAML 內容 (群組任務模式)
     yaml_content = f"""name: Sub Group - {chat_id}
 
 on:
@@ -85,22 +77,29 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
+            # 使用增強型 Python 下載腳本，具備重試機制解決秒級延遲
             python -c "
-            import os, json, urllib.request as r
-            def dl(name, default):
-                try:
-                    req = r.Request(f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}', headers={{'Authorization': f'Bearer {{os.environ[\"BLOB_TOKEN\"]}}'}})
-                    with r.urlopen(req) as resp:
-                        data = json.loads(resp.read().decode())
-                        if data.get('blobs'):
-                            url = data['blobs'][0]['url']
-                            with r.urlopen(url) as f_resp:
-                                with open(name, 'wb') as f: f.write(f_resp.read())
-                        else:
-                            with open(name, 'w') as f: f.write(default)
-                except Exception as e:
-                    print(f'Download {{name}} failed: {{e}}')
-                    with open(name, 'w') as f: f.write(default)
+            import os, json, time, urllib.request as r
+            def dl(name, default, retry=3):
+                headers = {{'Authorization': f'Bearer {{os.environ[\"BLOB_TOKEN\"]}}'}}
+                for i in range(retry):
+                    try:
+                        req = r.Request(f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}', headers=headers)
+                        with r.urlopen(req) as resp:
+                            data = json.loads(resp.read().decode())
+                            if data.get('blobs'):
+                                f_resp = r.urlopen(data['blobs'][0]['url'])
+                                content = f_resp.read()
+                                if name == 'subscriptions.json':
+                                    s = json.loads(content.decode())
+                                    if not s or '{chat_id}' not in s: 
+                                        if i < retry - 1:
+                                            print(f'Sync delay, retrying {{i+1}}...'); time.sleep(5); continue
+                                with open(name, 'wb') as f: f.write(content)
+                                return
+                    except: pass
+                    if i < retry - 1: time.sleep(5)
+                with open(name, 'w') as f: f.write(default)
             dl('processed_videos.txt', '')
             dl('subscriptions.json', '{{}}')
             "
@@ -123,12 +122,12 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            [ -f processed_videos.txt ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-add-random-suffix: 0" --data-binary @processed_videos.txt "https://blob.vercel-storage.com/state/processed_videos.txt"
-            [ -f subscriptions.json ] && curl -s -X PUT -H "Authorization: Bearer $BLOB_TOKEN" -H "x-add-random-suffix: 0" --data-binary @subscriptions.json "https://blob.vercel-storage.com/state/subscriptions.json"
+            # 修正上傳 URL 路徑並加入版本號
+            [ -f processed_videos.txt ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @processed_videos.txt \"https://blob.vercel-storage.com/v1/upload/state/processed_videos.txt\"
+            [ -f subscriptions.json ] && curl -s -X PUT -H \"Authorization: Bearer $BLOB_TOKEN\" -H \"x-api-version: 1\" -H \"x-add-random-suffix: 0\" --data-binary @subscriptions.json \"https://blob.vercel-storage.com/v1/upload/state/subscriptions.json\"
           fi
 """
     
-    # 準備 GitHub API 請求
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/contents/{path}"
     headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json"}
 
@@ -136,8 +135,7 @@ jobs:
         async with httpx.AsyncClient(timeout=20.0) as client:
             sha = None
             resp_get = await client.get(api_url, headers=headers)
-            if resp_get.status_code == 200:
-                sha = resp_get.json().get("sha")
+            if resp_get.status_code == 200: sha = resp_get.json().get("sha")
 
             payload = {
                 "message": f"chore: update subscription workflow for group {chat_id}",
@@ -145,15 +143,12 @@ jobs:
                 "branch": GH_BRANCH
             }
             if sha: payload["sha"] = sha
-
             resp_put = await client.put(api_url, json=payload, headers=headers)
             return resp_put.status_code in [200, 201]
-    except Exception as e:
-        logger.error(f"GitHub API 異常: {e}")
-        return False
+    except Exception: return False
 
 async def dispatch_group_workflow(chat_id: str) -> bool:
-    """主動觸發特定群組的 Workflow Action (原生模式)"""
+    """主動觸發特定群組的 Workflow Action"""
     if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
     safe_chat_id = str(chat_id).replace("-", "n")
     workflow_file = f"sub-group-{safe_chat_id}.yml"
