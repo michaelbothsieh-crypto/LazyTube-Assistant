@@ -2,6 +2,7 @@ import os
 import httpx
 import logging
 import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
@@ -13,6 +14,10 @@ GH_OWNER = os.environ.get("GH_REPO_OWNER")
 GH_REPO = os.environ.get("GH_REPO_NAME")
 GH_BRANCH = os.environ.get("GH_REPO_BRANCH", "main")
 
+def get_hashed_id(chat_id: str) -> str:
+    """將 chat_id 轉換為不具識別性的雜湊 ID (隱私保護)"""
+    return hashlib.sha256(str(chat_id).encode()).hexdigest()[:12]
+
 def tw_time_to_utc_cron(tw_time: str) -> str:
     """將台灣時間 HH:mm 轉換為 UTC 格式的 cron"""
     try:
@@ -22,12 +27,12 @@ def tw_time_to_utc_cron(tw_time: str) -> str:
     except Exception: return "0 0 * * *"
 
 async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) -> bool:
-    """為特定的 chat_id 建立或更新獨立的 Group Workflow 檔案"""
+    """為特定的 chat_id 建立或更新獨立的 Group Workflow 檔案 (使用雜湊 ID 保護隱私)"""
     if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
     if not group_subs: return await delete_group_workflow(chat_id)
 
-    safe_chat_id = str(chat_id).replace("-", "n")
-    file_name = f"sub-group-{safe_chat_id}.yml"
+    hashed_id = get_hashed_id(chat_id)
+    file_name = f"sub-group-{hashed_id}.yml"
     path = f".github/workflows/{file_name}"
     
     crons = set()
@@ -37,8 +42,8 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     if not crons: crons.add("0 0,12 * * *")
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
 
-    # 建立 YAML 內容，改用更簡單的 cat 寫入檔案方式
-    yaml_content = f"""name: Sub Group - {chat_id}
+    # 注意：在 YAML 與腳本參數中均使用 hashed_id 以保護隱私
+    yaml_content = f"""name: Task - {hashed_id}
 
 on:
   schedule:
@@ -71,7 +76,8 @@ jobs:
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
             cat << 'INNER_EOF' > sync_state.py
-import os, json, time, urllib.request as r
+import os, json, time, urllib.request as r, hashlib
+def get_h(cid): return hashlib.sha256(str(cid).encode()).hexdigest()[:12]
 def dl(name, default, retry=3):
     headers = {{'Authorization': f'Bearer {{os.environ.get("BLOB_TOKEN")}}', 'x-api-version': '1'}}
     for i in range(retry):
@@ -85,8 +91,9 @@ def dl(name, default, retry=3):
                     content = r.urlopen(url).read()
                     if name == 'subscriptions.json':
                         s = json.loads(content.decode())
-                        if '{chat_id}' not in s:
-                            print(f'Sync delay, retrying {{i+1}}...'); time.sleep(5); continue
+                        # 檢查 JSON 中是否有任何群組 ID 雜湊後與當前 hashed_id 匹配
+                        if not any(get_h(k) == '{hashed_id}' for k in s.keys()):
+                            print(f'Sync delay for {hashed_id}, retrying {{i+1}}...'); time.sleep(5); continue
                     with open(name, 'wb') as f: f.write(content)
                     print(f'Successfully downloaded {{name}}'); return
         except Exception as e: print(f'Retry failed: {{e}}')
@@ -107,7 +114,8 @@ INNER_EOF
           TELEGRAM_BOT_TOKEN: ${{{{ secrets.TELEGRAM_BOT_TOKEN }}}}
           NLM_COOKIE_BASE64: ${{{{ secrets.NLM_COOKIE_BASE64 }}}}
         run: |
-          python on_demand_group.py "{chat_id}"
+          # 傳入雜湊後的 ID
+          python on_demand_group.py "{hashed_id}"
 
       - name: Persist state to Vercel Blob
         if: always()
@@ -130,7 +138,7 @@ INNER_EOF
             resp_get = await client.get(api_url, headers=headers)
             if resp_get.status_code == 200: sha = resp_get.json().get("sha")
             payload = {
-                "message": f"chore: update subscription workflow for group {chat_id}",
+                "message": f"chore: update subscription workflow for task {hashed_id}",
                 "content": base64.b64encode(yaml_content.encode("utf-8")).decode("utf-8"),
                 "branch": GH_BRANCH
             }
@@ -140,10 +148,10 @@ INNER_EOF
     except Exception: return False
 
 async def dispatch_group_workflow(chat_id: str) -> bool:
-    """主動觸發特定群組的 Workflow Action"""
+    """主動觸發特定群組的 Workflow Action (使用雜湊 ID)"""
     if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
-    safe_chat_id = str(chat_id).replace("-", "n")
-    workflow_file = f"sub-group-{safe_chat_id}.yml"
+    hashed_id = get_hashed_id(chat_id)
+    workflow_file = f"sub-group-{hashed_id}.yml"
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/{workflow_file}/dispatches"
     payload = {"ref": GH_BRANCH, "inputs": {}}
     headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json"}
@@ -154,9 +162,9 @@ async def dispatch_group_workflow(chat_id: str) -> bool:
     except Exception: return False
 
 async def delete_group_workflow(chat_id: str) -> bool:
-    """刪除整個群組的 Workflow 檔案"""
-    safe_chat_id = str(chat_id).replace("-", "n")
-    path = f".github/workflows/sub-group-{safe_chat_id}.yml"
+    """刪除整個群組的 Workflow 檔案 (使用雜湊 ID)"""
+    hashed_id = get_hashed_id(chat_id)
+    path = f".github/workflows/sub-group-{hashed_id}.yml"
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/contents/{path}"
     headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json"}
     try:
@@ -164,13 +172,12 @@ async def delete_group_workflow(chat_id: str) -> bool:
             resp_get = await client.get(api_url, headers=headers)
             if resp_get.status_code != 200: return True
             sha = resp_get.json().get("sha")
-            payload = {"message": f"chore: delete group workflow {chat_id}", "sha": sha, "branch": GH_BRANCH}
+            payload = {"message": f"chore: delete task workflow {hashed_id}", "sha": sha, "branch": GH_BRANCH}
             resp_del = await client.request("DELETE", api_url, json=payload, headers=headers)
             return resp_del.status_code == 200
     except Exception: return False
 
 async def dispatch_nlm_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = ""):
-    """觸發隨選 NLM 查詢工作流"""
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/nlm-on-demand.yml/dispatches"
     payload = {"ref": GH_BRANCH, "inputs": {"url": url, "prompt": prompt, "chat_id": str(chat_id), "message_id": str(message_id)}}
     headers = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json"}
@@ -181,7 +188,6 @@ async def dispatch_nlm_workflow(url: str, prompt: str = "", chat_id: str = "", m
     except Exception: return False
 
 async def dispatch_artifact_workflow(url: str, prompt: str = "", chat_id: str = "", message_id: str = "", slide_format: str = "pdf", slide_lang: str = "zh-TW", artifact_type: str = "slide_deck"):
-    """觸發簡報/圖片/報告工作流"""
     meta_prefix = f"__META:{slide_lang},{slide_format},{artifact_type}__"
     effective_prompt = f"{meta_prefix}{prompt}"
     api_url = f"https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/actions/workflows/slide-on-demand.yml/dispatches"
