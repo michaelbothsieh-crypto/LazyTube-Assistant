@@ -25,7 +25,7 @@ class Config:
     LAST_CHECK_FILE = os.path.join(_STATE_DIR, "last_check.txt")
     PROCESSED_VIDEOS_FILE = os.path.join(_STATE_DIR, "processed_videos.txt")
     SUBSCRIPTIONS_FILE = os.path.join(_STATE_DIR, "subscriptions.json")
-    MAX_VIDEOS = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
+    MAX_VIDEOS = int(os.environ.get("MAX_VIDEOS_PER_RUN", 10))
 
     # 超過這個秒數才視為長影片，60 秒以下視為 Shorts/短片
     SHORTS_MAX_SECONDS = int(os.environ.get("SHORTS_MAX_SECONDS", 60))
