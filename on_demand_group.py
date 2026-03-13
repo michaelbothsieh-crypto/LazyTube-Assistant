@@ -50,6 +50,7 @@ def main():
         channel_title = sub["channel_title"]
         pref_time = sub.get("preferred_time")
         last_check_str = sub.get("last_check")
+        is_first_run = sub.get("is_first_run", False)
         
         last_check_day = ""
         if last_check_str:
@@ -70,6 +71,10 @@ def main():
                 should_run = True
                 print(f"⏲️ [保底點] {channel_title} 已超過 12 小時未檢查")
 
+        # 特殊情況：如果是主動觸發的第一次執行，我們也應該讓它跑
+        if is_first_run:
+            should_run = True
+
         if not should_run:
             print(f"⏭️ 跳過 {channel_title} (未到執行時間或今日已處理)")
             continue
@@ -80,12 +85,14 @@ def main():
             pid = pid_map.get(channel_id)
             if not pid: continue
 
-            items = yt._get_playlist_items(pid, limit=10)
+            # 第一次執行時只需抓 1 支，後續抓 10 支
+            items = yt._get_playlist_items(pid, limit=1 if is_first_run else 10)
             
             for item in items:
                 pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                # 這裡的 last_check 是該頻道的上次成功掃描時間
-                if last_check_str and pub_time <= datetime.fromisoformat(last_check_str):
+                
+                # 如果不是第一次執行，才需要檢查時間是否比上次新
+                if not is_first_run and last_check_str and pub_time <= datetime.fromisoformat(last_check_str):
                     continue
                 
                 vid_id = item["contentDetails"]["videoId"]
@@ -96,6 +103,10 @@ def main():
                 if summary:
                     Notifier.send_summary(item['snippet']['title'], f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=chat_id)
                     StateManager.add_processed_id(vid_id)
+                
+                # 第一次執行只需處理一部
+                if is_first_run:
+                    break
             
             # 更新該訂閱項目的 last_check
             sub_vm.update_last_check(chat_id, channel_id, datetime.now(timezone.utc))

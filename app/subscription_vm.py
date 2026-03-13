@@ -56,6 +56,7 @@ class SubscriptionViewModel:
             "custom_prompt": custom_prompt,
             "preferred_time": preferred_time,
             "last_check": last_check_time.isoformat(),
+            "is_first_run": True, # 標記為第一次執行
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -147,5 +148,6 @@ class SubscriptionViewModel:
             for s in subs[chat_id]:
                 if s["channel_id"] == channel_id:
                     s["last_check"] = check_time.isoformat()
+                    s["is_first_run"] = False # 清除第一次執行標記
                     break
             self._save_subs(subs)
