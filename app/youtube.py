@@ -80,15 +80,18 @@ class YouTubeService:
     @retry(max_attempts=2)
     def get_channel_info(self, channel_url: str) -> dict:
         """根據頻道 URL 獲取頻道 ID 與標題"""
+        import urllib.parse
+        channel_url = urllib.parse.unquote(channel_url)
         handle = None
         if "/@" in channel_url:
             handle = channel_url.split("/@")[1].split("/")[0]
         elif "youtube.com/" in channel_url:
             parts = channel_url.split("youtube.com/")[1].split("/")
-            if parts[0] in ["c", "user", "channel"] and len(parts) > 1:
-                handle = parts[1]
-            else:
-                handle = parts[0]
+            if len(parts) > 0:
+                if parts[0] in ["c", "user", "channel"] and len(parts) > 1:
+                    handle = parts[1]
+                else:
+                    handle = parts[0]
         
         if not handle:
             # 嘗試直接提取 ID (UC...)

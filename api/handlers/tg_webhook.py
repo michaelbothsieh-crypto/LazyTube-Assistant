@@ -377,21 +377,24 @@ async def _handle_sub(chat_id: str, text: str):
     
     parts = text.split() # ['/sub', 'url', 'prompt...', 'time?']
     if len(parts) < 2:
-        await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/sub &lt;頻道網址&gt; [客製化Prompt] [時間(HH:mm)?]</code>\n\n範例：\n<code>/sub https://youtube.com/@... 09:30</code>")
+        await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/sub &lt;頻道網址&gt; [客製化Prompt] [小時(0-23)?]</code>\n\n範例：\n<code>/sub https://youtube.com/@... 9</code>")
         return
 
     url = parts[1]
     custom_prompt = ""
     preferred_time = ""
 
-    # 解析最後一個參數是否為時間 (如 09:30)
+    # 解析最後一個參數是否為小時 (如 9, 09, 14)
     if len(parts) >= 3:
         last_part = parts[-1]
-        if re.match(r"^\d{1,2}:\d{2}$", last_part):
-            preferred_time = last_part
-            if len(preferred_time.split(":")[0]) == 1: # 補 0 (9:30 -> 09:30)
-                preferred_time = f"0{preferred_time}"
-            custom_prompt = " ".join(parts[2:-1])
+        if re.match(r"^\d{1,2}$", last_part):
+            hour = int(last_part)
+            if 0 <= hour <= 23:
+                preferred_time = f"{hour:02d}:00"
+                custom_prompt = " ".join(parts[2:-1])
+            else:
+                await send_telegram_message(chat_id, "❌ <b>時間錯誤</b>\n小時請輸入 0 到 23 之間的數字。")
+                return
         else:
             custom_prompt = " ".join(parts[2:])
 
@@ -484,19 +487,15 @@ async def _handle_list(chat_id: str):
 
 
 async def _handle_clear(chat_id: str):
-    """處理 /clear 指令，強制移除該群組的所有 GitHub 排程"""
-    from api.utils.github_dispatch import delete_group_workflow
+    """處理 /clear 指令，強制移除該群組的所有訂閱紀錄"""
     from app.state_manager import StateManager
     from app.notifier import Notifier
     from app.config import Config
     import json
     import os
 
-    resp = await send_telegram_message(chat_id, "🧹 正在強制清理 GitHub 排程檔案...")
+    resp = await send_telegram_message(chat_id, "🧹 正在強制清理訂閱紀錄...")
     msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
-    
-    # 1. 強制刪除 GitHub 檔案
-    success = await delete_group_workflow(chat_id)
     
     # 2. 清理紀錄
     await StateManager.sync_from_blob("subscriptions.json")
@@ -519,7 +518,4 @@ async def _handle_clear(chat_id: str):
     if msg_id:
         Notifier.delete_pending_message(chat_id, msg_id)
 
-    if success:
-        await send_telegram_message(chat_id, "✅ 已成功移除該群組的所有 GitHub Actions 排程檔案與訂閱紀錄。")
-    else:
-        await send_telegram_message(chat_id, "⚠️ 清理過程發生部分錯誤（可能檔案已被手動刪除），請檢查 GitHub Actions 分頁。")
+    await send_telegram_message(chat_id, "✅ 已成功移除該群組的所有訂閱紀錄。")

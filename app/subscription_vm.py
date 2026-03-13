@@ -67,13 +67,7 @@ class SubscriptionViewModel:
         if chat_id not in subs: subs[chat_id] = []
         subs[chat_id].append(new_sub)
 
-        # 1. 同步建立/更新 GitHub 群組 Workflow
-        from api.utils.github_dispatch import update_group_workflow, dispatch_group_workflow
-        success = await update_group_workflow(chat_id, subs[chat_id])
-        
-        if not success:
-            return {"success": False, "message": "❌ 同步 GitHub 排程失敗，請檢查 GH_PAT 設定。"}
-
+        # 1. 不再同步建立 GitHub 群組 Workflow，改由單一排程中心處理
         # 2. 儲存至檔案
         self._save_subs(subs)
         
@@ -84,7 +78,7 @@ class SubscriptionViewModel:
             "message": f"✅ 已成功訂閱「{channel_info['title']}」！\n"
                        f"客製化 Prompt：{custom_prompt if custom_prompt else '（使用預設）'}"
                        f"{time_msg}\n\n"
-                       f"🚀 <b>正在同步排程...</b> 稍後將自動啟動第一次掃描。"
+                       f"🚀 <b>訂閱成功！</b> 稍後將自動啟動第一次掃描。"
         }
 
     def update_signup_msg_id(self, chat_id: str, channel_id: str, msg_id: str) -> None:
@@ -126,9 +120,7 @@ class SubscriptionViewModel:
         # 更新清單紀錄
         subs[chat_id] = [s for s in subs[chat_id] if s["channel_id"] != target_channel_id]
         
-        # 1. 同步更新 GitHub Workflow (若無訂閱則刪除檔案)
-        from api.utils.github_dispatch import update_group_workflow
-        await update_group_workflow(chat_id, subs[chat_id])
+        # 1. 不再同步更新 GitHub Workflow，改由單一排程中心處理
 
         # 2. 儲存
         self._save_subs(subs)

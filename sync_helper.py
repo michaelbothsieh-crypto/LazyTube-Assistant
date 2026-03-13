@@ -52,14 +52,18 @@ def main():
     action = sys.argv[1]
 
     if action == "restore":
-        target_hash = sys.argv[2] if len(sys.argv) > 2 else ""
+        target_chat_id = sys.argv[2] if len(sys.argv) > 2 else ""
         dl('processed_videos.txt', '')
         for i in range(5):
-            if dl('subscriptions.json', '{}') and target_hash:
+            success = dl('subscriptions.json', '{}')
+            if not target_chat_id and success:
+                print("✅ Downloaded subscriptions.json")
+                return
+            if success and target_chat_id:
                 with open('subscriptions.json', 'r') as f:
                     s = json.load(f)
-                    if any(get_h(k) == target_hash for k in s.keys()):
-                        print(f"✅ Found {target_hash}"); return
+                    if target_chat_id in s.keys():
+                        print(f"✅ Found {target_chat_id}"); return
             time.sleep(10)
 
     elif action == "persist":

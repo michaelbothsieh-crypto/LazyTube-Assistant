@@ -1,6 +1,6 @@
 """
 專用的群組任務執行程式 (Group Executor)
-由 sub-group-<hash>.yml 呼叫，處理該群組內的所有訂閱。
+由 execute-group.yml 呼叫，處理該群組內的所有訂閱。
 """
 import sys
 import os
@@ -20,30 +20,25 @@ def get_h(cid):
 
 def main():
     if len(sys.argv) < 2:
-        print("使用方法: python on_demand_group.py <hashed_chat_id>")
+        print("使用方法: python on_demand_group.py <chat_id>")
         sys.exit(1)
 
-    target_hash = sys.argv[1]
-    
+    target_chat_id = sys.argv[1]
+
     # 1. 驗證與憑證
     AuthManager.deploy_credentials()
-    
+
     # 2. 初始化服務
     yt = YouTubeService()
     nb = NotebookService()
     sub_vm = SubscriptionViewModel()
-    
+
     # 3. 獲取所有訂閱並尋找匹配的原始 chat_id
     all_subs = sub_vm.get_all_active_subscriptions()
-    
-    real_chat_id = None
-    for cid in all_subs.keys():
-        if get_h(cid) == target_hash:
-            real_chat_id = str(cid)
-            break
-            
-    if not real_chat_id:
-        print(f"❌ 找不到與雜湊值 {target_hash} 匹配的群組訂閱紀錄。")
+
+    real_chat_id = target_chat_id
+    if real_chat_id not in all_subs:
+        print(f"❌ 找不到群組 {target_chat_id} 的訂閱設定")
         print(f"📊 目前資料庫中包含：{[get_h(k) for k in all_subs.keys()]}")
         return
 
