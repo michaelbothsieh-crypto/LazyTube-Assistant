@@ -16,25 +16,26 @@ def get_h(cid):
 
 def dl(name, default):
     token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-    if not token:
-        print("❌ Missing BLOB_TOKEN")
-        return False
+    if not token: return False
     
     headers = {'Authorization': f'Bearer {token}', 'x-api-version': '1'}
     try:
+        # 使用 prefix=state/ 進行精確搜尋
         list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{name}'
         req = r.Request(list_url, headers=headers)
         with r.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
-            if data.get('blobs'):
-                url = data['blobs'][0]['url']
-                content = r.urlopen(url).read()
-                with open(name, 'wb') as f:
-                    f.write(content)
+            blobs = data.get('blobs', [])
+            if blobs:
+                # 下載內容
+                with r.urlopen(blobs[0]['url']) as f_resp:
+                    with open(name, 'wb') as f:
+                        f.write(f_resp.read())
                 return True
     except Exception as e:
         print(f"⚠️ Download {name} failed: {e}")
     
+    # 失敗時建立預設檔案
     with open(name, 'w') as f:
         f.write(default)
     return False
@@ -45,28 +46,35 @@ def main():
 
     if action == "restore":
         target_hash = sys.argv[2] if len(sys.argv) > 2 else ""
-        # 1. 先下載已處理影片清單
         dl('processed_videos.txt', '')
-        # 2. 下載訂閱清單 (帶重試邏輯)
-        for i in range(3):
+        
+        for i in range(4): # 增加到 4 次重試 (共 30 秒)
             success = dl('subscriptions.json', '{}')
             if success and target_hash:
                 with open('subscriptions.json', 'r') as f:
-                    s = json.load(f)
-                    if any(get_h(k) == target_hash for k in s.keys()):
-                        print(f"✅ Sync successful for {target_hash}")
-                        break
-            print(f"⏳ Sync delay, retrying {i+1}...")
+                    try:
+                        s = json.load(f)
+                        if any(get_h(k) == target_hash for k in s.keys()):
+                            print(f"✅ Sync successful for {target_hash}")
+                            return
+                    except: pass
+            print(f"⏳ Sync delay for {target_hash}, retrying {i+1}...")
             time.sleep(10)
 
     elif action == "persist":
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if not token: return
+        
         for name in ['processed_videos.txt', 'subscriptions.json']:
             if not os.path.exists(name): continue
             try:
                 with open(name, 'rb') as f:
                     data = f.read()
-                url = f"https://blob.vercel-storage.com/v1/upload/state/{name}"
+                
+                # 防止空檔案導致 400
+                if len(data) == 0: data = b"\n"
+                
+                url = f"https://blob.vercel-storage.com/state/{name}"
                 req = r.Request(url, data=data, method='PUT', headers={
                     'Authorization': f'Bearer {token}',
                     'x-api-version': '1',

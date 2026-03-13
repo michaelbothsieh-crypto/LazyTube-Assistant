@@ -7,7 +7,7 @@ import json
 class StateManager:
     """
     /// 狀態管理模組
-    /// 封裝狀態檔案的同步與讀寫邏輯
+    /// 負責狀態檔案的同步與讀寫邏輯
     """
 
     @staticmethod
@@ -44,84 +44,58 @@ class StateManager:
 
     @staticmethod
     def clear_local(filename: str):
-        """移除本地快取的狀態檔案"""
-        local_path = ""
-        if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
-        elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
-        elif filename == "processed_videos.txt": local_path = Config.PROCESSED_VIDEOS_FILE
-        else: local_path = filename
-        
+        local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
         if os.path.exists(local_path):
             try: os.remove(local_path)
             except: pass
 
     @staticmethod
     async def sync_from_blob(filename: str) -> bool:
-        """從 Vercel Blob 尋找並下載最新的狀態檔案"""
+        """從 Vercel Blob 下載狀態檔案"""
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return False
         
-        local_path = ""
-        if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
-        elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
-        elif filename == "processed_videos.txt": local_path = Config.PROCESSED_VIDEOS_FILE
-        else: local_path = filename
+        local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
 
         try:
             headers = {"Authorization": f"Bearer {token}"}
-            # 1. 先透過 List API 找到該檔案的真實 URL
+            # 透過 List API 尋找檔案
             list_url = f"https://blob.vercel-storage.com/v1?prefix=state/{filename}"
             async with httpx.AsyncClient() as client:
                 resp = await client.get(list_url, headers=headers, timeout=10.0)
                 if resp.status_code != 200: return False
                 
-                data = resp.json()
-                blobs = data.get("blobs", [])
+                blobs = resp.json().get("blobs", [])
                 if not blobs: return False
                 
-                # 取得最近更新的那個 blob URL
-                target_url = blobs[0]["url"]
-                
-                # 2. 下載真實檔案
-                file_resp = await client.get(target_url, timeout=15.0)
+                # 下載內容
+                file_resp = await client.get(blobs[0]["url"], timeout=15.0)
                 if file_resp.status_code == 200:
-                    content = file_resp.content
-                    # 預防性檢查：如果是 API 報錯的 JSON 就不寫入
-                    if content.startswith(b'{"error":'): return False
-                    
                     os.makedirs(os.path.dirname(local_path), exist_ok=True) if os.path.dirname(local_path) else None
                     with open(local_path, "wb") as f:
-                        f.write(content)
+                        f.write(file_resp.content)
                     return True
         except Exception: pass
         return False
 
     @staticmethod
     async def sync_to_blob(filename: str) -> bool:
-        """將本地檔案上傳至 Vercel Blob (覆蓋模式)"""
+        """上傳狀態檔案至 Vercel Blob"""
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return False
         
-        local_path = ""
-        if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
-        elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
-        elif filename == "processed_videos.txt": local_path = Config.PROCESSED_VIDEOS_FILE
-        else: local_path = filename
-
+        local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
         if not os.path.exists(local_path): return False
 
         try:
-            # 確保內容不是錯誤格式
-            if filename.endswith(".json"):
-                with open(local_path, "r") as f:
-                    test_data = json.load(f)
-                    if "error" in test_data and len(test_data) == 1: return False
-
-            # 修正：Vercel Blob REST API 正確的上傳端點
-            url = f"https://blob.vercel-storage.com/v1/upload/state/{filename}"
             with open(local_path, "rb") as f:
                 data = f.read()
             
+            # 防止空檔案導致 400 Bad Request
+            if len(data) == 0: data = b"\n"
+
+            # 統一路徑格式
+            url = f"https://blob.vercel-storage.com/state/{filename}"
             headers = {
                 "Authorization": f"Bearer {token}",
                 "x-api-version": "1",
