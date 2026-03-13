@@ -99,12 +99,6 @@ async def handle_telegram_update(update: dict):
     elif text.startswith("/note"):
         await _handle_note(chat_id, text)
 
-    elif "youtube.com/" in text or "youtu.be/" in text:
-        # 自動辨識網址 (若沒打指令但貼了網址)
-        urls = re.findall(r'(https?://\S+)', text)
-        if urls:
-            await _handle_nlm(chat_id, f"/nlm {urls[0]}")
-
     else:
         # 非指令訊息，安靜地忽略，不留 Log
         return
