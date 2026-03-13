@@ -37,7 +37,7 @@ async def update_group_workflow(chat_id: str, group_subs: List[Dict[str, Any]]) 
     if not crons: crons.add("0 0,12 * * *")
     cron_yaml = "\n".join([f"    - cron: '{c}'" for c in sorted(list(crons))])
 
-    # 使用 EOF 方式嵌入 Python 腳本，徹底解決縮進與轉義問題
+    # 建立 YAML 內容，改用更簡單的 cat 寫入檔案方式
     yaml_content = f"""name: Sub Group - {chat_id}
 
 on:
@@ -70,10 +70,10 @@ jobs:
           BLOB_TOKEN: ${{{{ secrets.BLOB_READ_WRITE_TOKEN }}}}
         run: |
           if [ -n "$BLOB_TOKEN" ]; then
-            python << 'EOF'
+            cat << 'INNER_EOF' > sync_state.py
 import os, json, time, urllib.request as r
 def dl(name, default, retry=3):
-    headers = {{'Authorization': f'Bearer {{os.environ["BLOB_TOKEN"]}}'}}
+    headers = {{'Authorization': f'Bearer {{os.environ.get("BLOB_TOKEN")}}', 'x-api-version': '1'}}
     for i in range(retry):
         try:
             list_url = f'https://blob.vercel-storage.com/v1?prefix=state/{{name}}'
@@ -86,21 +86,16 @@ def dl(name, default, retry=3):
                     if name == 'subscriptions.json':
                         s = json.loads(content.decode())
                         if '{chat_id}' not in s:
-                            print(f'ID {chat_id} not in JSON, retry {{i+1}}...')
-                            time.sleep(5); continue
+                            print(f'Sync delay, retrying {{i+1}}...'); time.sleep(5); continue
                     with open(name, 'wb') as f: f.write(content)
-                    print(f'Successfully downloaded {{name}}')
-                    return
-                else:
-                    print(f'No blobs found for {{name}}, retry {{i+1}}...')
-        except Exception as e: print(f'Retry {{i+1}} failed: {{e}}')
+                    print(f'Successfully downloaded {{name}}'); return
+        except Exception as e: print(f'Retry failed: {{e}}')
         time.sleep(5)
-    print(f'Fallback to default for {{name}}')
     with open(name, 'w') as f: f.write(default)
-
 dl('processed_videos.txt', '')
 dl('subscriptions.json', '{{}}')
-EOF
+INNER_EOF
+            python sync_state.py
           fi
 
       - name: Run group task
