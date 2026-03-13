@@ -19,9 +19,12 @@ class Config:
 
     NLM_COOKIE_BASE64 = os.environ.get("NLM_COOKIE_BASE64", "")
 
-    LAST_CHECK_FILE = "last_check.txt"
-    PROCESSED_VIDEOS_FILE = "processed_videos.txt"
-    SUBSCRIPTIONS_FILE = "subscriptions.json"
+    # Vercel 環境下只有 /tmp 是可寫的
+    _STATE_DIR = "/tmp" if os.environ.get("VERCEL") or os.environ.get("NOW_REGION") else "."
+    
+    LAST_CHECK_FILE = os.path.join(_STATE_DIR, "last_check.txt")
+    PROCESSED_VIDEOS_FILE = os.path.join(_STATE_DIR, "processed_videos.txt")
+    SUBSCRIPTIONS_FILE = os.path.join(_STATE_DIR, "subscriptions.json")
     MAX_VIDEOS = int(os.environ.get("MAX_VIDEOS_PER_RUN", 5))
 
     # 超過這個秒數才視為長影片，60 秒以下視為 Shorts/短片

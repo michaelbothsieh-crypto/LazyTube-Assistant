@@ -56,12 +56,20 @@ class StateManager:
         import httpx
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return False
+        
+        # 決定本地路徑
+        local_path = ""
+        if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
+        elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
+        elif filename == "processed_videos.txt": local_path = Config.PROCESSED_VIDEOS_FILE
+        else: local_path = filename
+
         try:
             url = f"https://blob.vercel-storage.com/state/{filename}"
             async with httpx.AsyncClient() as client:
                 resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
                 if resp.status_code == 200:
-                    with open(filename, "wb") as f:
+                    with open(local_path, "wb") as f:
                         f.write(resp.content)
                     return True
         except Exception: pass
@@ -73,10 +81,20 @@ class StateManager:
         import os
         import httpx
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-        if not token or not os.path.exists(filename): return False
+        if not token: return False
+        
+        # 決定本地路徑
+        local_path = ""
+        if filename == "subscriptions.json": local_path = Config.SUBSCRIPTIONS_FILE
+        elif filename == "last_check.txt": local_path = Config.LAST_CHECK_FILE
+        elif filename == "processed_videos.txt": local_path = Config.PROCESSED_VIDEOS_FILE
+        else: local_path = filename
+
+        if not os.path.exists(local_path): return False
+
         try:
             url = f"https://blob.vercel-storage.com/state/{filename}"
-            with open(filename, "rb") as f:
+            with open(local_path, "rb") as f:
                 data = f.read()
             async with httpx.AsyncClient() as client:
                 resp = await client.put(url, content=data, headers={
