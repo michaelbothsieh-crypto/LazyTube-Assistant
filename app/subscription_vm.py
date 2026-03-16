@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from app.config import Config
 from app.youtube import YouTubeService
@@ -24,7 +24,6 @@ class SubscriptionViewModel:
         try:
             with open(self.subs_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                # 安全性檢查：如果資料不是字典，或者是包含 API 報錯的內容
                 if not isinstance(data, dict) or "error" in data:
                     return {}
                 return data
@@ -32,9 +31,27 @@ class SubscriptionViewModel:
             return {}
 
     def _save_subs(self, subs: Dict[str, List[Dict[str, Any]]]) -> None:
-        """將訂閱資料保存至檔案。"""
-        with open(self.subs_file, "w", encoding="utf-8") as f:
+        """將訂閱資料保存至檔案（寫入暫存檔後 rename，避免寫入中斷導致損壞）。"""
+        tmp_path = self.subs_file + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(subs, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, self.subs_file)
+
+    @staticmethod
+    def snap_preferred_time(hour: int) -> str:
+        """
+        將使用者指定的小時數對齊到最近的有效時段。
+        有效時段 = Config.VALID_PREFERRED_HOURS (台北偶數小時 6,8,10...22)
+        回傳格式: "HH:00"
+        """
+        valid = Config.VALID_PREFERRED_HOURS
+        # 找最近的有效小時
+        best = min(valid, key=lambda h: abs(h - hour))
+        # 距離相同時取較大值（使用者期望的時間不早於指定）
+        if abs(best - hour) > 0:
+            candidates = [h for h in valid if abs(h - hour) == abs(best - hour)]
+            best = max(candidates)
+        return f"{best:02d}:00"
 
     async def subscribe(self, chat_id: str, channel_url: str, custom_prompt: str = "", preferred_time: str = "") -> Dict[str, Any]:
         """
@@ -47,11 +64,9 @@ class SubscriptionViewModel:
         subs = self._load_subs()
         group_subs = subs.get(chat_id, [])
 
-        # 檢查是否已訂閱過
         if any(s["channel_id"] == channel_info["id"] for s in group_subs):
             return {"success": False, "message": f"您已經訂閱過「{channel_info['title']}」了。"}
 
-        # 更新記憶體中的資料
         # 初始檢查時間回溯 24 小時，以便訂閱後能立刻掃描到最近的新片
         last_check_time = datetime.now(timezone.utc) - timedelta(hours=24)
         new_sub = {
@@ -60,21 +75,21 @@ class SubscriptionViewModel:
             "custom_prompt": custom_prompt,
             "preferred_time": preferred_time,
             "last_check": last_check_time.isoformat(),
-            "is_first_run": True, # 標記為第一次執行
+            "is_first_run": True,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
-        
-        if chat_id not in subs: subs[chat_id] = []
+
+        if chat_id not in subs:
+            subs[chat_id] = []
         subs[chat_id].append(new_sub)
 
-        # 1. 不再同步建立 GitHub 群組 Workflow，改由單一排程中心處理
-        # 2. 儲存至檔案
         self._save_subs(subs)
-        
+
+        valid_hours_display = ", ".join(f"{h}" for h in Config.VALID_PREFERRED_HOURS)
         time_msg = f"\n定時檢查：<code>{preferred_time}</code>" if preferred_time else "\n定時檢查：<code>預設 (每 12 小時)</code>"
         return {
-            "success": True, 
-            "channel_id": channel_info["id"], # 回傳 ID 以便後續更新訊息 ID
+            "success": True,
+            "channel_id": channel_info["id"],
             "message": f"✅ 已成功訂閱「{channel_info['title']}」！\n"
                        f"客製化 Prompt：{custom_prompt if custom_prompt else '（使用預設）'}"
                        f"{time_msg}\n\n"
@@ -117,12 +132,8 @@ class SubscriptionViewModel:
         if not target_channel_id:
             return {"success": False, "message": "找不到該頻道。"}
 
-        # 更新清單紀錄
         subs[chat_id] = [s for s in subs[chat_id] if s["channel_id"] != target_channel_id]
-        
-        # 1. 不再同步更新 GitHub Workflow，改由單一排程中心處理
 
-        # 2. 儲存
         self._save_subs(subs)
         return {"success": True, "message": f"❌ 已取消訂閱「{target_title}」，群組排程已同步更新。"}
 
@@ -137,7 +148,7 @@ class SubscriptionViewModel:
         for i, s in enumerate(group_subs, 1):
             time_info = f" | 🕒 <code>{s['preferred_time']}</code>" if s['preferred_time'] else " | 🕒 <code>預設</code>"
             msg += f"{i}. <b>{s['channel_title']}</b>{time_info}\n"
-        
+
         msg += "\n💡 輸入 <code>/unsub &lt;序號&gt;</code> 可取消訂閱。"
         return msg
 
@@ -150,6 +161,6 @@ class SubscriptionViewModel:
             for s in subs[chat_id]:
                 if s["channel_id"] == channel_id:
                     s["last_check"] = check_time.isoformat()
-                    s["is_first_run"] = False # 清除第一次執行標記
+                    s["is_first_run"] = False
                     break
             self._save_subs(subs)

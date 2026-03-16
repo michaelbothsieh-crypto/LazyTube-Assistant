@@ -13,7 +13,9 @@ def get_h(cid):
 
 def dl(name, default):
     token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-    if not token: return False
+    if not token:
+        print(f"⚠️ 缺少 BLOB_READ_WRITE_TOKEN，無法下載 {name}")
+        return False
     headers = {'Authorization': f'Bearer {token}'}
     try:
         list_url = f'https://blob.vercel-storage.com?prefix=state/{name}'
@@ -26,7 +28,8 @@ def dl(name, default):
                     content = f_resp.read()
                     with open(name, 'wb') as f: f.write(content)
                 return True
-    except: pass
+    except Exception as e:
+        print(f"⚠️ 下載 {name} 失敗: {e}")
     with open(name, 'w') as f: f.write(default)
     return False
 
@@ -45,7 +48,8 @@ def up(name, local_path):
         })
         r.urlopen(req)
         print(f"✅ Persisted {name}")
-    except Exception as e: print(f"❌ Persist {name} failed: {e}")
+    except Exception as e:
+        print(f"❌ Persist {name} failed: {e}")
 
 def main():
     if len(sys.argv) < 2: return
@@ -61,27 +65,43 @@ def main():
                 print("✅ Downloaded subscriptions.json")
                 return
             if success and target_chat_id:
-                with open('subscriptions.json', 'r') as f:
-                    s = json.load(f)
-                    if target_chat_id in s.keys():
-                        print(f"✅ Found {target_chat_id}"); return
-            time.sleep(10)
+                try:
+                    with open('subscriptions.json', 'r') as f:
+                        s = json.load(f)
+                        if target_chat_id in s.keys():
+                            print(f"✅ Found {target_chat_id}"); return
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ subscriptions.json 解析失敗 (attempt {i+1}): {e}")
+            if i < 4:
+                print(f"⏳ 等待 Blob 同步... (attempt {i+1}/5)")
+                time.sleep(10)
 
     elif action == "persist":
-        # 1. 直接上傳已處理影片清單與上次檢查時間
         up('processed_videos.txt', 'processed_videos.txt')
         up('last_check.txt', 'last_check.txt')
-        
-        # 2. 訂閱清單採用「下載-合併-上傳」策略
+
+        # 訂閱清單採用「下載-合併-上傳」策略
+        # 注意: dl() 會覆蓋 local file，所以先將 local 資料讀進記憶體
         local_file = 'subscriptions.json'
         if os.path.exists(local_file):
             print("🔄 Merging last_check updates into cloud data...")
-            with open(local_file, 'r') as f: local_subs = json.load(f)
-            
-            # 先下載雲端最新版到暫存檔
+            try:
+                with open(local_file, 'r') as f: local_subs = json.load(f)
+            except json.JSONDecodeError as e:
+                print(f"❌ 本地 {local_file} 解析失敗: {e}")
+                return
+
+            # dl() 下載雲端版本並覆蓋 local_file，但 local_subs 已在記憶體中
             if dl('subscriptions.json', '{}'):
-                with open(local_file, 'r') as f: cloud_subs = json.load(f)
-                
+                try:
+                    with open(local_file, 'r') as f: cloud_subs = json.load(f)
+                except json.JSONDecodeError as e:
+                    print(f"❌ 雲端資料解析失敗: {e}")
+                    # 雲端損壞則直接上傳本地版本
+                    with open(local_file, 'w') as f: json.dump(local_subs, f)
+                    up('subscriptions.json', local_file)
+                    return
+
                 # 將 local 的 last_check 與 is_first_run 更新到 cloud 中
                 for cid, group in local_subs.items():
                     if cid in cloud_subs:
@@ -90,8 +110,9 @@ def main():
                                 if l_sub['channel_id'] == c_sub['channel_id']:
                                     c_sub['last_check'] = l_sub['last_check']
                                     c_sub['is_first_run'] = l_sub.get('is_first_run', False)
-                                    if 'signup_msg_id' in l_sub: c_sub['signup_msg_id'] = l_sub['signup_msg_id']
-                
+                                    if 'signup_msg_id' in l_sub:
+                                        c_sub['signup_msg_id'] = l_sub['signup_msg_id']
+
                 # 寫回 local 並上傳
                 with open(local_file, 'w') as f: json.dump(cloud_subs, f)
                 up('subscriptions.json', local_file)

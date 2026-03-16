@@ -2,9 +2,13 @@ name: Master Scheduler
 
 on:
   schedule:
-    # 每個整點執行一次 (分 00, 小時 *)
-    - cron: '0 * * * *'
+    # 每 2 小時 :30 分執行，與 yt-summary (:00) 完全錯開避免搶 runner
+    # 台北 06:30, 08:30, 10:30 ... 22:30
+    - cron: '30 22,0,2,4,6,8,10,12,14 * * *'
   workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   master-scheduler:

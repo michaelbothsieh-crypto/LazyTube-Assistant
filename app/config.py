@@ -38,6 +38,22 @@ class Config:
     # 白名單使用者 ID（逗號分隔）
     ALLOWED_USERS = os.environ.get("ALLOWED_USERS", "")
 
+    # 排程系統：有效的 preferred_time 時段（台北時間，偶數小時）
+    # master-scheduler 在這些時段的 :30 分執行，與 yt-summary 的 :00 分完全錯開
+    VALID_PREFERRED_HOURS = [6, 8, 10, 12, 14, 16, 18, 20, 22]
+
+    # 已處理影片 ID 上限（超過則保留最新的）
+    PROCESSED_IDS_LIMIT = 150
+
+    # URL 長度上限
+    MAX_URL_LENGTH = 2048
+
+    # 自訂 Prompt 長度上限
+    MAX_PROMPT_LENGTH = 500
+
+    # 批次處理 URL 上限
+    MAX_BATCH_URLS = 20
+
     @classmethod
     def validate(cls) -> bool:
         """

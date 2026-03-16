@@ -8,12 +8,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import sys
-import os
 import hashlib
 from datetime import datetime, timezone, timedelta
 from app.auth import AuthManager
-from app.config import Config
 from app.youtube import YouTubeService
 from app.notebook import NotebookService
 from app.notifier import Notifier
@@ -31,88 +28,85 @@ def main():
 
     target_chat_id = sys.argv[1]
 
-    # 1. 驗證與憑證
     AuthManager.deploy_credentials()
 
-    # 2. 初始化服務
     yt = YouTubeService()
     nb = NotebookService()
     sub_vm = SubscriptionViewModel()
 
-    # 3. 獲取所有訂閱並尋找匹配的原始 chat_id
     all_subs = sub_vm.get_all_active_subscriptions()
 
-    real_chat_id = target_chat_id
-    if real_chat_id not in all_subs:
+    if target_chat_id not in all_subs:
         print(f"❌ 找不到群組 {target_chat_id} 的訂閱設定")
         print(f"📊 目前資料庫中包含：{[get_h(k) for k in all_subs.keys()]}")
         return
 
     print(f"🎯 雜湊匹配成功！執行任務中... (隱私保護：ID 已遮蔽)")
-    group_subs = all_subs.get(real_chat_id, [])
-    
-    # 4. 遍歷並判斷執行
+    group_subs = all_subs.get(target_chat_id, [])
+
     now_tw = datetime.now(timezone(timedelta(hours=8)))
     today_str = now_tw.strftime("%Y-%m-%d")
     current_time_str = now_tw.strftime("%H:%M")
     processed_ids = StateManager.get_processed_ids()
-    
+
     for sub in group_subs:
         channel_id = sub["channel_id"]
         channel_title = sub["channel_title"]
         pref_time = sub.get("preferred_time")
         last_check_str = sub.get("last_check")
         is_first_run = sub.get("is_first_run", False)
-        
+
         last_check_day = ""
         if last_check_str:
             last_check_day = datetime.fromisoformat(last_check_str).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
 
         should_run = False
-        if pref_time:
+        if is_first_run:
+            should_run = True
+        elif pref_time:
             if last_check_day != today_str and current_time_str >= pref_time:
                 should_run = True
         else:
             if not last_check_str or (datetime.now(timezone.utc) - datetime.fromisoformat(last_check_str)).total_seconds() > 12 * 3600:
                 should_run = True
 
-        if is_first_run: should_run = True
-
         if not should_run:
             print(f"⏭️ 跳過 {channel_title} (未到時間或今日已處理)")
             continue
 
-        # 5. 執行該頻道的摘要邏輯
         try:
             pid_map = yt._get_uploads_playlist_ids([channel_id])
             pid = pid_map.get(channel_id)
-            if not pid: continue
+            if not pid:
+                continue
 
             items = yt._get_playlist_items(pid, limit=1 if is_first_run else 10)
-            
+
             for item in items:
                 pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
                 if not is_first_run and last_check_str and pub_time <= datetime.fromisoformat(last_check_str):
                     continue
-                
+
                 vid_id = item["contentDetails"]["videoId"]
-                if vid_id in processed_ids: continue
-                
+                if vid_id in processed_ids:
+                    continue
+
                 print(f"🎬 處理新影片：{item['snippet']['title']}")
                 summary = nb.process_video(f"https://www.youtube.com/watch?v={vid_id}", item['snippet']['title'], custom_prompt=sub.get("custom_prompt"))
                 if summary:
-                    Notifier.send_summary(item['snippet']['title'], f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=real_chat_id)
+                    Notifier.send_summary(item['snippet']['title'], f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=target_chat_id)
                     StateManager.add_processed_id(vid_id)
-                if is_first_run: break
-            
-            sub_vm.update_last_check(real_chat_id, channel_id, datetime.now(timezone.utc))
-            
+                if is_first_run:
+                    break
+
+            sub_vm.update_last_check(target_chat_id, channel_id, datetime.now(timezone.utc))
+
             # 清理訂閱成功訊息 (保持群組乾淨)
             signup_msg_id = sub.get("signup_msg_id")
             if signup_msg_id:
                 print(f"🧹 正在清理訂閱通知訊息：{signup_msg_id}")
-                Notifier.delete_pending_message(real_chat_id, signup_msg_id)
-            
+                Notifier.delete_pending_message(target_chat_id, signup_msg_id)
+
         except Exception as e:
             print(f"❌ 處理頻道 {channel_title} 時發生錯誤: {e}")
 

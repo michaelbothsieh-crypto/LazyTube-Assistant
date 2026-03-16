@@ -35,9 +35,22 @@ class StateManager:
 
     @staticmethod
     def add_processed_id(video_id: str) -> None:
-        ids = list(StateManager.get_processed_ids())
-        if video_id not in ids: ids.append(video_id)
-        trimmed = ids[-150:]
+        # 保持插入順序以確保 trim 時保留最新的
+        existing = set()
+        ids = []
+        if os.path.exists(Config.PROCESSED_VIDEOS_FILE):
+            try:
+                with open(Config.PROCESSED_VIDEOS_FILE, "r", encoding="utf-8") as f:
+                    for line in f:
+                        vid = line.strip()
+                        if vid and vid not in existing:
+                            ids.append(vid)
+                            existing.add(vid)
+            except Exception:
+                pass
+        if video_id not in existing:
+            ids.append(video_id)
+        trimmed = ids[-Config.PROCESSED_IDS_LIMIT:]
         os.makedirs(os.path.dirname(Config.PROCESSED_VIDEOS_FILE), exist_ok=True) if os.path.dirname(Config.PROCESSED_VIDEOS_FILE) else None
         with open(Config.PROCESSED_VIDEOS_FILE, "w", encoding="utf-8") as f:
             for vid in trimmed: f.write(f"{vid}\n")
