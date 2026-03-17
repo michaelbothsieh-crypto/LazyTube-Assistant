@@ -2,9 +2,12 @@ name: Master Scheduler
 
 on:
   schedule:
-    # 每小時第 5 分鐘執行一次，避開整點高峰
-    - cron: '5 * * * *'
+    # ⚠️ 此 cron 由 jobs/update_cron.py 自動管理，請勿手動修改
+    - cron: '5 2 * * *'
   workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   master-scheduler:

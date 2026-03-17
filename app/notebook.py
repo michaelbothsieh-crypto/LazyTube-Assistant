@@ -40,7 +40,7 @@ class NotebookService:
         /// 核心代理匯入邏輯：套用多重代理策略確保成功率
         /// 回傳 True/False
         """
-        wait_flag = ["--wait"] if wait else []
+        wait_flag = [] # 拿掉內建的 --wait，統一由外部手動 Polling 以免 30s timeout
         hard_domains = ["forum.gamer.com.tw", "ptt.cc", "bilibili.com", "x.com", "twitter.com"]
         is_hard_domain = any(domain in url for domain in hard_domains)
         success = False
@@ -92,7 +92,24 @@ class NotebookService:
         nb_id = match.group(1) if match else nb_name
         print(f"✅ 筆記本建立成功 (ID: {nb_id})")
 
-        if self._add_source_with_proxy(nb_id, url, wait=wait):
+        if self._add_source_with_proxy(nb_id, url, wait=False):
+            if wait:
+                print("⏳ 正在等待來源內容解析...")
+                start_time = time.time()
+                is_ready = False
+                while time.time() - start_time < 120:
+                    status_res = self.run_nlm("source", "list", nb_id, "--json", verbose=False)
+                    if status_res.returncode == 0:
+                        try:
+                            sources = json.loads(status_res.stdout)
+                            if isinstance(sources, list) and len(sources) > 0:
+                                is_ready = True
+                                break
+                        except:
+                            pass
+                    time.sleep(3)
+                if not is_ready:
+                    print("⚠️ 來源內容解析超時，嘗試繼續產出流程...")
             return nb_id, url
         else:
             print("❌ 所有代理嘗試均失敗。")
@@ -215,7 +232,7 @@ class NotebookService:
                     "--language", slide_lang,
                     "--format", "presenter_slides",
                     "--length", "short",
-                    "--wait", "--json",
+                    "--json",
                     "--confirm"
                 ]
                 if custom_prompt:
@@ -229,7 +246,7 @@ class NotebookService:
                     "--language", lang,
                     "--orientation", orientation,
                     "--detail", detail,
-                    "--wait", "--json",
+                    "--json",
                     "--confirm"
                 ]
                 if custom_prompt:
@@ -240,7 +257,7 @@ class NotebookService:
                     "report", "create", nb_id,
                     "--language", lang,
                     "--format", "Create Your Own",
-                    "--wait", "--json",
+                    "--json",
                     "--confirm"
                 ]
                 cmd_args.extend(["--prompt", custom_prompt or "請用繁體中文提供詳細的內容摘要報告"])
@@ -279,8 +296,41 @@ class NotebookService:
                     subcmd = "artifact"
 
                 out_path = f"{artifact_type}_{uuid.uuid4().hex[:4]}.{ext}"
-                print(f"📥 正在下載檔案 ({ext}): {out_path}...")
+                
+                print(f"⏳ 正在等待產出物生成，此過程可能長達 1 ~ 3 分鐘...")
+                start_time = time.time()
+                is_ready = False
+                
+                # 每 10 秒輪詢一次，最多等 5 分鐘
+                while time.time() - start_time < 300:
+                    status_res = self.run_nlm("studio", "status", nb_id, "--json", verbose=False)
+                    if status_res.returncode == 0:
+                        try:
+                            stats = json.loads(status_res.stdout)
+                            if isinstance(stats, list):
+                                for artifact in stats:
+                                    # 比對 id (可能是 id 或 artifact_id)
+                                    curr_id = artifact.get("id") or artifact.get("artifact_id")
+                                    if curr_id == artifact_id:
+                                        status = str(artifact.get("status", "")).lower()
+                                        if status in ["completed", "success", "2"]:
+                                            is_ready = True
+                                        elif status in ["failed", "4"]:
+                                            print(f"❌ {artifact_type} 生成失敗 (模型遭拒或建立失敗)")
+                                            return None
+                                        break
+                        except:
+                            pass
+                    
+                    if is_ready:
+                        break
+                    time.sleep(10)
+                
+                if not is_ready:
+                    print(f"⏰ {artifact_type} 生成超時 (超過 5 分鐘)")
+                    return None
 
+                print(f"📥 正在下載檔案 ({ext}): {out_path}...")
                 down_args = ["download", subcmd, nb_id, "--id", artifact_id, "--output", out_path]
                 if artifact_type == "slide_deck":
                     down_args.extend(["--format", ext])
@@ -292,7 +342,7 @@ class NotebookService:
                 else:
                     print("❌ 檔案下載失敗")
             else:
-                print("⏰ 製作超時")
+                print("❌ 無法取得 Artifact ID，可能是 API 發生異常")
 
         finally:
             if nb_id:

@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 # 預設 Prompt（若用戶未提供且非簡報任務）
 DEFAULT_NLM_PROMPT = "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
 
+# URL 長度上限 & Prompt 長度上限
+_MAX_URL_LEN = 2048
+_MAX_PROMPT_LEN = 500
+
+
+def _validate_url(url: str) -> str | None:
+    """驗證 URL，回傳錯誤訊息或 None 表示通過。"""
+    if not url.startswith("http"):
+        return f"❌ <b>無效的 URL</b>：<code>{url[:100]}</code>\n請提供完整的 http/https 網址。"
+    if len(url) > _MAX_URL_LEN:
+        return f"❌ URL 過長（上限 {_MAX_URL_LEN} 字元）。"
+    return None
+
 
 
 
@@ -122,24 +135,6 @@ async def _handle_start(chat_id: str):
 async def _handle_help(chat_id: str):
     """回傳服務說明"""
     await send_telegram_message(chat_id, build_help_text(html=True))
-    return
-    help_text = (
-        "🤖 <b>LazyTube 查詢機器人</b>\n\n"
-        "<b>指令說明：</b> (問號?代表有預設值)\n"
-        "📌 <code>/nlm &lt;url&gt; &lt;自訂Prompt?&gt;</code> (1-3分)\n"
-        "  → 獲取來源的文字摘要\n\n"
-        "📌 <code>/pic &lt;url&gt; &lt;自訂Prompt?&gt;</code> (3-5分)\n"
-        "  → 生成 <b>Portrait/Detailed</b> 圖片總結 (PNG)\n\n"
-        "📌 <code>/note &lt;url&gt; &lt;自訂Prompt?&gt;</code> (3-5分)\n"
-        "  → 生成詳細的 <b>Markdown</b> 總結報告檔案\n\n"
-        "📌 <code>/slide &lt;url&gt; &lt;自訂Prompt?&gt; &lt;語言?&gt; &lt;格式?&gt;</code> (5-10分)\n"
-        "  → 產生 <b>繁體中文</b> PDF (預設) 或 PPTX 簡報\n\n"
-        "<b>範例：</b>\n"
-        "<code>/pic https://youtu.be/xxxxx</code>\n"
-        "<code>/note https://youtu.be/xxxxx</code>\n"
-        "<code>/slide https://youtu.be/xxxxx _ zh-TW/en pptx/pdf</code> (預設是 zh-TW/pdf)"
-    )
-    await send_telegram_message(chat_id, help_text)
 
 
 async def _handle_status(chat_id: str):
@@ -168,23 +163,14 @@ async def _handle_nlm(chat_id: str, text: str):
         return
 
     url = parts[1]
-    if not url.startswith("http"):
-        await send_telegram_message(
-            chat_id,
-            f"❌ <b>無效的 URL</b>：<code>{url[:100]}</code>\n請提供完整的 http/https 網址。"
-        )
+    url_err = _validate_url(url)
+    if url_err:
+        await send_telegram_message(chat_id, url_err)
         return
 
-    # URL 長度限制
-    if len(url) > 2048:
-        await send_telegram_message(chat_id, "❌ URL 過長（上限 2048 字元）。")
-        return
-
-    # 自訂 Prompt（選填，最多 500 字）
     custom_prompt = parts[2] if len(parts) >= 3 else DEFAULT_NLM_PROMPT
-    if len(custom_prompt) > 500:
-        custom_prompt = custom_prompt[:500]
-        logger.info("自訂 Prompt 超過 500 字元，已截斷")
+    if len(custom_prompt) > _MAX_PROMPT_LEN:
+        custom_prompt = custom_prompt[:_MAX_PROMPT_LEN]
 
     # 立即回應「處理中」並取得 message_id
     resp_data = await send_telegram_message(
@@ -208,21 +194,18 @@ async def _handle_nlm(chat_id: str, text: str):
             message_id=msg_id
         )
         if not success:
-            debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
+            logger.error("dispatch_nlm_workflow failed: check GH_PAT_WORKFLOW, GH_REPO_OWNER, GH_REPO_NAME")
             await send_telegram_message(
                 chat_id,
-                f"❌ <b>觸發任務失敗</b>\n\n"
-                f"原因：無法連接到 GitHub API (NLM)。\n"
-                f"🔧 <b>除錯資訊</b>：<code>{debug_info}</code>\n"
-                f"請檢查 Vercel 環境變數是否正確。"
+                "❌ <b>觸發任務失敗</b>\n\n"
+                "原因：無法連接到後端服務。請聯繫管理員。"
             )
     except Exception as e:
         logger.error(f"dispatch_nlm_workflow 發生錯誤: {e}")
         await send_telegram_message(
             chat_id,
-            f"❌ <b>系統發生異常</b>\n\n"
-            f"錯誤內容：<code>{str(e)[:100]}</code>\n"
-            f"請聯繫管理員檢查 Vercel 日誌。"
+            "❌ <b>系統發生異常</b>\n\n"
+            "請稍後重試，或聯繫管理員。"
         )
 
 async def _handle_slide(chat_id: str, text: str):
@@ -241,16 +224,9 @@ async def _handle_slide(chat_id: str, text: str):
         return
 
     url = parts[1]
-    if not url.startswith("http"):
-        await send_telegram_message(
-            chat_id,
-            f"❌ <b>無效的 URL</b>：<code>{url[:100]}</code>\n請提供完整的 http/https 網址。"
-        )
-        return
-
-    # URL 長度限制
-    if len(url) > 2048:
-        await send_telegram_message(chat_id, "❌ URL 過長（上限 2048 字元）。")
+    url_err = _validate_url(url)
+    if url_err:
+        await send_telegram_message(chat_id, url_err)
         return
 
     # 1. 參數解析與 Prompt 生成
@@ -314,21 +290,18 @@ async def _handle_slide(chat_id: str, text: str):
             artifact_type="slide_deck"
         )
         if not success:
-            debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
+            logger.error("dispatch_slide_workflow failed: check GH_PAT_WORKFLOW, GH_REPO_OWNER, GH_REPO_NAME")
             await send_telegram_message(
                 chat_id,
-                f"❌ <b>觸發任務失敗</b>\n\n"
-                f"原因：無法連接到 GitHub API (Artifact)。\n"
-                f"🔧 <b>除錯資訊</b>：<code>{debug_info}</code>\n"
-                f"請檢查 Vercel 環境變數是否正確。"
+                "❌ <b>觸發任務失敗</b>\n\n"
+                "原因：無法連接到後端服務。請聯繫管理員。"
             )
     except Exception as e:
         logger.error(f"dispatch_slide_workflow 發生錯誤: {e}")
         await send_telegram_message(
             chat_id,
-            f"❌ <b>系統發生異常</b>\n\n"
-            f"錯誤內容：<code>{str(e)[:100]}</code>\n"
-            f"請聯繫管理員檢查 Vercel 日誌。"
+            "❌ <b>系統發生異常</b>\n\n"
+            "請稍後重試，或聯繫管理員。"
         )
 
 async def _handle_pic(chat_id: str, text: str):
@@ -338,14 +311,23 @@ async def _handle_pic(chat_id: str, text: str):
         await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/pic &lt;url&gt; [自訂Prompt]</code>")
         return
     url, prompt = parts[1], (parts[2] if len(parts) >= 3 else "")
-    
+
+    url_err = _validate_url(url)
+    if url_err:
+        await send_telegram_message(chat_id, url_err)
+        return
+
     resp = await send_telegram_message(chat_id, f"⏳ <b>正在生成圖片總結...</b>\n🔗 URL: <code>{url[:60]}...</code>")
     msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
-    
-    success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="infographic")
-    if not success:
-        debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
-        await send_telegram_message(chat_id, f"❌ <b>觸發圖片任務失敗</b>\n除錯資訊：<code>{debug_info}</code>")
+
+    try:
+        success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="infographic")
+        if not success:
+            logger.error("dispatch_artifact_workflow (pic) failed")
+            await send_telegram_message(chat_id, "❌ <b>觸發圖片任務失敗</b>\n請聯繫管理員。")
+    except Exception as e:
+        logger.error(f"dispatch_artifact_workflow (pic) error: {e}")
+        await send_telegram_message(chat_id, "❌ <b>系統發生異常</b>\n請稍後重試。")
 
 async def _handle_note(chat_id: str, text: str):
     """解析 /note 指令並生成報告"""
@@ -355,13 +337,22 @@ async def _handle_note(chat_id: str, text: str):
         return
     url, prompt = parts[1], (parts[2] if len(parts) >= 3 else "")
 
+    url_err = _validate_url(url)
+    if url_err:
+        await send_telegram_message(chat_id, url_err)
+        return
+
     resp = await send_telegram_message(chat_id, f"⏳ <b>正在製作總結報告...</b>\n🔗 URL: <code>{url[:60]}...</code>")
     msg_id = str(resp.get("result", {}).get("message_id", "")) if resp.get("ok") else ""
-    
-    success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="report")
-    if not success:
-        debug_info = f"Owner:{os.environ.get('GH_REPO_OWNER')} | Repo:{os.environ.get('GH_REPO_NAME')} | Auth:{'Yes' if os.environ.get('GH_PAT_WORKFLOW') else 'No'}"
-        await send_telegram_message(chat_id, f"❌ <b>觸發報告任務失敗</b>\n除錯資訊：<code>{debug_info}</code>")
+
+    try:
+        success = await dispatch_artifact_workflow(url=url, prompt=prompt, chat_id=chat_id, message_id=msg_id, artifact_type="report")
+        if not success:
+            logger.error("dispatch_artifact_workflow (note) failed")
+            await send_telegram_message(chat_id, "❌ <b>觸發報告任務失敗</b>\n請聯繫管理員。")
+    except Exception as e:
+        logger.error(f"dispatch_artifact_workflow (note) error: {e}")
+        await send_telegram_message(chat_id, "❌ <b>系統發生異常</b>\n請稍後重試。")
 
 
 # --- 頻道訂閱指令處理 ---
@@ -370,26 +361,36 @@ async def _handle_sub(chat_id: str, text: str):
     """處理 /sub 指令"""
     from app.subscription_vm import SubscriptionViewModel
     from app.state_manager import StateManager
+    from app.config import Config
     import re
-    
-    parts = text.split() # ['/sub', 'url', 'prompt...', 'time?']
+
+    valid_hours = Config.VALID_PREFERRED_HOURS
+    valid_hours_str = ", ".join(str(h) for h in valid_hours)
+
+    parts = text.split()  # ['/sub', 'url', 'prompt...', 'time?']
     if len(parts) < 2:
-        await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/sub &lt;頻道網址&gt; [客製化Prompt] [小時(0-23)?]</code>\n\n範例：\n<code>/sub https://youtube.com/@... 9</code>")
+        await send_telegram_message(
+            chat_id,
+            f"❌ <b>格式錯誤</b>\n"
+            f"使用方法：<code>/sub &lt;頻道網址&gt; [客製化Prompt] [小時?]</code>\n\n"
+            f"可用時段（台北時間）：<code>{valid_hours_str}</code>\n"
+            f"範例：<code>/sub https://youtube.com/@... 10</code>"
+        )
         return
 
     url = parts[1]
     custom_prompt = ""
     preferred_time = ""
 
-    # 解析最後一個參數是否為小時 (如 9, 09, 14, 14:00)
+    # 解析最後一個參數是否為小時
     if len(parts) >= 3:
         last_part = parts[-1]
-        # 支援純數字或 HH:00 的格式
         match = re.match(r"^(\d{1,2})(?::00)?$", last_part)
         if match:
             hour = int(match.group(1))
             if 0 <= hour <= 23:
-                preferred_time = f"{hour:02d}:00"
+                # 自動對齊到最近的有效時段
+                preferred_time = SubscriptionViewModel.snap_preferred_time(hour)
                 custom_prompt = " ".join(parts[2:-1])
             else:
                 await send_telegram_message(chat_id, "❌ <b>時間錯誤</b>\n小時請輸入 0 到 23 之間的數字。")
@@ -446,7 +447,8 @@ async def _handle_sub(chat_id: str, text: str):
         if msg_id:
             from app.notifier import Notifier
             Notifier.delete_pending_message(chat_id, msg_id)
-        await send_telegram_message(chat_id, f"❌ <b>設定失敗</b>\n發生非預期錯誤：<code>{str(e)[:100]}</code>")
+        logger.error(f"_handle_sub failed for {chat_id}: {e}")
+        await send_telegram_message(chat_id, "❌ <b>設定失敗</b>\n請稍後重試，或聯繫管理員。")
 
 
 async def _handle_unsub(chat_id: str, text: str):
@@ -507,8 +509,10 @@ async def _handle_clear(chat_id: str):
                 with open(Config.SUBSCRIPTIONS_FILE, "w") as f:
                     json.dump(subs, f)
                 await StateManager.sync_to_blob("subscriptions.json")
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to clear subscriptions for {chat_id}: {e}")
+            await send_telegram_message(chat_id, "❌ 清理時發生錯誤，請稍後重試。")
+            return
     
     # 強制移除本地快取，防止殘留
     StateManager.clear_local("subscriptions.json")
