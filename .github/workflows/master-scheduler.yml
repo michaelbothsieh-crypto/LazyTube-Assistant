@@ -2,8 +2,8 @@ name: Master Scheduler
 
 on:
   schedule:
-    # 每個整點執行一次 (分 00, 小時 *)
-    - cron: '0 * * * *'
+    # 每小時第 5 分鐘執行一次，避開整點高峰
+    - cron: '5 * * * *'
   workflow_dispatch:
 
 jobs:
