@@ -24,10 +24,8 @@ def tw_time_to_utc_hour(time_str: str) -> int:
 
 def generate_cron(subscriptions_file: str = "subscriptions.json") -> str:
     """
-    讀取所有訂閱，產生只在有人訂閱的時段執行的 cron 表達式。
-    - 有 preferred_time → 轉換為 UTC hour
-    - 沒有 preferred_time → 加入預設每 12 小時的時段 (UTC 0, 12)
-    - 完全沒訂閱 → fallback: 5 * * * * (每小時)
+    讀取所有訂閱的 preferred_time，只在這些時段執行。
+    沒有任何 preferred_time → fallback: 5 * * * * (每小時)
     """
     if not os.path.exists(subscriptions_file):
         return "5 * * * *"
@@ -39,23 +37,14 @@ def generate_cron(subscriptions_file: str = "subscriptions.json") -> str:
             return "5 * * * *"
 
     utc_hours = set()
-    has_no_pref = False
-
     for group_subs in subs.values():
         for sub in group_subs:
             pref = sub.get("preferred_time", "")
             if pref:
                 utc_hours.add(tw_time_to_utc_hour(pref))
-            else:
-                has_no_pref = True
 
-    # 沒有任何訂閱時的 fallback
-    if not utc_hours and not has_no_pref:
+    if not utc_hours:
         return "5 * * * *"
-
-    # 沒設定 preferred_time 的訂閱，用每 12 小時掃一次當 fallback
-    if has_no_pref:
-        utc_hours.update([0, 12])
 
     hours_str = ",".join(str(h) for h in sorted(utc_hours))
     return f"5 {hours_str} * * *"
