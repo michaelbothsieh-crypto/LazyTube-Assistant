@@ -76,10 +76,15 @@ class Notifier:
             return False
 
         endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendMessage"
-        html_text = text.replace("🎥", "<b>🎥").replace("\n📺", "</b>\n📺")
+        
+        # 簡單處理 HTML 逸碼，避免破壞標籤
+        safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        
+        # 恢復我們想要加粗的部分
+        html_text = safe_text.replace("🎥", "<b>🎥").replace("\n📺", "</b>\n📺")
 
         try:
-            requests.post(
+            resp = requests.post(
                 endpoint,
                 json={
                     "chat_id": chat_id,
@@ -89,9 +94,15 @@ class Notifier:
                 },
                 timeout=15,
             )
+            if resp.status_code != 200:
+                print(f"❌ Telegram 推播失敗: {resp.status_code} {resp.text}")
+                # 如果是 HTML 解析錯誤，嘗試以純文字重發
+                if "can't parse entities" in resp.text:
+                    requests.post(endpoint, json={"chat_id": chat_id, "text": text}, timeout=15)
+                return False
             return True
         except Exception as e:
-            print(f"❌ Telegram 推播失敗: {e}")
+            print(f"❌ Telegram 推播異常: {e}")
             return False
 
     @staticmethod

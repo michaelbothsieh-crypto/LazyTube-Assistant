@@ -13,12 +13,9 @@ import asyncio
 from api.utils.github_dispatch import dispatch_nlm_workflow, dispatch_artifact_workflow
 from api.utils.telegram import send_telegram_message
 from api.utils.help_text import build_help_text
-from api.utils.prompt_manager import get_optimized_prompt
+from api.utils.prompt_manager import get_optimized_prompt, get_nlm_prompt
 
 logger = logging.getLogger(__name__)
-
-# 預設 Prompt（若用戶未提供且非簡報任務）
-DEFAULT_NLM_PROMPT = "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
 
 # URL 長度上限 & Prompt 長度上限
 _MAX_URL_LEN = 2048
@@ -168,7 +165,7 @@ async def _handle_nlm(chat_id: str, text: str):
         await send_telegram_message(chat_id, url_err)
         return
 
-    custom_prompt = parts[2] if len(parts) >= 3 else DEFAULT_NLM_PROMPT
+    custom_prompt = get_nlm_prompt(parts[2] if len(parts) >= 3 else "")
     if len(custom_prompt) > _MAX_PROMPT_LEN:
         custom_prompt = custom_prompt[:_MAX_PROMPT_LEN]
 
@@ -310,7 +307,7 @@ async def _handle_pic(chat_id: str, text: str):
     if len(parts) < 2:
         await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/pic &lt;url&gt; [自訂Prompt]</code>")
         return
-    url, prompt = parts[1], (parts[2] if len(parts) >= 3 else "")
+    url, prompt = parts[1], get_nlm_prompt(parts[2] if len(parts) >= 3 else "")
 
     url_err = _validate_url(url)
     if url_err:
@@ -335,7 +332,7 @@ async def _handle_note(chat_id: str, text: str):
     if len(parts) < 2:
         await send_telegram_message(chat_id, "❌ <b>格式錯誤</b>\n使用方法：<code>/note &lt;url&gt; [自訂Prompt]</code>")
         return
-    url, prompt = parts[1], (parts[2] if len(parts) >= 3 else "")
+    url, prompt = parts[1], get_nlm_prompt(parts[2] if len(parts) >= 3 else "")
 
     url_err = _validate_url(url)
     if url_err:
@@ -391,12 +388,12 @@ async def _handle_sub(chat_id: str, text: str):
             if 0 <= hour <= 23:
                 # 自動對齊到最近的有效時段
                 preferred_time = SubscriptionViewModel.snap_preferred_time(hour)
-                custom_prompt = " ".join(parts[2:-1])
+                custom_prompt = get_nlm_prompt(" ".join(parts[2:-1]))
             else:
                 await send_telegram_message(chat_id, "❌ <b>時間錯誤</b>\n小時請輸入 0 到 23 之間的數字。")
                 return
         else:
-            custom_prompt = " ".join(parts[2:])
+            custom_prompt = get_nlm_prompt(" ".join(parts[2:]))
 
     # 先從 Blob 下載訂閱清單
     await StateManager.sync_from_blob("subscriptions.json")
@@ -555,12 +552,13 @@ async def _handle_batch(chat_id: str, text: str):
         url_list = url_list[:20]
 
     # 3. 剩下的內容就是 Prompt
-    custom_prompt = content
+    custom_prompt_raw = content
     for u in url_list:
-        custom_prompt = custom_prompt.replace(u, "")
+        custom_prompt_raw = custom_prompt_raw.replace(u, "")
     
     # 清理 Prompt 中殘留的逗號、括號與空格
-    custom_prompt = re.sub(r'^[ ,，()（）]+', '', custom_prompt).strip()
+    custom_prompt_raw = re.sub(r'^[ ,，()（）]+', '', custom_prompt_raw).strip()
+    custom_prompt = get_nlm_prompt(custom_prompt_raw)
 
     # 4. 立即回應「處理中」
     resp_data = await send_telegram_message(

@@ -15,6 +15,7 @@ if project_root not in sys.path:
 
 from api.handlers.tg_webhook import handle_telegram_update
 from api.utils.help_text import build_help_text
+from api.utils.prompt_manager import get_nlm_prompt
 from app.notifier import Notifier
 
 
@@ -70,7 +71,8 @@ async def external_dispatch(
     try:
         data = await request.json()
         url = data.get("url")
-        prompt = data.get("prompt", DEFAULT_EXTERNAL_PROMPT)
+        prompt_raw = data.get("prompt", "")
+        prompt = get_nlm_prompt(prompt_raw)
         chat_id = data.get("chat_id")
         command = str(data.get("command", "nlm")).strip().lower()
 

@@ -4,6 +4,7 @@ import re
 import json
 import os
 import time
+from api.utils.prompt_manager import get_nlm_prompt
 
 
 class NotebookService:
@@ -140,8 +141,7 @@ class NotebookService:
             print(f"📝 正在產出整合摘要 (成功數: {success_count})...")
             
             # 使用與 /nlm 相同的預設 Prompt
-            default_prompt = "請用繁體中文列出這部影片或這個來源的 5 個核心重點，並在最後加上一句話的總結。"
-            user_intent = custom_prompt or default_prompt
+            user_intent = get_nlm_prompt(custom_prompt)
             
             # 格式強制指令僅作為輔助後綴，不覆蓋使用者意圖
             format_rules = (
@@ -189,7 +189,7 @@ class NotebookService:
                 return msg
 
             print("📝 正在產出摘要...")
-            prompt = custom_prompt or "請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題"
+            prompt = get_nlm_prompt(custom_prompt)
             res = self.run_nlm("query", "notebook", nb_id, prompt)
 
             if res.returncode == 0:
@@ -198,6 +198,13 @@ class NotebookService:
                     summary = data.get("value", {}).get("answer", res.stdout)
                 except Exception:
                     summary = res.stdout.strip()
+                
+                # 強力過濾：移除所有被 ** 包裹的區塊 (通常是模型自帶的標題或思考過程)
+                summary = re.sub(r'\*\*.*?\*\*', '', summary).strip()
+                
+                # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
+                if summary and len(summary) > 20 and not re.search(r'[\u4e00-\u9fa5]', summary) and ("I am" in summary or "distilling" in summary):
+                    summary = "❌ AI 回傳了無效的思考過程而非內容。請嘗試更換 Prompt。"
         finally:
             if nb_id:
                 print(f"🧹 正在刪除暫存筆記本: {nb_id}...")
@@ -236,7 +243,7 @@ class NotebookService:
                     "--confirm"
                 ]
                 if custom_prompt:
-                    cmd_args.extend(["--focus", custom_prompt])
+                    cmd_args.extend(["--focus", get_nlm_prompt(custom_prompt)])
             elif artifact_type == "infographic":
                 lang = kwargs.get("language", "zh-TW")
                 orientation = kwargs.get("orientation", "portrait")
@@ -250,7 +257,7 @@ class NotebookService:
                     "--confirm"
                 ]
                 if custom_prompt:
-                    cmd_args.extend(["--focus", custom_prompt])
+                    cmd_args.extend(["--focus", get_nlm_prompt(custom_prompt)])
             elif artifact_type == "report":
                 lang = kwargs.get("language", "zh-TW")
                 cmd_args = [
@@ -260,7 +267,7 @@ class NotebookService:
                     "--json",
                     "--confirm"
                 ]
-                cmd_args.extend(["--prompt", custom_prompt or "請用繁體中文提供詳細的內容摘要報告"])
+                cmd_args.extend(["--prompt", get_nlm_prompt(custom_prompt or "請用繁體中文提供詳細的內容摘要報告")])
 
             create_res = self.run_nlm(*cmd_args)
 
