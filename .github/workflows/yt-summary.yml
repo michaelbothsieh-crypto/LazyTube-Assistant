@@ -48,6 +48,16 @@ jobs:
         run: |
           python jobs/sync_helper.py restore
 
+      - name: Patch Prompt for PoE (Surgical Edit)
+        run: |
+          # 潤飾後且包含遊戲名稱的客製化 Prompt
+          CUSTOM_PROMPT="請針對這部《流亡黯道 (Path of Exile)》影片內容進行摘要，詳細列出流派機制、地圖策略與關鍵裝備，並指出影片獨特之處。請以繁體中文回覆，內容精煉且不超過 100 字。"
+          
+          # 使用 sed 動態修改程式碼中的預設 Prompt
+          sed -i "s/請用繁體中文列出這部影片的 3 到 5 個核心重點，並加上影片標題/${CUSTOM_PROMPT}/g" app/notebook.py
+          
+          echo "✅ 已針對 PoE 自動任務套用客製化 Prompt"
+
       - name: Run summarizer
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
