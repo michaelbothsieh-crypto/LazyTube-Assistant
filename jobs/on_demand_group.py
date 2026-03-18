@@ -26,7 +26,7 @@ def main():
         print("使用方法: python on_demand_group.py <chat_id>")
         sys.exit(1)
 
-    target_chat_id = sys.argv[1]
+    target_chat_id = str(sys.argv[1])
 
     AuthManager.deploy_credentials()
 
@@ -34,14 +34,16 @@ def main():
     nb = NotebookService()
     sub_vm = SubscriptionViewModel()
 
+    # 從雲端同步最新的訂閱狀態
     all_subs = sub_vm.get_all_active_subscriptions()
 
     if target_chat_id not in all_subs:
         print(f"❌ 找不到群組 {target_chat_id} 的訂閱設定")
-        print(f"📊 目前資料庫中包含：{[get_h(k) for k in all_subs.keys()]}")
+        # 列出前 8 碼以供除錯
+        print(f"📊 目前資料庫中包含：{[k[:8] for k in all_subs.keys()]}")
         return
 
-    print(f"🎯 雜湊匹配成功！執行任務中... (隱私保護：ID 已遮蔽)")
+    print(f"🎯 群組匹配成功！執行任務中... (ID: {target_chat_id[:8]}...)")
     group_subs = all_subs.get(target_chat_id, [])
 
     now_tw = datetime.now(timezone(timedelta(hours=8)))
@@ -80,6 +82,7 @@ def main():
             if not pid:
                 continue
 
+            # 首次執行只取 1 支影片，一般執行最多取 10 支
             items = yt._get_playlist_items(pid, limit=1 if is_first_run else 10)
 
             for item in items:
@@ -96,9 +99,12 @@ def main():
                 if summary:
                     Notifier.send_summary(item['snippet']['title'], f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=target_chat_id)
                     StateManager.add_processed_id(vid_id)
+                
+                # 首次執行只處理一支最新的
                 if is_first_run:
                     break
 
+            # 成功處理後，將 is_first_run 設為 False 並更新 last_check
             sub_vm.update_last_check(target_chat_id, channel_id, datetime.now(timezone.utc))
 
             # 清理訂閱成功訊息 (保持群組乾淨)

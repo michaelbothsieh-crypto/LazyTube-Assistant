@@ -81,41 +81,54 @@ def main():
         up('last_check.txt', 'last_check.txt')
 
         # 訂閱清單採用「下載-合併-上傳」策略
-        # 注意: dl() 會覆蓋 local file，所以先將 local 資料讀進記憶體
         local_file = 'subscriptions.json'
         if os.path.exists(local_file):
-            print("🔄 Merging last_check updates into cloud data...")
+            print("🔄 Merging subscription updates into cloud data...")
             try:
                 with open(local_file, 'r') as f: local_subs = json.load(f)
             except json.JSONDecodeError as e:
                 print(f"❌ 本地 {local_file} 解析失敗: {e}")
                 return
 
-            # dl() 下載雲端版本並覆蓋 local_file，但 local_subs 已在記憶體中
             if dl('subscriptions.json', '{}'):
                 try:
                     with open(local_file, 'r') as f: cloud_subs = json.load(f)
                 except json.JSONDecodeError as e:
                     print(f"❌ 雲端資料解析失敗: {e}")
                     # 雲端損壞則直接上傳本地版本
-                    with open(local_file, 'w') as f: json.dump(local_subs, f)
                     up('subscriptions.json', local_file)
                     return
 
-                # 將 local 的 last_check 與 is_first_run 更新到 cloud 中
-                for cid, group in local_subs.items():
-                    if cid in cloud_subs:
-                        for l_sub in group:
-                            for c_sub in cloud_subs[cid]:
-                                if l_sub['channel_id'] == c_sub['channel_id']:
-                                    c_sub['last_check'] = l_sub['last_check']
-                                    c_sub['is_first_run'] = l_sub.get('is_first_run', False)
-                                    if 'signup_msg_id' in l_sub:
-                                        c_sub['signup_msg_id'] = l_sub['signup_msg_id']
+                # --- 改進的合併邏輯 ---
+                # 1. 確保本地所有群組都在雲端中存在
+                for cid, l_group in local_subs.items():
+                    if cid not in cloud_subs:
+                        cloud_subs[cid] = l_group
+                        continue
+                    
+                    # 2. 針對群組內的每個頻道進行比對與更新
+                    c_group = cloud_subs[cid]
+                    for l_sub in l_group:
+                        found = False
+                        for c_sub in c_group:
+                            if l_sub['channel_id'] == c_sub['channel_id']:
+                                # 更新狀態資訊
+                                c_sub['last_check'] = l_sub['last_check']
+                                c_sub['is_first_run'] = l_sub.get('is_first_run', False)
+                                if 'signup_msg_id' in l_sub:
+                                    c_sub['signup_msg_id'] = l_sub['signup_msg_id']
+                                found = True
+                                break
+                        
+                        # 3. 如果是新加入的頻道，則新增至雲端群組
+                        if not found:
+                            c_group.append(l_sub)
 
                 # 寫回 local 並上傳
-                with open(local_file, 'w') as f: json.dump(cloud_subs, f)
+                with open(local_file, 'w', encoding='utf-8') as f:
+                    json.dump(cloud_subs, f, ensure_ascii=False, indent=2)
                 up('subscriptions.json', local_file)
+
 
 if __name__ == "__main__":
     main()
