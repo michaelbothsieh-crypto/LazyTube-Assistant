@@ -77,11 +77,10 @@ async def handle_telegram_update(update: dict):
         await _handle_start(chat_id)
 
     elif text.startswith("/my_id"):
-        await send_telegram_message(
-            chat_id, 
-            f"👤 <b>使用者 ID</b>：<code>{user_id}</code>\n"
-            f"💬 <b>對話室 ID</b>：<code>{chat_id}</code>"
-        )
+        if chat_id == user_id:
+            await send_telegram_message(chat_id, f"👤 <b>您的個人 ID</b>：<code>{user_id}</code>")
+        else:
+            await send_telegram_message(chat_id, f"💬 <b>此群組的 ID</b>：<code>{chat_id}</code>")
 
     elif text.startswith("/help"):
         await _handle_help(chat_id)
