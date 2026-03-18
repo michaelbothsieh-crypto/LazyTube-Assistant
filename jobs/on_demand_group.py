@@ -49,7 +49,9 @@ def main():
     now_tw = datetime.now(timezone(timedelta(hours=8)))
     today_str = now_tw.strftime("%Y-%m-%d")
     current_time_str = now_tw.strftime("%H:%M")
-    processed_ids = StateManager.get_processed_ids()
+    
+    # 注意：不再使用全域 processed_ids 攔截，改由各訂閱的 last_check 控管
+    # 這樣不同群組訂閱相同頻道時，才能各自收到摘要。
 
     for sub in group_subs:
         channel_id = sub["channel_id"]
@@ -87,17 +89,19 @@ def main():
 
             for item in items:
                 pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                if not is_first_run and last_check_str and pub_time <= datetime.fromisoformat(last_check_str):
-                    continue
+                
+                # 只有在非首次執行時，才檢查發布時間是否晚於上次檢查時間
+                if not is_first_run and last_check_str:
+                    if pub_time <= datetime.fromisoformat(last_check_str):
+                        continue
 
                 vid_id = item["contentDetails"]["videoId"]
-                if vid_id in processed_ids:
-                    continue
-
-                print(f"🎬 處理新影片：{item['snippet']['title']}")
+                print(f"🎬 處理新影片：{item['snippet']['title']} (ID: {vid_id})")
+                
                 summary = nb.process_video(f"https://www.youtube.com/watch?v={vid_id}", item['snippet']['title'], custom_prompt=sub.get("custom_prompt"))
                 if summary:
                     Notifier.send_summary(item['snippet']['title'], f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=target_chat_id)
+                    # 雖然群組任務不攔截，但仍記錄至全域清單供其他單次任務參考
                     StateManager.add_processed_id(vid_id)
                 
                 # 首次執行只處理一支最新的
@@ -106,6 +110,7 @@ def main():
 
             # 成功處理後，將 is_first_run 設為 False 並更新 last_check
             sub_vm.update_last_check(target_chat_id, channel_id, datetime.now(timezone.utc))
+
 
             # 清理訂閱成功訊息 (保持群組乾淨)
             signup_msg_id = sub.get("signup_msg_id")
