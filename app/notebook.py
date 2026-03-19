@@ -4,6 +4,8 @@ import re
 import json
 import os
 import time
+import requests
+import urllib.parse
 from api.utils.prompt_manager import get_nlm_prompt
 
 
@@ -42,7 +44,7 @@ class NotebookService:
         /// 回傳 True/False
         """
         wait_flag = [] # 拿掉內建的 --wait，統一由外部手動 Polling 以免 30s timeout
-        hard_domains = ["forum.gamer.com.tw", "ptt.cc", "bilibili.com", "x.com", "twitter.com"]
+        hard_domains = ["forum.gamer.com.tw", "ptt.cc", "bilibili.com", "x.com", "twitter.com", "patreon.com"]
         is_hard_domain = any(domain in url for domain in hard_domains)
         success = False
 
@@ -53,16 +55,17 @@ class NotebookService:
 
         # 策略 2: Jina Reader
         if not success:
-            proxy_url = f"https://r.jina.ai/{url}"
+            encoded_url = urllib.parse.quote(url, safe="")
+            proxy_url = f"https://r.jina.ai/{encoded_url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url, *wait_flag)
             if res_add.returncode == 0: success = True
 
         # 策略 3: Cloudflare Proxy
         if not success:
-            import requests
             cf_worker_url = "https://lazypipe-worker.hsieh130.workers.dev/"
             try:
-                cf_res = requests.get(f"{cf_worker_url}?url={url}", timeout=30)
+                encoded_url = urllib.parse.quote(url, safe="")
+                cf_res = requests.get(f"{cf_worker_url}?url={encoded_url}", timeout=30)
                 cf_data = cf_res.json()
                 if cf_data.get("success") and cf_data.get("content"):
                     tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
@@ -74,7 +77,8 @@ class NotebookService:
 
         # 策略 4: Google Translate Proxy
         if not success:
-            gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={url}"
+            encoded_url = urllib.parse.quote(url, safe="")
+            gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={encoded_url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url, *wait_flag)
             if res_add.returncode == 0: success = True
             
@@ -159,8 +163,10 @@ class NotebookService:
                 except: pass
             
             # 強力過濾：移除所有被 ** 包裹的區塊 (通常是模型自帶的標題或思考過程)
-            # 範例: **Summarizing...** -> 移除
-            summary = re.sub(r'\*\*.*?\*\*', '', summary).strip()
+            # 先移除常見的 Meta-talk 區塊
+            summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程|摘要中|分析中)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
+            # 再將剩餘的 **文字** 轉為 文字 (保留內容但移除標記，符合使用者禁用 Markdown 加粗的要求)
+            summary = re.sub(r'\*\*(.*?)\*\*', r'\1', summary).strip()
             
             # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
             if len(summary) > 20 and not re.search(r'[\u4e00-\u9fa5]', summary) and ("I am" in summary or "distilling" in summary):
@@ -200,7 +206,10 @@ class NotebookService:
                     summary = res.stdout.strip()
                 
                 # 強力過濾：移除所有被 ** 包裹的區塊 (通常是模型自帶的標題或思考過程)
-                summary = re.sub(r'\*\*.*?\*\*', '', summary).strip()
+                # 先移除常見的 Meta-talk 區塊
+                summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程|摘要中|分析中)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
+                # 再將剩餘的 **文字** 轉為 文字 (保留內容但移除標記，符合使用者禁用 Markdown 加粗的要求)
+                summary = re.sub(r'\*\*(.*?)\*\*', r'\1', summary).strip()
                 
                 # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
                 if summary and len(summary) > 20 and not re.search(r'[\u4e00-\u9fa5]', summary) and ("I am" in summary or "distilling" in summary):
