@@ -82,6 +82,8 @@ class NotebookService:
                 content = cf_data.get("content", "")
                 if cf_data.get("success") and content:
                     print(f"✅ CF Worker 抓取成功，內容長度: {len(content)}")
+                    print(f"📄 內容預覽 (前 500 字): {content[:500]}...")
+                    
                     tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
                     with open(tmp_txt, "w", encoding="utf-8") as f:
                         f.write(f"標題: {cf_data.get('title', '未知')}\n\n{content}")
@@ -89,6 +91,13 @@ class NotebookService:
                     if res_add.returncode == 0: 
                         print("✅ 策略 3 成功")
                         success = True
+                        
+                        # 額外嘗試：如果內容中有 YouTube 連結，一併加入來源增加上下文
+                        yt_match = re.search(r'(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[a-zA-Z0-9_-]+)', content)
+                        if yt_match:
+                            yt_url = yt_match.group(1)
+                            print(f"🔗 偵測到內嵌影片: {yt_url}，嘗試加入來源...")
+                            self.run_nlm("source", "add", nb_id, "--url", yt_url, *wait_flag)
                 else:
                     print(f"⚠️ CF Worker 回傳失敗: {cf_data.get('error', '未知錯誤')}")
             except Exception as e: 
@@ -130,12 +139,22 @@ class NotebookService:
                         try:
                             sources = json.loads(status_res.stdout)
                             if isinstance(sources, list) and len(sources) > 0:
-                                is_ready = True
-                                break
+                                all_done = True
+                                for s in sources:
+                                    s_status = str(s.get("status", "")).lower()
+                                    # 檢查常見的成功狀態字串或代碼
+                                    if s_status not in ["completed", "success", "2"]:
+                                        all_done = False
+                                        break
+                                if all_done:
+                                    is_ready = True
+                                    break
                         except:
                             pass
-                    time.sleep(3)
-                if not is_ready:
+                    time.sleep(5)
+                if is_ready:
+                    print("✅ 來源內容解析完成。")
+                else:
                     print("⚠️ 來源內容解析超時，嘗試繼續產出流程...")
             return nb_id, url
         else:
@@ -208,7 +227,9 @@ class NotebookService:
         summary = None
 
         try:
-            nb_id, effective_url = self._prepare_notebook(url, prefix="YT", wait=False)
+            # 修正：針對 Patreon 等長文內容，強制等待解析完成 (wait=True)
+            wait_needed = "patreon.com" in url or "batch" in title.lower()
+            nb_id, effective_url = self._prepare_notebook(url, prefix="YT", wait=wait_needed)
             if nb_id is None:
                 return None
             if effective_url is None:
