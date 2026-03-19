@@ -6,6 +6,7 @@ import os
 import time
 import requests
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from api.utils.prompt_manager import get_nlm_prompt
 
 
@@ -16,9 +17,9 @@ class NotebookService:
     """
 
     @staticmethod
-    def run_nlm(*args, verbose=True):
+    def run_nlm(*args, verbose=True, max_retries=3):
         """
-        /// 執行 nlm 指令並確保路徑環境正確
+        /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
         """
         home = os.path.expanduser("~")
         config_dir = os.path.join(home, ".notebooklm-mcp-cli")
@@ -26,17 +27,70 @@ class NotebookService:
         env["NLM_CONFIG_DIR"] = config_dir
 
         cmd = ["nlm", *args]
-        res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        
+        last_res = None
+        for attempt in range(max_retries):
+            res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+            last_res = res
+            
+            if res.returncode == 0:
+                return res
+            
+            # 檢查是否為可重試的錯誤 (例如 429, Timeout 或特定頻繁失敗字串)
+            error_msg = (res.stderr or res.stdout or "").lower()
+            retryable = any(k in error_msg for k in ["429", "too many requests", "timeout", "busy", "limit"])
+            
+            if retryable and attempt < max_retries - 1:
+                wait_time = (2 ** attempt) + 1
+                if verbose:
+                    print(f"⚠️ 指令執行繁忙 (Attempt {attempt+1}/{max_retries}), {wait_time}s 後重試...")
+                time.sleep(wait_time)
+                continue
+            break
 
-        if verbose and res.returncode != 0:
+        if verbose and last_res and last_res.returncode != 0:
             print(f"❌ 指令執行失敗: {' '.join(cmd)}")
-            if res.stderr:
+            if last_res.stderr:
                 print(f"--- 🛑 系統錯誤輸出 (STDERR) ---")
-                print(res.stderr.strip())
-            if res.stdout:
+                print(last_res.stderr.strip())
+            if last_res.stdout:
                 print(f"--- 💡 指令回傳訊息 (STDOUT) ---")
-                print(res.stdout.strip())
-        return res
+                print(last_res.stdout.strip())
+        return last_res
+
+    def _clean_content(self, text):
+        """
+        /// 清理網頁抓取到的雜訊內容，提升 AI 分析精準度
+        """
+        if not text: return ""
+        
+        # 1. 移除常見的網頁導航與政策關鍵字 (Case-insensitive)
+        noise_patterns = [
+            r"Cookie Policy", r"Terms of Service", r"Privacy Policy",
+            r"Subscribe to", r"Follow us on", r"All rights reserved",
+            r"Skip to main content", r"Log in", r"Sign up", r"Copyright ©"
+        ]
+        for p in noise_patterns:
+            text = re.sub(p, "", text, flags=re.IGNORECASE)
+            
+        # 2. 移除連續多個換行與多餘空白，讓文本更緊湊
+        text = re.sub(r'\n\s*\n', '\n\n', text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        
+        # 3. 逐行過濾：移除過短或 URL 佔比過高的無效行 (通常是選單或側邊欄)
+        lines = text.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            line = line.strip()
+            if len(line) < 10: continue # 略過短句
+            
+            # 如果一行內包含 2 個以上 URL 且長度不長，高度懷疑是導覽連結
+            url_count = len(re.findall(r'https?://', line))
+            if url_count >= 2 and len(line) < 150: continue
+            
+            cleaned_lines.append(line)
+            
+        return "\n".join(cleaned_lines)
 
     def _add_source_with_proxy(self, nb_id, url, wait=False):
         """
@@ -75,15 +129,19 @@ class NotebookService:
                 cf_data = cf_res.json()
                 content = cf_data.get("content", "")
                 if cf_data.get("success") and content:
+                    # 進行內容清洗 (優化 #4)
+                    cleaned_content = self._clean_content(content)
+                    print(f"✅ CF Worker 抓取成功 (原始: {len(content)} -> 清洗後: {len(cleaned_content)})")
+
                     tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
                     with open(tmp_txt, "w", encoding="utf-8") as f:
-                        f.write(f"標題: {cf_data.get('title', '未知')}\n\n{content}")
+                        f.write(f"標題: {cf_data.get('title', '未知')}\n\n{cleaned_content}")
                     res_add = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
                     if res_add.returncode == 0: 
                         success = True
 
                         # 額外嘗試：如果內容中有 YouTube 連結，一併加入來源增加上下文
-                        yt_match = re.search(r'(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[a-zA-Z0-9_-]+)', content)
+                        yt_match = re.search(r'(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[a-zA-Z0-9_-]+)', cleaned_content)
                         if yt_match:
                             yt_url = yt_match.group(1)
                             self.run_nlm("source", "add", nb_id, "--url", yt_url, *wait_flag)
@@ -158,13 +216,23 @@ class NotebookService:
             match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
             nb_id = match.group(1) if match else nb_name
             
-            success_count = 0
-            for url in urls:
-                url = url.strip()
-                if not url: continue
-                print(f"🔗 正在批次加入來源: {url}...")
-                if self._add_source_with_proxy(nb_id, url, wait=False):
-                    success_count += 1
+            # 使用並行匯入 (優化 #1)
+            print(f"🔗 正在啟動並行匯入流程 (網址數: {len(urls)})...")
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # 建立任務映射
+                futures = {executor.submit(self._add_source_with_proxy, nb_id, url.strip()): url for url in urls if url.strip()}
+                
+                success_count = 0
+                for future in as_completed(futures):
+                    url = futures[future]
+                    try:
+                        if future.result():
+                            print(f"✅ 匯入成功: {url}")
+                            success_count += 1
+                        else:
+                            print(f"❌ 匯入失敗: {url}")
+                    except Exception as e:
+                        print(f"❌ 匯入過程發生異常 ({url}): {e}")
             
             if success_count == 0:
                 return "❌ 所有網址匯入均失敗。"
