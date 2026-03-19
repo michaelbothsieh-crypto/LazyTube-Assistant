@@ -42,6 +42,7 @@ class NotebookService:
         """
         /// 核心代理匯入邏輯：套用多重代理策略確保成功率
         /// 回傳 True/False
+        """
         # 策略辨識
         wait_flag = [] # 拿掉內建的 --wait，統一由外部手動 Polling 以免 30s timeout
         hard_domains = ["forum.gamer.com.tw", "ptt.cc", "bilibili.com", "x.com", "twitter.com", "patreon.com"]
