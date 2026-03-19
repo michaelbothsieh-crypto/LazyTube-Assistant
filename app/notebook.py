@@ -238,8 +238,9 @@ class NotebookService:
         summary = None
 
         try:
-            # 修正：針對 Patreon 等長文內容，強制等待解析完成 (wait=True)
-            wait_needed = "patreon.com" in url or "batch" in title.lower()
+            is_youtube = "youtube.com" in url or "youtu.be" in url
+            # 修正：除了 YouTube 以外的網頁內容（如 Patreon, 財經新聞），通常需要較長索引時間，強制等待 (wait=True)
+            wait_needed = not is_youtube or "batch" in title.lower()
             nb_id, effective_url = self._prepare_notebook(url, prefix="YT", wait=wait_needed)
             if nb_id is None:
                 return None
@@ -335,7 +336,7 @@ class NotebookService:
             create_res = self.run_nlm(*cmd_args)
 
             if create_res.returncode != 0:
-                print(f"❌ {artifact_type} 生成請求失敗")
+                print(f"❌ {artifact_type} 生成請求失敗: {create_res.stdout} {create_res.stderr}")
                 return None
 
             # 解析生成的 Artifact ID
@@ -350,6 +351,8 @@ class NotebookService:
             except:
                 match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", create_res.stdout)
                 artifact_id = match.group(1) if match else None
+
+            print(f"🆔 取得 Artifact ID: {artifact_id}")
 
             if artifact_id:
                 if artifact_type == "slide_deck":
@@ -383,6 +386,7 @@ class NotebookService:
                                     curr_id = artifact.get("id") or artifact.get("artifact_id")
                                     if curr_id == artifact_id:
                                         status = str(artifact.get("status", "")).lower()
+                                        print(f"📊 目前生成狀態: {status}")
                                         if status in ["completed", "success", "2"]:
                                             is_ready = True
                                         elif status in ["failed", "4"]:
@@ -410,7 +414,7 @@ class NotebookService:
                     target_path = out_path
                     print("✅ 下載成功")
                 else:
-                    print("❌ 檔案下載失敗")
+                    print(f"❌ 檔案下載失敗: {down_res.stdout} {down_res.stderr}")
             else:
                 print("❌ 無法取得 Artifact ID，可能是 API 發生異常")
 
