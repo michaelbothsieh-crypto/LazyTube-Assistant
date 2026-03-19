@@ -169,6 +169,31 @@ class NotebookService:
             if success_count == 0:
                 return "❌ 所有網址匯入均失敗。"
 
+            # 補強：批次處理通常內容較多，強制等待解析完成
+            print(f"⏳ 正在等待 {success_count} 個來源內容解析完成...")
+            start_time = time.time()
+            is_ready = False
+            while time.time() - start_time < 180: # 批次給予較長等待時間 (3分鐘)
+                status_res = self.run_nlm("source", "list", nb_id, "--json", verbose=False)
+                if status_res.returncode == 0:
+                    try:
+                        sources = json.loads(status_res.stdout)
+                        if isinstance(sources, list) and len(sources) > 0:
+                            all_done = True
+                            for s in sources:
+                                s_status = str(s.get("status", "")).lower()
+                                if s_status not in ["completed", "success", "2"]:
+                                    all_done = False
+                                    break
+                            if all_done:
+                                is_ready = True
+                                break
+                    except: pass
+                time.sleep(5)
+            
+            if not is_ready:
+                print("⚠️ 部分來源解析超時，嘗試繼續產出整合摘要...")
+
             print(f"📝 正在產出整合摘要 (成功數: {success_count})...")
             
             # 使用與 /nlm 相同的預設 Prompt
