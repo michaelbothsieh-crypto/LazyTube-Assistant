@@ -54,26 +54,20 @@ class NotebookService:
 
         # 策略 1: 直接連線
         if not is_hard_domain:
-            print(f"嘗試策略 1: 直接連線...")
             res_add = self.run_nlm("source", "add", nb_id, "--url", url, *wait_flag)
             if res_add.returncode == 0: 
-                print("✅ 策略 1 成功")
                 success = True
 
         # 策略 2: Jina Reader
         if not success and not is_js_heavy:
-            print(f"嘗試策略 2: Jina Reader...")
             encoded_url = urllib.parse.quote(url, safe="")
             proxy_url = f"https://r.jina.ai/{encoded_url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url, *wait_flag)
             if res_add.returncode == 0: 
-                print("✅ 策略 2 成功")
                 success = True
-
 
         # 策略 3: Cloudflare Proxy
         if not success:
-            print(f"嘗試策略 3: Cloudflare Proxy (Puppeteer)...")
             cf_worker_url = "https://lazypipe-worker.hsieh130.workers.dev/"
             try:
                 encoded_url = urllib.parse.quote(url, safe="")
@@ -81,37 +75,29 @@ class NotebookService:
                 cf_data = cf_res.json()
                 content = cf_data.get("content", "")
                 if cf_data.get("success") and content:
-                    print(f"✅ CF Worker 抓取成功，內容長度: {len(content)}")
-                    print(f"📄 內容預覽 (前 500 字): {content[:500]}...")
-                    
                     tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
                     with open(tmp_txt, "w", encoding="utf-8") as f:
                         f.write(f"標題: {cf_data.get('title', '未知')}\n\n{content}")
                     res_add = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
                     if res_add.returncode == 0: 
-                        print("✅ 策略 3 成功")
                         success = True
-                        
+
                         # 額外嘗試：如果內容中有 YouTube 連結，一併加入來源增加上下文
                         yt_match = re.search(r'(https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[a-zA-Z0-9_-]+)', content)
                         if yt_match:
                             yt_url = yt_match.group(1)
-                            print(f"🔗 偵測到內嵌影片: {yt_url}，嘗試加入來源...")
                             self.run_nlm("source", "add", nb_id, "--url", yt_url, *wait_flag)
-                else:
-                    print(f"⚠️ CF Worker 回傳失敗: {cf_data.get('error', '未知錯誤')}")
-            except Exception as e: 
-                print(f"❌ 策略 3 發生異常: {e}")
+            except: 
+                pass
 
         # 策略 4: Google Translate Proxy
         if not success:
-            print(f"嘗試策略 4: Google Translate Proxy...")
             encoded_url = urllib.parse.quote(url, safe="")
             gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={encoded_url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url, *wait_flag)
             if res_add.returncode == 0: 
-                print("✅ 策略 4 成功")
                 success = True
+
             
         return success
 
