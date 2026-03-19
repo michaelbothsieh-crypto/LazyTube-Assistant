@@ -300,10 +300,9 @@ class NotebookService:
                 slide_lang = kwargs.get("slide_lang", "zh-TW")
                 cmd_args = [
                     "slides", "create", nb_id,
-                    "--language", slide_lang,
                     "--format", "presenter_slides",
-                    "--length", "short",
-                    "--json",
+                    "--language", slide_lang,
+                    "--length", "medium",
                     "--confirm"
                 ]
                 if custom_prompt:
@@ -326,10 +325,12 @@ class NotebookService:
                 cmd_args = [
                     "report", "create", nb_id,
                     "--language", lang,
-                    "--format", "Create Your Own",
+                    "--format", "Professional Report",
+                    "--outline",
                     "--confirm"
                 ]
-                cmd_args.extend(["--prompt", get_nlm_prompt(custom_prompt or "請用繁體中文提供詳細的內容摘要報告")])
+                report_prompt = custom_prompt or "請提供一份結構嚴謹、包含目錄、核心論點分析及腳註引用的繁體中文報告。"
+                cmd_args.extend(["--prompt", get_nlm_prompt(report_prompt)])
 
             create_res = self.run_nlm(*cmd_args)
 
