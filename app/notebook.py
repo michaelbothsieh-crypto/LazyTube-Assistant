@@ -317,7 +317,6 @@ class NotebookService:
                     "--language", lang,
                     "--orientation", orientation,
                     "--detail", detail,
-                    "--json",
                     "--confirm"
                 ]
                 if custom_prompt:
@@ -328,7 +327,6 @@ class NotebookService:
                     "report", "create", nb_id,
                     "--language", lang,
                     "--format", "Create Your Own",
-                    "--json",
                     "--confirm"
                 ]
                 cmd_args.extend(["--prompt", get_nlm_prompt(custom_prompt or "請用繁體中文提供詳細的內容摘要報告")])
