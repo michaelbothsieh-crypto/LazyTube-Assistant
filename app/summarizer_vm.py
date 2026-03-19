@@ -63,7 +63,7 @@ class SummarizerViewModel:
         
         for video in videos_batch:
             print(f"🎬 處理中：{video['title']}")
-            summary = self.notebook_service.process_video(video["url"], video["title"])
+            summary = self.notebook_service.process_video(video["url"], video["title"], custom_prompt=Config.CUSTOM_PROMPT)
             
             if summary:
                 # 發送通知 (View Layer)

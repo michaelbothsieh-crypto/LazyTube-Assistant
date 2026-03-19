@@ -18,6 +18,7 @@ class Config:
     LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 
     NLM_COOKIE_BASE64 = os.environ.get("NLM_COOKIE_BASE64", "")
+    CUSTOM_PROMPT = os.environ.get("CUSTOM_PROMPT")
 
     # Vercel 環境下只有 /tmp 是可寫的
     _STATE_DIR = "/tmp" if os.environ.get("VERCEL") or os.environ.get("NOW_REGION") else "."
