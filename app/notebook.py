@@ -42,10 +42,13 @@ class NotebookService:
         """
         /// 核心代理匯入邏輯：套用多重代理策略確保成功率
         /// 回傳 True/False
-        """
+        # 策略辨識
         wait_flag = [] # 拿掉內建的 --wait，統一由外部手動 Polling 以免 30s timeout
         hard_domains = ["forum.gamer.com.tw", "ptt.cc", "bilibili.com", "x.com", "twitter.com", "patreon.com"]
+        js_heavy_domains = ["patreon.com", "x.com", "twitter.com"] # 這些網站 Jina 抓不準，強制用 Puppeteer
+
         is_hard_domain = any(domain in url for domain in hard_domains)
+        is_js_heavy = any(domain in url for domain in js_heavy_domains)
         success = False
 
         # 策略 1: 直接連線
@@ -57,7 +60,7 @@ class NotebookService:
                 success = True
 
         # 策略 2: Jina Reader
-        if not success:
+        if not success and not is_js_heavy:
             print(f"嘗試策略 2: Jina Reader...")
             encoded_url = urllib.parse.quote(url, safe="")
             proxy_url = f"https://r.jina.ai/{encoded_url}"
@@ -65,6 +68,7 @@ class NotebookService:
             if res_add.returncode == 0: 
                 print("✅ 策略 2 成功")
                 success = True
+
 
         # 策略 3: Cloudflare Proxy
         if not success:
