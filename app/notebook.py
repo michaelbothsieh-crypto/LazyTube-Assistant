@@ -50,37 +50,54 @@ class NotebookService:
 
         # 策略 1: 直接連線
         if not is_hard_domain:
+            print(f"嘗試策略 1: 直接連線...")
             res_add = self.run_nlm("source", "add", nb_id, "--url", url, *wait_flag)
-            if res_add.returncode == 0: success = True
+            if res_add.returncode == 0: 
+                print("✅ 策略 1 成功")
+                success = True
 
         # 策略 2: Jina Reader
         if not success:
+            print(f"嘗試策略 2: Jina Reader...")
             encoded_url = urllib.parse.quote(url, safe="")
             proxy_url = f"https://r.jina.ai/{encoded_url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", proxy_url, *wait_flag)
-            if res_add.returncode == 0: success = True
+            if res_add.returncode == 0: 
+                print("✅ 策略 2 成功")
+                success = True
 
         # 策略 3: Cloudflare Proxy
         if not success:
+            print(f"嘗試策略 3: Cloudflare Proxy (Puppeteer)...")
             cf_worker_url = "https://lazypipe-worker.hsieh130.workers.dev/"
             try:
                 encoded_url = urllib.parse.quote(url, safe="")
                 cf_res = requests.get(f"{cf_worker_url}?url={encoded_url}", timeout=30)
                 cf_data = cf_res.json()
-                if cf_data.get("success") and cf_data.get("content"):
+                content = cf_data.get("content", "")
+                if cf_data.get("success") and content:
+                    print(f"✅ CF Worker 抓取成功，內容長度: {len(content)}")
                     tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
                     with open(tmp_txt, "w", encoding="utf-8") as f:
-                        f.write(f"標題: {cf_data.get('title', '未知')}\n\n{cf_data.get('content')}")
+                        f.write(f"標題: {cf_data.get('title', '未知')}\n\n{content}")
                     res_add = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
-                    if res_add.returncode == 0: success = True
-            except: pass
+                    if res_add.returncode == 0: 
+                        print("✅ 策略 3 成功")
+                        success = True
+                else:
+                    print(f"⚠️ CF Worker 回傳失敗: {cf_data.get('error', '未知錯誤')}")
+            except Exception as e: 
+                print(f"❌ 策略 3 發生異常: {e}")
 
         # 策略 4: Google Translate Proxy
         if not success:
+            print(f"嘗試策略 4: Google Translate Proxy...")
             encoded_url = urllib.parse.quote(url, safe="")
             gt_url = f"https://translate.google.com/translate?sl=auto&tl=zh-TW&u={encoded_url}"
             res_add = self.run_nlm("source", "add", nb_id, "--url", gt_url, *wait_flag)
-            if res_add.returncode == 0: success = True
+            if res_add.returncode == 0: 
+                print("✅ 策略 4 成功")
+                success = True
             
         return success
 
