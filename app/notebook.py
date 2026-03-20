@@ -15,24 +15,21 @@ class NotebookService:
     /// NotebookLM CLI 封裝模組
     /// 負責與 nlm 指令互動，執行摘要產出與清理
     """
+@staticmethod
+def run_nlm(*args, verbose=True, max_retries=3):
+    """
+    /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
+    """
+    home = os.path.expanduser("~")
+    config_dir = os.path.join(home, ".notebooklm-mcp-cli")
 
-    @staticmethod
-    def run_nlm(*args, verbose=True, max_retries=3):
-        """
-        /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
-        """
-        home = os.path.expanduser("~")
-        config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
-        
-        env = os.environ.copy()
-        # 同時設定新舊版本可能使用的環境變數
-        env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
-        env["NLM_CONFIG_DIR"] = config_dir
-        env["XDG_CONFIG_HOME"] = os.path.join(home, ".config") # 模擬 Linux 標準配置
-        # 額外顯式指定憑證路徑
-        env["NLM_AUTH_JSON"] = os.path.join(config_dir, "profiles", "default", "auth.json")
+    env = os.environ.copy()
+    # 根據 v0.4.6 原始碼 (utils/config.py) 設定
+    env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
+    env["NLM_PROFILE"] = "default"
 
-        cmd = ["nlm", *args]
+    cmd = ["nlm", *args]
+
         
         last_res = None
         for attempt in range(max_retries):
