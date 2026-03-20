@@ -22,16 +22,19 @@ class NotebookService:
         /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
         """
         home = os.path.expanduser("~")
-        config_dir = os.path.join(home, ".notebooklm-mcp-cli")
+        # 遵循 Added Memories：~/.config/notebooklm-mcp-cli
+        config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
 
         env = os.environ.copy()
-        # 根據 v0.4.6 原始碼 (utils/config.py) 設定
+        # 同時設定所有可能使用的路徑環境變數
+        env["NLM_CONFIG_DIR"] = config_dir
         env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
-        env["NLM_PROFILE"] = "default"
+        env["XDG_CONFIG_HOME"] = os.path.join(home, ".config")
 
         cmd = ["nlm", *args]
-        
+
         last_res = None
+
         for attempt in range(max_retries):
             res = subprocess.run(cmd, capture_output=True, text=True, env=env)
             last_res = res

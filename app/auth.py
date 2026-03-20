@@ -13,6 +13,7 @@ class AuthManager:
     def deploy_credentials():
         """
         /// 將 NLM_COOKIE_BASE64 解碼並佈署到 CLI 預期路徑
+        /// 遵循 GEMINI.md 規範：佈署至 ~/.config/notebooklm-mcp-cli
         """
         if not Config.NLM_COOKIE_BASE64:
             return False
@@ -20,38 +21,30 @@ class AuthManager:
         print(f"::add-mask::{Config.NLM_COOKIE_BASE64}")
 
         try:
+            # 直接讀取原始 Base64 資料 (已由 setup_helper.py 合併 metadata 與 cookies)
             full_data_bytes = base64.b64decode("".join(Config.NLM_COOKIE_BASE64.split()))
-            full_json = json.loads(full_data_bytes)
             
-            # 確保 Cookie 格式正確 (String 格式)
-            cookies_raw = full_json.get("cookies", [])
-            if isinstance(cookies_raw, list):
-                cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies_raw if 'name' in c and 'value' in c])
-                full_json["cookies"] = cookie_str
-            
-            # 根據 v0.4.6 原始碼 (utils/config.py) 對齊路徑
             home = os.path.expanduser("~")
-            config_dir = os.path.join(home, ".notebooklm-mcp-cli")
+            # 根據 Added Memories，目標路徑為 ~/.config/notebooklm-mcp-cli
+            config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
             profile_dir = os.path.join(config_dir, "profiles", "default")
             os.makedirs(profile_dir, exist_ok=True)
             
-            # 佈署 auth.json (這是 v0.4.6 最關鍵的檔案)
-            with open(os.path.join(profile_dir, "auth.json"), "w", encoding="utf-8") as f:
-                json.dump(full_json, f)
+            # 1. 佈署核心檔案 auth.json
+            with open(os.path.join(profile_dir, "auth.json"), "wb") as f: 
+                f.write(full_data_bytes)
             
-            # 建立符合 v0.4.6 預期的 profiles.json
+            # 2. 佈署 profiles.json (宣告 default profile)
             profile_config = {
-                "active_profile": "default",
+                "default_profile": "default",
                 "profiles": {
-                    "default": {
-                        "name": "default"
-                    }
+                    "default": {}
                 }
             }
             with open(os.path.join(config_dir, "profiles.json"), "w", encoding="utf-8") as f:
                 json.dump(profile_config, f)
 
-            print(f"✅ 憑證已成功佈署至 {config_dir} (v0.4.6 標準)")
+            print(f"✅ 憑證已嚴格遵循規範佈署至 {config_dir}")
             return True
         except Exception as e:
             print(f"❌ 憑證佈署異常: {e}")
