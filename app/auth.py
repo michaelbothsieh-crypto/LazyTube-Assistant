@@ -23,19 +23,27 @@ class AuthManager:
 
         try:
             full_data_bytes = base64.b64decode("".join(Config.NLM_COOKIE_BASE64.split()))
+            full_json = json.loads(full_data_bytes)
+            
+            # 關鍵修正：轉換 Cookie 格式 (從 JSON List 轉為 String)
+            # 這是因為 nlm v0.4.0+ 的 auth.json 預期 cookies 是分號分隔的字串
+            cookies_raw = full_json.get("cookies", [])
+            if isinstance(cookies_raw, list):
+                # 將 [{name: "...", value: "..."}, ...] 轉為 "name1=value1; name2=value2"
+                cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies_raw if 'name' in c and 'value' in c])
+                full_json["cookies"] = cookie_str
+                print("🍪 已將 Cookie 從 JSON 列表轉換為字串格式")
             
             home = os.path.expanduser("~")
-            # 根據系統記憶對齊路徑
             config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
             profile_dir = os.path.join(config_dir, "profiles", "default")
             os.makedirs(profile_dir, exist_ok=True)
             
-            # 佈署核心檔案：auth.json 在 v0.4.0+ 是合併了 metadata 與 cookies 的 JSON
-            auth_path = os.path.join(profile_dir, "auth.json")
-            with open(auth_path, "wb") as f: 
-                f.write(full_data_bytes)
+            # 佈署核心檔案：auth.json
+            with open(os.path.join(profile_dir, "auth.json"), "w") as f: 
+                json.dump(full_json, f)
             
-            # 建立 profiles.json 導向至 default，並明確宣告 default profile
+            # 建立 profiles.json 導向至 default
             profile_config = {
                 "active_profile": "default",
                 "profiles": {
@@ -44,20 +52,16 @@ class AuthManager:
                     }
                 }
             }
+            with open(os.path.join(config_dir, "profiles.json"), "w") as f:
+                json.dump(profile_config, f)
             
-            # 1. 佈署到 ~/.config/notebooklm-mcp-cli (XDG 標準)
-            config_dir_xdg = os.path.join(home, ".config", "notebooklm-mcp-cli")
-            profile_dir_xdg = os.path.join(config_dir_xdg, "profiles", "default")
-            os.makedirs(profile_dir_xdg, exist_ok=True)
-            with open(os.path.join(profile_dir_xdg, "auth.json"), "wb") as f: f.write(full_data_bytes)
-            with open(os.path.join(config_dir_xdg, "profiles.json"), "w") as f: json.dump(profile_config, f)
-            
-            # 2. 佈署到 ~/.notebooklm-mcp-cli (舊版相容)
-            config_dir_old = os.path.join(home, ".notebooklm-mcp-cli")
-            profile_dir_old = os.path.join(config_dir_old, "profiles", "default")
-            os.makedirs(profile_dir_old, exist_ok=True)
-            with open(os.path.join(profile_dir_old, "auth.json"), "wb") as f: f.write(full_data_bytes)
-            with open(os.path.join(config_dir_old, "profiles.json"), "w") as f: json.dump(profile_config, f)
+            # 同時也同步一份到舊的路徑 ~/.notebooklm-mcp-cli 以防萬一
+            old_config_dir = os.path.join(home, ".notebooklm-mcp-cli")
+            old_profile_dir = os.path.join(old_config_dir, "profiles", "default")
+            os.makedirs(old_profile_dir, exist_ok=True)
+            with open(os.path.join(old_profile_dir, "auth.json"), "w") as f: json.dump(full_json, f)
+            with open(os.path.join(old_config_dir, "profiles.json"), "w") as f:
+                json.dump(profile_config, f)
 
             print(f"✅ 憑證已同步佈署至 XDG 與舊版路徑")
             return True
