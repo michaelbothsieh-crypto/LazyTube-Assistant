@@ -36,9 +36,10 @@ class AuthManager:
                 f.write(full_data_bytes)
             
             # 建立 profiles.json 導向至 default，並明確宣告 default profile
-            # 修正欄位名稱為 active_profile 並補齊 name 屬性 (v0.4.6+ 相容格式)
+            # 使用雙重欄位宣告以相容新舊版本 (v0.4.0 ~ v0.4.6)
             profile_config = {
-                "active_profile": "default", 
+                "active_profile": "default",
+                "default_profile": "default",
                 "profiles": {
                     "default": {"name": "default"}
                 }
@@ -46,13 +47,15 @@ class AuthManager:
             with open(os.path.join(config_dir, "profiles.json"), "w") as f:
                 json.dump(profile_config, f)
             
-            # 同時也同步一份到舊的路徑 ~/.notebooklm-mcp-cli 以防萬一
-            old_config_dir = os.path.join(home, ".notebooklm-mcp-cli")
-            old_profile_dir = os.path.join(old_config_dir, "profiles", "default")
-            os.makedirs(old_profile_dir, exist_ok=True)
-            with open(os.path.join(old_profile_dir, "auth.json"), "wb") as f: f.write(full_data_bytes)
-            with open(os.path.join(old_config_dir, "profiles.json"), "w") as f:
-                json.dump(profile_config, f)
+            # 偵錯：印出佈署後的路徑結構
+            print(f"📂 設定目錄結構診斷:")
+            for root, dirs, files in os.walk(config_dir):
+                level = root.replace(config_dir, '').count(os.sep)
+                indent = ' ' * 4 * level
+                print(f"{indent}{os.path.basename(root)}/")
+                sub_indent = ' ' * 4 * (level + 1)
+                for f in files:
+                    print(f"{sub_indent}{f}")
 
             print(f"✅ 憑證已佈署至 {config_dir}")
             return True
