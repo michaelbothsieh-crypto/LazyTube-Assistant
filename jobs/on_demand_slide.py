@@ -61,7 +61,7 @@ def main():
         detail="detailed"
     )
 
-    if file_path and os.path.exists(file_path):
+    if file_path and not file_path.startswith("❌") and os.path.exists(file_path):
         print(f"📡 正在發送內容至 {chat_id}...")
 
         type_name = {
@@ -82,8 +82,9 @@ def main():
         else:
             print("❌ 發送失敗 (Notifier 回報失敗)")
     else:
-        print(f"❌ {artifact_type} 生成流程失敗，未取得檔案")
-        Notifier.send_error(chat_id, f"{artifact_type} 生成失敗，請稍後再試或確認影片連結是否有效。", url=url)
+        error_msg = file_path if file_path and file_path.startswith("❌") else f"❌ {artifact_type} 生成失敗，請稍後再試或確認影片連結是否有效。"
+        print(f"❌ 流程失敗: {error_msg}")
+        Notifier.send_error(chat_id, error_msg.replace("❌", "").strip(), url=url)
 
     Notifier.delete_pending_message(chat_id, message_id)
 

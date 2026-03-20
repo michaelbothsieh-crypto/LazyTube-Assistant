@@ -66,6 +66,11 @@ class SummarizerViewModel:
             summary = self.notebook_service.process_video(video["url"], video["title"], custom_prompt=Config.CUSTOM_PROMPT)
             
             if summary:
+                if summary.startswith("❌"):
+                    results["failed"] += 1
+                    print(f"⚠️ 略過：{video['title']} (生成失敗: {summary})")
+                    continue
+
                 # 發送通知 (View Layer)
                 Notifier.send_summary(
                     video["title"],
@@ -80,7 +85,7 @@ class SummarizerViewModel:
                 print(f"✅ 完成：{video['title']}")
             else:
                 results["failed"] += 1
-                print(f"⚠️ 略過：{video['title']} (生成失敗)")
+                print(f"⚠️ 略過：{video['title']} (生成失敗: 回傳 None)")
 
         # 4. 更新全域檢查點
         # 即便本輪有失敗，我們也推進檢查點，避免下次重複掃描同樣的失敗影片造成無限迴圈

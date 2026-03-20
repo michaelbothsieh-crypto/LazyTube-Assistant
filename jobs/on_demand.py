@@ -33,12 +33,16 @@ def main():
     summary = nlm.process_video(url, "On-Demand Query", custom_prompt=prompt)
 
     if summary:
-        print(f"📡 正在發送通知至 {chat_id}...")
-        success = Notifier.send_summary("隨選摘要結果", url, "手動觸發", summary, target_chat_id=chat_id)
-        if success:
-            print("✅ 通知發送成功")
+        if summary.startswith("❌"):
+            print(f"❌ 偵測到執行錯誤: {summary}")
+            Notifier.send_error(chat_id, summary.replace("❌", "").strip(), url=url)
+        else:
+            print(f"📡 正在發送通知至 {chat_id}...")
+            success = Notifier.send_summary("隨選摘要結果", url, "手動觸發", summary, target_chat_id=chat_id)
+            if success:
+                print("✅ 通知發送成功")
     else:
-        print("❌ 摘要生成失敗，發送錯誤通知...")
+        print("❌ 摘要生成失敗 (回傳 None)，發送預設錯誤通知...")
         Notifier.send_error(chat_id, "摘要生成失敗，請稍後再試或確認影片連結是否有效。", url=url)
 
     Notifier.delete_pending_message(chat_id, message_id)

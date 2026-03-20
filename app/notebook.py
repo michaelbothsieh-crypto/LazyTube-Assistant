@@ -163,10 +163,27 @@ class NotebookService:
         """
         /// 共用的筆記本準備流程
         """
+        # 1. 預處理 URL (移除 YouTube 的 si, t 參數等雜訊，提高匯入成功率)
+        if "youtube.com" in url or "youtu.be" in url:
+            try:
+                parsed = urllib.parse.urlparse(url)
+                params = urllib.parse.parse_qs(parsed.query)
+                # 移除特定雜訊參數
+                params.pop('si', None)
+                params.pop('t', None)
+                # 重新組合
+                new_query = urllib.parse.urlencode(params, doseq=True)
+                url = urllib.parse.urlunparse(parsed._replace(query=new_query))
+                print(f"🧹 URL 已清理: {url}")
+            except Exception as e:
+                print(f"⚠️ URL 清理失敗: {e}")
+
         nb_name = f"{prefix}_{uuid.uuid4().hex[:4].upper()}"
         print(f"📁 正在建立筆記本: {nb_name}...")
         res = self.run_nlm("notebook", "create", nb_name)
-        if res.returncode != 0: return None, None
+        if res.returncode != 0:
+            error_msg = res.stderr or res.stdout or "未知錯誤"
+            return None, f"❌ 建立筆記本失敗: {error_msg}"
         
         match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
         nb_id = match.group(1) if match else nb_name
@@ -213,6 +230,9 @@ class NotebookService:
         try:
             nb_name = f"BATCH_{uuid.uuid4().hex[:4].upper()}"
             res = self.run_nlm("notebook", "create", nb_name)
+            if res.returncode != 0:
+                return f"❌ 建立批次筆記本失敗: {res.stderr or res.stdout or '未知錯誤'}"
+
             match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
             nb_id = match.group(1) if match else nb_name
             
@@ -275,17 +295,19 @@ class NotebookService:
             
             res = self.run_nlm("query", "notebook", nb_id, final_prompt)
             
+            if res.returncode != 0:
+                return f"❌ 批次摘要產出失敗: {res.stderr or res.stdout or '未知錯誤'}"
+
             summary = res.stdout.strip()
-            if res.returncode == 0:
-                try:
-                    data = json.loads(res.stdout)
-                    summary = data.get("value", {}).get("answer", res.stdout)
-                except: pass
+            try:
+                data = json.loads(res.stdout)
+                summary = data.get("value", {}).get("answer", res.stdout)
+            except: pass
             
             # 強力過濾：移除所有被 ** 包裹的區塊 (通常是模型自帶的標題或思考過程)
             # 先移除常見的 Meta-talk 區塊
             summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程|摘要中|分析中)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
-            # 再將剩餘的 **文字** 轉為 文字 (保留內容但移除標記，符合使用者禁用 Markdown 加粗的要求)
+            # 再將剩餘的 **文字** 轉為 文字 (保留內容)
             summary = re.sub(r'\*\*(.*?)\*\*', r'\1', summary).strip()
             
             # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
@@ -310,8 +332,11 @@ class NotebookService:
             # 修正：除了 YouTube 以外的網頁內容（如 Patreon, 財經新聞），通常需要較長索引時間，強制等待 (wait=True)
             wait_needed = not is_youtube or "batch" in title.lower()
             nb_id, effective_url = self._prepare_notebook(url, prefix="YT", wait=wait_needed)
+            
+            # 如果 nb_id 是 None，代表筆記本建立就失敗了 (effective_url 在這種情況下會是錯誤訊息)
             if nb_id is None:
-                return None
+                return effective_url
+                
             if effective_url is None:
                 msg = "❌ 所有代理嘗試均失敗，無法讀取網址內容。這通常是因為來源網站阻擋了自動化抓取，建議嘗試手動將網頁存為 PDF 後上傳。"
                 print(msg)
@@ -336,7 +361,9 @@ class NotebookService:
                 
                 # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
                 if summary and len(summary) > 20 and not re.search(r'[\u4e00-\u9fa5]', summary) and ("I am" in summary or "distilling" in summary):
-                    summary = "❌ AI 回傳了無效的思考過程而非內容。請嘗試更換 Prompt。"
+                    summary = "❌ AI 回傳了無效的思考過程而非內容。請嘗試更換 Prompt 或檢查來源內容。"
+            else:
+                summary = f"❌ 摘要產出失敗: {res.stderr or res.stdout or '未知錯誤'}"
         finally:
             if nb_id:
                 print(f"🧹 正在刪除暫存筆記本: {nb_id}...")
@@ -356,10 +383,9 @@ class NotebookService:
         try:
             nb_id, effective_url = self._prepare_notebook(url, prefix=prefix, wait=True)
             if nb_id is None:
-                return None
+                return effective_url # 這邊 effective_url 已經是包含 ❌ 的錯誤訊息
             if effective_url is None:
-                print("❌ 所有代理嘗試均失敗，無法讀取網址內容，無法生成 Artifact。")
-                return None
+                return "❌ 所有代理嘗試均失敗，無法讀取網址內容，無法生成內容。建議嘗試手動將網頁存為 PDF 後上傳。"
 
             print(f"🎨 正在請求生成 {artifact_type}...")
 
@@ -403,8 +429,7 @@ class NotebookService:
             create_res = self.run_nlm(*cmd_args)
 
             if create_res.returncode != 0:
-                print(f"❌ {artifact_type} 生成請求失敗: {create_res.stdout} {create_res.stderr}")
-                return None
+                return f"❌ {artifact_type} 生成請求失敗: {create_res.stderr or create_res.stdout or '未知錯誤'}"
 
             # 解析生成的 Artifact ID
             artifact_id = None
@@ -457,8 +482,7 @@ class NotebookService:
                                         if status in ["completed", "success", "2"]:
                                             is_ready = True
                                         elif status in ["failed", "4"]:
-                                            print(f"❌ {artifact_type} 生成失敗 (模型遭拒或建立失敗)")
-                                            return None
+                                            return f"❌ {artifact_type} 生成失敗 (模型遭拒或建立失敗)"
                                         break
                         except:
                             pass
@@ -468,8 +492,7 @@ class NotebookService:
                     time.sleep(10)
                 
                 if not is_ready:
-                    print(f"⏰ {artifact_type} 生成超時 (超過 5 分鐘)")
-                    return None
+                    return f"❌ {artifact_type} 生成超時 (超過 5 分鐘)"
 
                 print(f"📥 正在下載檔案 ({ext}): {out_path}...")
                 down_args = ["download", subcmd, nb_id, "--id", artifact_id, "--output", out_path]
@@ -481,9 +504,9 @@ class NotebookService:
                     target_path = out_path
                     print("✅ 下載成功")
                 else:
-                    print(f"❌ 檔案下載失敗: {down_res.stdout} {down_res.stderr}")
+                    return f"❌ 檔案下載失敗: {down_res.stderr or down_res.stdout or '未知錯誤'}"
             else:
-                print("❌ 無法取得 Artifact ID，可能是 API 發生異常")
+                return "❌ 無法取得 Artifact ID，可能是 API 發生異常"
 
         finally:
             if nb_id:
