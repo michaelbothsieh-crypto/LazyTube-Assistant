@@ -33,7 +33,7 @@ class AuthManager:
                 full_json["cookies"] = cookie_str
                 print(f"🍪 已將 {len(cookies_raw)} 個 Cookie 轉換為字串格式")
             
-            home = os.expanduser("~")
+            home = os.path.expanduser("~")
             config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
             profile_dir = os.path.join(config_dir, "profiles", "default")
             os.makedirs(profile_dir, exist_ok=True)
