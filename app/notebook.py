@@ -30,9 +30,11 @@ class NotebookService:
         env["NLM_CONFIG_DIR"] = config_dir
         env["NLM_CONFIG_PATH"] = config_dir
         env["NLM_PROFILE"] = "default"
+        env["NLM_CONFIG_PROFILE"] = "default"
         env["XDG_CONFIG_HOME"] = os.path.join(home, ".config") # 模擬 Linux 標準配置
 
-        cmd = ["nlm", *args]
+        # 顯式指定 profile 增加穩定性
+        cmd = ["nlm", "--profile", "default", *args]
         
         last_res = None
         for attempt in range(max_retries):

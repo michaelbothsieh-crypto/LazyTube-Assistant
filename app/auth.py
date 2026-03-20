@@ -36,7 +36,13 @@ class AuthManager:
                 f.write(full_data_bytes)
             
             # 建立 profiles.json 導向至 default，並明確宣告 default profile
-            profile_config = {"default_profile": "default", "profiles": {"default": {}}}
+            # 修正欄位名稱為 active_profile 並補齊 name 屬性 (v0.4.6+ 相容格式)
+            profile_config = {
+                "active_profile": "default", 
+                "profiles": {
+                    "default": {"name": "default"}
+                }
+            }
             with open(os.path.join(config_dir, "profiles.json"), "w") as f:
                 json.dump(profile_config, f)
             
