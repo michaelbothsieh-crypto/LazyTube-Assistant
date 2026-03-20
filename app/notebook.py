@@ -29,6 +29,8 @@ class NotebookService:
         env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
         env["NLM_CONFIG_DIR"] = config_dir
         env["XDG_CONFIG_HOME"] = os.path.join(home, ".config") # 模擬 Linux 標準配置
+        # 額外顯式指定憑證路徑
+        env["NLM_AUTH_JSON"] = os.path.join(config_dir, "profiles", "default", "auth.json")
 
         cmd = ["nlm", *args]
         
