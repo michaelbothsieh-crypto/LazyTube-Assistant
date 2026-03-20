@@ -36,26 +36,32 @@ class AuthManager:
                 f.write(full_data_bytes)
             
             # 建立 profiles.json 導向至 default，並明確宣告 default profile
-            # 使用雙重欄位宣告以相容新舊版本 (v0.4.0 ~ v0.4.6)
+            # 根據 v0.4.6+ 原始碼推測的精確格式
             profile_config = {
                 "active_profile": "default",
-                "default_profile": "default",
                 "profiles": {
-                    "default": {"name": "default"}
+                    "default": {
+                        "name": "default"
+                    }
                 }
             }
             with open(os.path.join(config_dir, "profiles.json"), "w") as f:
                 json.dump(profile_config, f)
             
-            # 偵錯：印出佈署後的路徑結構
+            # 偵錯：印出佈署後的路徑結構與 profiles.json 內容
             print(f"📂 設定目錄結構診斷:")
             for root, dirs, files in os.walk(config_dir):
                 level = root.replace(config_dir, '').count(os.sep)
                 indent = ' ' * 4 * level
-                print(f"{indent}{os.path.basename(root)}/")
+                print(f"{indent}{os.path.basename(root) or 'notebooklm-mcp-cli'}/")
                 sub_indent = ' ' * 4 * (level + 1)
                 for f in files:
-                    print(f"{sub_indent}{f}")
+                    file_path = os.path.join(root, f)
+                    if f == "profiles.json":
+                        with open(file_path, "r") as pf:
+                            print(f"{sub_indent}{f} 內容: {pf.read()}")
+                    else:
+                        print(f"{sub_indent}{f}")
 
             print(f"✅ 憑證已佈署至 {config_dir}")
             return True
