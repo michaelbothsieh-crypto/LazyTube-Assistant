@@ -15,21 +15,21 @@ class NotebookService:
     /// NotebookLM CLI 封裝模組
     /// 負責與 nlm 指令互動，執行摘要產出與清理
     """
-@staticmethod
-def run_nlm(*args, verbose=True, max_retries=3):
-    """
-    /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
-    """
-    home = os.path.expanduser("~")
-    config_dir = os.path.join(home, ".notebooklm-mcp-cli")
 
-    env = os.environ.copy()
-    # 根據 v0.4.6 原始碼 (utils/config.py) 設定
-    env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
-    env["NLM_PROFILE"] = "default"
+    @staticmethod
+    def run_nlm(*args, verbose=True, max_retries=3):
+        """
+        /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
+        """
+        home = os.path.expanduser("~")
+        config_dir = os.path.join(home, ".notebooklm-mcp-cli")
 
-    cmd = ["nlm", *args]
+        env = os.environ.copy()
+        # 根據 v0.4.6 原始碼 (utils/config.py) 設定
+        env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
+        env["NLM_PROFILE"] = "default"
 
+        cmd = ["nlm", *args]
         
         last_res = None
         for attempt in range(max_retries):
