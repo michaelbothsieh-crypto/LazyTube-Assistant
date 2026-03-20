@@ -21,8 +21,9 @@ class AuthManager:
         print(f"::add-mask::{Config.NLM_COOKIE_BASE64}")
 
         try:
-            # 直接讀取原始 Base64 資料 (已由 setup_helper.py 合併 metadata 與 cookies)
+            # 1. 解碼並解析原始資料
             full_data_bytes = base64.b64decode("".join(Config.NLM_COOKIE_BASE64.split()))
+            full_json = json.loads(full_data_bytes)
             
             home = os.path.expanduser("~")
             # 根據 Added Memories，目標路徑為 ~/.config/notebooklm-mcp-cli
@@ -30,15 +31,26 @@ class AuthManager:
             profile_dir = os.path.join(config_dir, "profiles", "default")
             os.makedirs(profile_dir, exist_ok=True)
             
-            # 1. 佈署核心檔案 auth.json
+            # 2. 佈署 auth.json (合併體)
             with open(os.path.join(profile_dir, "auth.json"), "wb") as f: 
                 f.write(full_data_bytes)
             
-            # 2. 佈署 profiles.json (宣告 default profile)
+            # 3. 佈署 metadata.json 與 cookies.json (備援與相容性)
+            metadata = {k: v for k, v in full_json.items() if k != "cookies"}
+            cookies = full_json.get("cookies", [])
+            with open(os.path.join(profile_dir, "metadata.json"), "w") as f:
+                json.dump(metadata, f)
+            with open(os.path.join(profile_dir, "cookies.json"), "w") as f:
+                json.dump(cookies, f)
+            
+            # 4. 佈署 profiles.json (宣告格式對齊 v0.4.6+)
             profile_config = {
+                "active_profile": "default",
                 "default_profile": "default",
                 "profiles": {
-                    "default": {}
+                    "default": {
+                        "name": "default"
+                    }
                 }
             }
             with open(os.path.join(config_dir, "profiles.json"), "w", encoding="utf-8") as f:
