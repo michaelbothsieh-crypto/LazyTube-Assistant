@@ -26,14 +26,8 @@ class NotebookService:
         
         env = os.environ.copy()
         # 同時設定新舊版本可能使用的環境變數
-        # 根據最新 Commit (65a99d8) 支援 NOTEBOOKLM_MCP_CLI_PATH
         env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
         env["NLM_CONFIG_DIR"] = config_dir
-        env["NLM_CONFIG_PATH"] = config_dir
-        # 設定所有可能的 Profile 環境變數
-        env["NLM_PROFILE"] = "default"
-        env["NLM_CONFIG_PROFILE"] = "default"
-        env["NOTEBOOKLM_MCP_CLI_PROFILE"] = "default"
         env["XDG_CONFIG_HOME"] = os.path.join(home, ".config") # 模擬 Linux 標準配置
 
         cmd = ["nlm", *args]
