@@ -25,25 +25,32 @@ class AuthManager:
             full_data_bytes = base64.b64decode("".join(Config.NLM_COOKIE_BASE64.split()))
             full_json = json.loads(full_data_bytes)
             
-            home = os.path.expanduser("~")
-            # 根據 Added Memories，目標路徑為 ~/.config/notebooklm-mcp-cli
+            # 2. 核心修正：將 Cookie 列表轉換為字串 (v0.4.6+ 強制要求)
+            # 這是解決 400 Bad Request 的關鍵
+            cookies_raw = full_json.get("cookies", [])
+            if isinstance(cookies_raw, list):
+                cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies_raw if 'name' in c and 'value' in c])
+                full_json["cookies"] = cookie_str
+                print(f"🍪 已將 {len(cookies_raw)} 個 Cookie 轉換為字串格式")
+            
+            home = os.expanduser("~")
             config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
             profile_dir = os.path.join(config_dir, "profiles", "default")
             os.makedirs(profile_dir, exist_ok=True)
             
-            # 2. 佈署 auth.json (合併體)
-            with open(os.path.join(profile_dir, "auth.json"), "wb") as f: 
-                f.write(full_data_bytes)
+            # 3. 佈署 auth.json (確保內容是轉換後的 JSON)
+            with open(os.path.join(profile_dir, "auth.json"), "w", encoding="utf-8") as f: 
+                json.dump(full_json, f)
             
-            # 3. 佈署 metadata.json 與 cookies.json (備援與相容性)
+            # 4. 同步佈署原始檔案以增加相容性
             metadata = {k: v for k, v in full_json.items() if k != "cookies"}
-            cookies = full_json.get("cookies", [])
-            with open(os.path.join(profile_dir, "metadata.json"), "w") as f:
+            with open(os.path.join(profile_dir, "metadata.json"), "w", encoding="utf-8") as f:
                 json.dump(metadata, f)
-            with open(os.path.join(profile_dir, "cookies.json"), "w") as f:
-                json.dump(cookies, f)
+            with open(os.path.join(profile_dir, "cookies.json"), "w", encoding="utf-8") as f:
+                # 這裡保留原始列表格式以防萬一
+                json.dump(cookies_raw, f)
             
-            # 4. 佈署 profiles.json (宣告格式對齊 v0.4.6+)
+            # 5. 佈署 profiles.json (宣告格式)
             profile_config = {
                 "active_profile": "default",
                 "default_profile": "default",
@@ -56,7 +63,7 @@ class AuthManager:
             with open(os.path.join(config_dir, "profiles.json"), "w", encoding="utf-8") as f:
                 json.dump(profile_config, f)
 
-            print(f"✅ 憑證已嚴格遵循規範佈署至 {config_dir}")
+            print(f"✅ 憑證已更新 Cookie 格式並佈署至 {config_dir}")
             return True
         except Exception as e:
             print(f"❌ 憑證佈署異常: {e}")
