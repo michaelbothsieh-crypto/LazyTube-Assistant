@@ -36,7 +36,6 @@ class AuthManager:
                 f.write(full_data_bytes)
             
             # 建立 profiles.json 導向至 default，並明確宣告 default profile
-            # 根據 v0.4.6+ 原始碼推測的精確格式
             profile_config = {
                 "active_profile": "default",
                 "profiles": {
@@ -45,25 +44,22 @@ class AuthManager:
                     }
                 }
             }
-            with open(os.path.join(config_dir, "profiles.json"), "w") as f:
-                json.dump(profile_config, f)
             
-            # 偵錯：印出佈署後的路徑結構與 profiles.json 內容
-            print(f"📂 設定目錄結構診斷:")
-            for root, dirs, files in os.walk(config_dir):
-                level = root.replace(config_dir, '').count(os.sep)
-                indent = ' ' * 4 * level
-                print(f"{indent}{os.path.basename(root) or 'notebooklm-mcp-cli'}/")
-                sub_indent = ' ' * 4 * (level + 1)
-                for f in files:
-                    file_path = os.path.join(root, f)
-                    if f == "profiles.json":
-                        with open(file_path, "r") as pf:
-                            print(f"{sub_indent}{f} 內容: {pf.read()}")
-                    else:
-                        print(f"{sub_indent}{f}")
+            # 1. 佈署到 ~/.config/notebooklm-mcp-cli (XDG 標準)
+            config_dir_xdg = os.path.join(home, ".config", "notebooklm-mcp-cli")
+            profile_dir_xdg = os.path.join(config_dir_xdg, "profiles", "default")
+            os.makedirs(profile_dir_xdg, exist_ok=True)
+            with open(os.path.join(profile_dir_xdg, "auth.json"), "wb") as f: f.write(full_data_bytes)
+            with open(os.path.join(config_dir_xdg, "profiles.json"), "w") as f: json.dump(profile_config, f)
+            
+            # 2. 佈署到 ~/.notebooklm-mcp-cli (舊版相容)
+            config_dir_old = os.path.join(home, ".notebooklm-mcp-cli")
+            profile_dir_old = os.path.join(config_dir_old, "profiles", "default")
+            os.makedirs(profile_dir_old, exist_ok=True)
+            with open(os.path.join(profile_dir_old, "auth.json"), "wb") as f: f.write(full_data_bytes)
+            with open(os.path.join(config_dir_old, "profiles.json"), "w") as f: json.dump(profile_config, f)
 
-            print(f"✅ 憑證已佈署至 {config_dir}")
+            print(f"✅ 憑證已同步佈署至 XDG 與舊版路徑")
             return True
         except Exception as e:
             print(f"❌ 憑證佈署失敗: {e}")
