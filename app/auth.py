@@ -13,6 +13,7 @@ class AuthManager:
     def deploy_credentials():
         """
         /// 將 NLM_COOKIE_BASE64 解碼並佈署到 CLI 預期路徑
+        /// 加入 GitHub Actions ::add-mask:: 指令以保護隱私
         """
         if not Config.NLM_COOKIE_BASE64:
             return False
@@ -25,7 +26,6 @@ class AuthManager:
             full_json = json.loads(full_data_bytes)
             
             home = os.path.expanduser("~")
-            # 關鍵：還原到昨天的路徑 ~/.notebooklm-mcp-cli
             config_dir = os.path.join(home, ".notebooklm-mcp-cli")
             profile_dir = os.path.join(config_dir, "profiles", "default")
             os.makedirs(profile_dir, exist_ok=True)
