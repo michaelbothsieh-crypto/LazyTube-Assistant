@@ -49,7 +49,18 @@ class NotebookService:
             break
 
         if verbose and last_res and last_res.returncode != 0:
+            error_msg = (last_res.stderr or last_res.stdout or "").strip()
             print(f"❌ 指令執行失敗: {' '.join(cmd)}")
+            
+            # 關鍵診斷：攔截 400 Bad Request 並明確標示為憑證過期
+            if "400 Bad Request" in error_msg:
+                print("\n⚠️ 【診斷報告：憑證過期或失效】")
+                print("偵測到 Google 拒絕存取 (400 Bad Request)，這通常代表您的 NLM_COOKIE_BASE64 已過期。")
+                print("👉 解決方案：請於本地執行 'nlm login --force'，再透過 'tools/setup_helper.py' 產出新 Secret 並更新 GitHub Actions。")
+                
+                # 修改錯誤訊息內容，讓 Telegram 上的顯示也變明確
+                last_res.stderr = f"憑證可能已過期 (400 Bad Request)\n請重新執行 nlm login --force 並更新 Secret。\n\n原始錯誤：{error_msg}"
+
             if last_res.stderr:
                 print(f"--- 🛑 系統錯誤輸出 (STDERR) ---")
                 print(last_res.stderr.strip())
