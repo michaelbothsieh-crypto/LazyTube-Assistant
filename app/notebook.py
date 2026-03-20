@@ -29,6 +29,7 @@ class NotebookService:
         # 同時設定新舊版本可能使用的環境變數
         env["NLM_CONFIG_DIR"] = config_dir
         env["NLM_CONFIG_PATH"] = config_dir
+        env["NLM_PROFILE"] = "default"
         env["XDG_CONFIG_HOME"] = os.path.join(home, ".config") # 模擬 Linux 標準配置
 
         cmd = ["nlm", *args]

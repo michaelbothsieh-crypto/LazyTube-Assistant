@@ -35,9 +35,10 @@ class AuthManager:
             with open(auth_path, "wb") as f: 
                 f.write(full_data_bytes)
             
-            # 建立 profiles.json 導向至 default
+            # 建立 profiles.json 導向至 default，並明確宣告 default profile
+            profile_config = {"default_profile": "default", "profiles": {"default": {}}}
             with open(os.path.join(config_dir, "profiles.json"), "w") as f:
-                json.dump({"default_profile": "default"}, f)
+                json.dump(profile_config, f)
             
             # 同時也同步一份到舊的路徑 ~/.notebooklm-mcp-cli 以防萬一
             old_config_dir = os.path.join(home, ".notebooklm-mcp-cli")
@@ -45,7 +46,7 @@ class AuthManager:
             os.makedirs(old_profile_dir, exist_ok=True)
             with open(os.path.join(old_profile_dir, "auth.json"), "wb") as f: f.write(full_data_bytes)
             with open(os.path.join(old_config_dir, "profiles.json"), "w") as f:
-                json.dump({"default_profile": "default"}, f)
+                json.dump(profile_config, f)
 
             print(f"✅ 憑證已佈署至 {config_dir}")
             return True
