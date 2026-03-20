@@ -22,9 +22,14 @@ class NotebookService:
         /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
         """
         home = os.path.expanduser("~")
-        config_dir = os.path.join(home, ".notebooklm-mcp-cli")
+        config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
+        old_config_dir = os.path.join(home, ".notebooklm-mcp-cli")
+        
         env = os.environ.copy()
+        # 同時設定新舊版本可能使用的環境變數
         env["NLM_CONFIG_DIR"] = config_dir
+        env["NLM_CONFIG_PATH"] = config_dir
+        env["XDG_CONFIG_HOME"] = os.path.join(home, ".config") # 模擬 Linux 標準配置
 
         cmd = ["nlm", *args]
         
