@@ -30,12 +30,13 @@ class NotebookService:
         env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
         env["NLM_CONFIG_DIR"] = config_dir
         env["NLM_CONFIG_PATH"] = config_dir
+        # 設定所有可能的 Profile 環境變數
         env["NLM_PROFILE"] = "default"
         env["NLM_CONFIG_PROFILE"] = "default"
+        env["NOTEBOOKLM_MCP_CLI_PROFILE"] = "default"
         env["XDG_CONFIG_HOME"] = os.path.join(home, ".config") # 模擬 Linux 標準配置
 
-        # 顯式指定 profile 增加穩定性
-        cmd = ["nlm", "--profile", "default", *args]
+        cmd = ["nlm", *args]
         
         last_res = None
         for attempt in range(max_retries):
