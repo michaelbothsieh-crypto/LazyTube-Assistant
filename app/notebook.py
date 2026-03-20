@@ -22,19 +22,13 @@ class NotebookService:
         /// 執行 nlm 指令並確保路徑環境正確，具備自動重試機制
         """
         home = os.path.expanduser("~")
-        # 遵循 Added Memories：~/.config/notebooklm-mcp-cli
-        config_dir = os.path.join(home, ".config", "notebooklm-mcp-cli")
-
+        config_dir = os.path.join(home, ".notebooklm-mcp-cli")
         env = os.environ.copy()
-        # 同時設定所有可能使用的路徑環境變數
         env["NLM_CONFIG_DIR"] = config_dir
-        env["NOTEBOOKLM_MCP_CLI_PATH"] = config_dir
-        env["XDG_CONFIG_HOME"] = os.path.join(home, ".config")
 
         cmd = ["nlm", *args]
-
+        
         last_res = None
-
         for attempt in range(max_retries):
             res = subprocess.run(cmd, capture_output=True, text=True, env=env)
             last_res = res
@@ -311,9 +305,7 @@ class NotebookService:
             except: pass
             
             # 強力過濾：移除所有被 ** 包裹的區塊 (通常是模型自帶的標題或思考過程)
-            # 先移除常見的 Meta-talk 區塊
             summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程|摘要中|分析中)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
-            # 再將剩餘的 **文字** 轉為 文字 (保留內容)
             summary = re.sub(r'\*\*(.*?)\*\*', r'\1', summary).strip()
             
             # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
@@ -360,9 +352,7 @@ class NotebookService:
                     summary = res.stdout.strip()
                 
                 # 強力過濾：移除所有被 ** 包裹的區塊 (通常是模型自帶的標題或思考過程)
-                # 先移除常見的 Meta-talk 區塊
                 summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程|摘要中|分析中)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
-                # 再將剩餘的 **文字** 轉為 文字 (保留內容但移除標記，符合使用者禁用 Markdown 加粗的要求)
                 summary = re.sub(r'\*\*(.*?)\*\*', r'\1', summary).strip()
                 
                 # 如果結果仍包含大量英文 meta 詞彙且沒有中文，則視為失敗
