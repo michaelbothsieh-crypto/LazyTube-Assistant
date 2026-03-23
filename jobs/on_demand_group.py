@@ -50,6 +50,8 @@ def main():
     today_str = now_tw.strftime("%Y-%m-%d")
     current_time_str = now_tw.strftime("%H:%M")
     
+    print(f"🕒 目前台灣時間：{now_tw.strftime('%Y-%m-%d %H:%M:%S')} (排程對比時間：{current_time_str})")
+
     # 注意：不再使用全域 processed_ids 攔截，改由各訂閱的 last_check 控管
     # 這樣不同群組訂閱相同頻道時，才能各自收到摘要。
 
@@ -60,6 +62,9 @@ def main():
         last_check_str = sub.get("last_check")
         is_first_run = sub.get("is_first_run", False)
 
+        print(f"--- 頻道：{channel_title} ---")
+        print(f"  → 設定時間：{pref_time if pref_time else '預設'}")
+        
         last_check_day = ""
         if last_check_str:
             last_check_day = datetime.fromisoformat(last_check_str).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
@@ -67,15 +72,21 @@ def main():
         should_run = False
         if is_first_run:
             should_run = True
+            print(f"  → 觸發原因：首次執行")
         elif pref_time:
             if last_check_day != today_str and current_time_str >= pref_time:
                 should_run = True
+                print(f"  → 觸發原因：定時觸發 ({pref_time})")
+            else:
+                print(f"  → 跳過原因：未到時間或今日已執行 (上次：{last_check_day})")
         else:
             if not last_check_str or (datetime.now(timezone.utc) - datetime.fromisoformat(last_check_str)).total_seconds() > 12 * 3600:
                 should_run = True
+                print(f"  → 觸發原因：逾時觸發")
+            else:
+                print(f"  → 跳過原因：間隔未達 12 小時")
 
         if not should_run:
-            print(f"⏭️ 跳過 {channel_title} (未到時間或今日已處理)")
             continue
 
         try:
@@ -86,27 +97,43 @@ def main():
 
             # 首次執行只取 1 支影片，一般執行最多取 10 支
             items = yt._get_playlist_items(pid, limit=1 if is_first_run else 10)
+            
+            # 定義「新影片」的時間窗口 (24 小時內)
+            new_video_window = datetime.now(timezone.utc) - timedelta(hours=24)
 
             for item in items:
                 pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
+                vid_id = item["contentDetails"]["videoId"]
+                vid_title = item['snippet']['title']
                 
-                # 只有在非首次執行時，才檢查發布時間是否晚於上次檢查時間
-                if not is_first_run and last_check_str:
+                # 1. 時間過濾
+                if is_first_run:
+                    # 首次執行：如果影片超過 24 小時，則視為「舊片」跳過
+                    if pub_time < new_video_window:
+                        print(f"  ⏭️ 跳過過舊影片：{vid_title} (發布於 {pub_time.astimezone(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M')})")
+                        continue
+                elif last_check_str:
+                    # 一般執行：發布時間必須晚於上次檢查時間
                     if pub_time <= datetime.fromisoformat(last_check_str):
                         continue
-
-                vid_id = item["contentDetails"]["videoId"]
-                print(f"🎬 處理新影片：{item['snippet']['title']} (ID: {vid_id})")
                 
-                summary = nb.process_video(f"https://www.youtube.com/watch?v={vid_id}", item['snippet']['title'], custom_prompt=sub.get("custom_prompt"))
+                # 2. 快取過濾 (全域攔截)
+                if StateManager.is_processed(vid_id):
+                    print(f"  ⏭️ 影片已在快取中 (可能由其他任務處理過)：{vid_title}")
+                    continue
+
+                print(f"  🎬 處理新影片：{vid_title} (ID: {vid_id})")
+                
+                summary = nb.process_video(f"https://www.youtube.com/watch?v={vid_id}", vid_title, custom_prompt=sub.get("custom_prompt"))
                 if summary:
-                    Notifier.send_summary(item['snippet']['title'], f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=target_chat_id)
-                    # 雖然群組任務不攔截，但仍記錄至全域清單供其他單次任務參考
+                    Notifier.send_summary(vid_title, f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=target_chat_id)
+                    # 記錄至全域清單
                     StateManager.add_processed_id(vid_id)
                 
                 # 首次執行只處理一支最新的
                 if is_first_run:
                     break
+
 
             # 成功處理後，將 is_first_run 設為 False 並更新 last_check
             sub_vm.update_last_check(target_chat_id, channel_id, datetime.now(timezone.utc))

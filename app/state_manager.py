@@ -34,6 +34,12 @@ class StateManager:
         except Exception: return set()
 
     @staticmethod
+    def is_processed(video_id: str) -> bool:
+        """檢查影片 ID 是否已經處理過"""
+        processed_ids = StateManager.get_processed_ids()
+        return video_id in processed_ids
+
+    @staticmethod
     def add_processed_id(video_id: str) -> None:
         # 保持插入順序以確保 trim 時保留最新的
         existing = set()
