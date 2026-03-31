@@ -11,6 +11,7 @@ if project_root not in sys.path:
 import hashlib
 from datetime import datetime, timezone, timedelta
 from app.auth import AuthManager
+from app.config import Config
 from app.youtube import YouTubeService
 from app.notebook import NotebookService
 from app.notifier import Notifier
@@ -97,6 +98,12 @@ def main():
 
             # 首次執行只取 1 支影片，一般執行最多取 10 支
             items = yt._get_playlist_items(pid, limit=1 if is_first_run else 10)
+            if not items:
+                continue
+
+            # 批次取得影片詳情以過濾 Shorts
+            vids = [item["contentDetails"]["videoId"] for item in items]
+            details = yt._fetch_video_details(vids)
             
             # 定義「新影片」的時間窗口 (24 小時內)
             new_video_window = datetime.now(timezone.utc) - timedelta(hours=24)
@@ -120,6 +127,12 @@ def main():
                 # 2. 快取過濾 (全域攔截)
                 if StateManager.is_processed(vid_id):
                     print(f"  ⏭️ 影片已在快取中 (可能由其他任務處理過)：{vid_title}")
+                    continue
+
+                # 3. 過濾 Shorts (依據影片長度)
+                duration = details["durations"].get(vid_id, 0)
+                if duration <= Config.SHORTS_MAX_SECONDS:
+                    print(f"  ⏭️ 跳過 Shorts：{vid_title} ({duration}s)")
                     continue
 
                 print(f"  🎬 處理新影片：{vid_title} (ID: {vid_id})")

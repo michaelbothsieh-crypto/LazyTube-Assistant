@@ -29,7 +29,49 @@ def main():
 
     urls = [u.strip() for u in urls_str.split(",") if u.strip()]
     
-    print(f"🚀 開始批次處理 {len(urls)} 個網址...")
+    # 1. 預過濾 Shorts (如果網址中有 YouTube)
+    from app.youtube import YouTubeService
+    yt = YouTubeService()
+    
+    filtered_urls = []
+    yt_video_ids = []
+    url_to_vid = {}
+
+    for u in urls:
+        vid = None
+        if "youtu.be/" in u:
+            vid = u.split("youtu.be/")[1].split("?")[0]
+        elif "youtube.com/watch" in u:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(u)
+            params = urllib.parse.parse_qs(parsed.query)
+            vid = params.get("v", [None])[0]
+        elif "youtube.com/shorts/" in u:
+            vid = u.split("youtube.com/shorts/")[1].split("?")[0]
+        
+        if vid:
+            yt_video_ids.append(vid)
+            url_to_vid[u] = vid
+        else:
+            filtered_urls.append(u) # 非 YouTube 網址直接保留
+
+    if yt_video_ids:
+        details = yt._fetch_video_details(yt_video_ids)
+        for u, vid in url_to_vid.items():
+            duration = details["durations"].get(vid, 0)
+            if duration > Config.SHORTS_MAX_SECONDS:
+                filtered_urls.append(u)
+            else:
+                print(f"⚠️ 略過批次網址：偵測到影片為 Shorts ({u}, {duration}s)")
+
+    if not filtered_urls:
+        print("❌ 過濾後無有效網址可供處理。")
+        Notifier.send_text(chat_id, "❌ 您提供的網址皆為 Shorts 短片，依據系統設定已略過處理。")
+        if message_id:
+            Notifier.delete_pending_message(chat_id, message_id)
+        return
+
+    print(f"🚀 開始批次處理 {len(filtered_urls)} 個網址 (已過濾 Shorts)...")
     
     # 部署認證
     if not AuthManager.deploy_credentials():
@@ -37,7 +79,7 @@ def main():
         return
     
     nb_service = NotebookService()
-    summary = nb_service.process_batch(urls, custom_prompt)
+    summary = nb_service.process_batch(filtered_urls, custom_prompt)
 
     if summary:
         # 發送結果
