@@ -141,7 +141,7 @@ class YouTubeService:
     def _fetch_video_details(self, video_ids: list) -> dict:
         if not video_ids:
             return {}
-        details = {"durations": {}, "categories": {}, "live_status": {}, "has_live_details": {}}
+        details = {"durations": {}, "categories": {}, "live_status": {}, "has_live_details": {}, "titles": {}}
         for i in range(0, len(video_ids), 50):
             batch_ids = video_ids[i : i + 50]
             response = self.service.videos().list(
@@ -156,6 +156,7 @@ class YouTubeService:
                 details["categories"][vid] = item["snippet"].get("categoryId")
                 details["live_status"][vid] = (item["snippet"].get("liveBroadcastContent") or "").lower()
                 details["has_live_details"][vid] = bool(item.get("liveStreamingDetails"))
+                details["titles"][vid] = item["snippet"].get("title", "")
         return details
 
     def fetch_new_game_videos(self, last_check_time: datetime) -> list:
@@ -205,7 +206,7 @@ class YouTubeService:
                     print(f"Skip live stream: {video['title']} ({live_status})")
                     continue
 
-                if duration_seconds <= Config.SHORTS_MAX_SECONDS:
+                if duration_seconds <= Config.SHORTS_MAX_SECONDS or "#shorts" in video["title"].lower():
                     continue
 
                 if Config.MAX_VIDEO_SECONDS > 0 and duration_seconds > Config.MAX_VIDEO_SECONDS:

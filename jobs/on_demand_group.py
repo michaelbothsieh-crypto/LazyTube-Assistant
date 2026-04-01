@@ -129,9 +129,9 @@ def main():
                     print(f"  ⏭️ 影片已在快取中 (可能由其他任務處理過)：{vid_title}")
                     continue
 
-                # 3. 過濾 Shorts (依據影片長度)
+                # 3. 過濾 Shorts (依據影片長度或標題)
                 duration = details["durations"].get(vid_id, 0)
-                if duration <= Config.SHORTS_MAX_SECONDS:
+                if duration <= Config.SHORTS_MAX_SECONDS or "#shorts" in vid_title.lower():
                     print(f"  ⏭️ 跳過 Shorts：{vid_title} ({duration}s)")
                     continue
 

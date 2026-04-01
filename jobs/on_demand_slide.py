@@ -66,7 +66,8 @@ def main():
     if video_id:
         details = yt._fetch_video_details([video_id])
         duration = details["durations"].get(video_id, 0)
-        if duration <= Config.SHORTS_MAX_SECONDS:
+        title = details["titles"].get(video_id, "").lower()
+        if duration <= Config.SHORTS_MAX_SECONDS or "#shorts" in title:
             print(f"⚠️ 略過任務：偵測到影片為 Shorts ({duration}s)，依據設定不執行。")
             Notifier.send_error(chat_id, f"系統已設定過濾 Shorts 短片 (長度 {duration} 秒)，故不執行此任務。", url=url)
             Notifier.delete_pending_message(chat_id, message_id)

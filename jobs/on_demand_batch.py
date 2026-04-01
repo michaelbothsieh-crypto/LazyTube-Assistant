@@ -59,7 +59,8 @@ def main():
         details = yt._fetch_video_details(yt_video_ids)
         for u, vid in url_to_vid.items():
             duration = details["durations"].get(vid, 0)
-            if duration > Config.SHORTS_MAX_SECONDS:
+            title = details["titles"].get(vid, "").lower()
+            if duration > Config.SHORTS_MAX_SECONDS and "#shorts" not in title:
                 filtered_urls.append(u)
             else:
                 print(f"⚠️ 略過批次網址：偵測到影片為 Shorts ({u}, {duration}s)")
