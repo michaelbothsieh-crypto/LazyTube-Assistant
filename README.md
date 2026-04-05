@@ -104,6 +104,27 @@ python tools/debug_yt_auth.py
 - **憑證時效性**：Cookie 通常維持 **2 至 4 週**。失效時請重新執行 `tools/setup_helper.py`。
 - **100% 隱私保護**：所有數據皆在隔離環境處理並直接傳送至 Google。
 
+## 🛠️ 常見問題與偵錯 (Troubleshooting)
+
+### 1. NotebookLM Session 過期怎麼辦？
+當您看到 `400 Bad Request` 或是摘要功能失效時，通常是 `NLM_COOKIE_BASE64` 過期了（約 2-4 週一次）。請依序執行以下指令：
+
+1.  **更新工具與重新登入**：
+    ```bash
+    pip install --upgrade notebooklm-mcp-cli
+    nlm login --force
+    ```
+    *(在彈出的視窗登入 Google 帳號後關閉)*
+
+2.  **擷取新的 Base64 字串**：
+    執行以下 Python 指令，它會自動抓取您剛才登入的憑證並轉為 Base64：
+    ```bash
+    python -c "import os, json, base64; path = os.path.expanduser('~\\.notebooklm-mcp-cli\\profiles\\default'); c = json.load(open(os.path.join(path, 'cookies.json'))); m = json.load(open(os.path.join(path, 'metadata.json'))); m['cookies'] = c; print(base64.b64encode(json.dumps(m).encode()).decode())"
+    ```
+
+3.  **更新雲端 Secrets**：
+    將產出的長字串複製，貼到 GitHub 專案的 **Settings > Secrets and variables > Actions** 裡面的 `NLM_COOKIE_BASE64`。
+
 ## ❤️ 特別鳴謝
 
 本專案的核心認證與操作邏輯深受 **[notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli)** 的啟發與支持。

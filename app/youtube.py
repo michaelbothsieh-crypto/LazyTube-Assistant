@@ -206,7 +206,12 @@ class YouTubeService:
                     print(f"Skip live stream: {video['title']} ({live_status})")
                     continue
 
-                if duration_seconds <= Config.SHORTS_MAX_SECONDS or "#shorts" in video["title"].lower():
+                # 強化版 Shorts 過濾邏輯
+                is_shorts_by_duration = duration_seconds <= Config.SHORTS_MAX_SECONDS
+                title_lower = video["title"].lower()
+                is_shorts_by_title = any(tag in title_lower for tag in ["#short", "shorts", "#短片", "#短影音"])
+
+                if is_shorts_by_duration or is_shorts_by_title:
                     continue
 
                 if Config.MAX_VIDEO_SECONDS > 0 and duration_seconds > Config.MAX_VIDEO_SECONDS:
