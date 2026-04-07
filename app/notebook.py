@@ -540,8 +540,8 @@ class NotebookService:
             nb_id = match.group(1) if match else nb_name
 
             print(f"🔎 正在啟動深度研究: {topic}...")
-            # 呼叫 nlm research start <notebook_id> <topic>
-            res_research = self.run_nlm("research", "start", nb_id, topic)
+            # 呼叫 nlm research start --notebook-id <nb_id> --mode deep <topic>
+            res_research = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", "deep", topic)
             
             if res_research.returncode != 0:
                 return False, f"研究啟動失敗: {res_research.stderr or res_research.stdout}"
@@ -550,26 +550,40 @@ class NotebookService:
             start_time = time.time()
             is_done = False
             while time.time() - start_time < 600: # 最多等 10 分鐘
-                status_res = self.run_nlm("research", "status", nb_id, "--json", verbose=False)
+                status_res = self.run_nlm("research", "status", "--json", verbose=False)
                 if status_res.returncode == 0:
                     try:
                         status_data = json.loads(status_res.stdout)
-                        # 假設回傳格式包含 status 欄位
-                        current_status = str(status_data.get("status", "")).lower()
-                        if current_status in ["completed", "success"]:
-                            is_done = True
-                            break
-                        elif current_status in ["failed", "error"]:
-                            return False, f"研究代理人執行出錯: {status_data.get('error', '未知錯誤')}"
+                        # 0.5.x 版回傳是一個列表，尋找 active 任務
+                        if isinstance(status_data, list):
+                            if not status_data: # 列表為空代表目前沒有正在執行的任務
+                                is_done = True
+                                break
+                            
+                            active_found = False
+                            for task in status_data:
+                                t_status = str(task.get("status", "")).lower()
+                                if t_status in ["active", "pending", "running"]:
+                                    active_found = True
+                                    break
+                            
+                            if not active_found:
+                                is_done = True
+                                break
                     except:
-                        # 如果 JSON 解析失敗，嘗試關鍵字比對
-                        if "completed" in status_res.stdout.lower():
+                        if "no active research" in status_res.stdout.lower() or "completed" in status_res.stdout.lower():
                             is_done = True
                             break
                 time.sleep(15)
 
             if not is_done:
                 return False, "研究任務超時 (10 分鐘)"
+
+            print("📥 正在將研究成果匯入筆記本...")
+            # 關鍵：研究完成後必須執行 import 才能將來源加入筆記本
+            import_res = self.run_nlm("research", "import", "--notebook-id", nb_id, "--all", "--confirm")
+            if import_res.returncode != 0:
+                print(f"⚠️ 匯入部分失敗，嘗試繼續產出報告... ({import_res.stderr or import_res.stdout})")
 
             print("📝 研究完成，正在產出總結報告...")
             # 研究完成後，資料已匯入筆記本，執行 query 產出報告
