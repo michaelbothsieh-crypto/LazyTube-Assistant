@@ -170,7 +170,7 @@ class NotebookService:
             with ThreadPoolExecutor(max_workers=5) as executor:
                 executor.map(lambda u: self._add_source_with_proxy(nb_id, u.strip()), urls)
             
-            time.sleep(15)
+            time.sleep(5)
             user_intent = get_nlm_prompt(custom_prompt)
             final_prompt = f"{user_intent}\n\n【請完全以繁體中文回答，嚴禁輸出 JSON 或思考過程。】"
             res = self.run_nlm("query", "notebook", nb_id, final_prompt)
@@ -239,8 +239,8 @@ class NotebookService:
             start_res = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", mode, topic)
             if start_res.returncode != 0: return False, "啟動失敗"
 
-            # 動態頻率：deep 1分鐘, fast 30秒
-            interval = 60 if mode == "deep" else 30
+            # 加速頻率：deep 30秒, fast 15秒
+            interval = 30 if mode == "deep" else 15
             timeout = 1200 if mode == "deep" else 600
             
             print(f"⏳ 正在輪詢研究進度 (每 {interval} 秒一次)...")
