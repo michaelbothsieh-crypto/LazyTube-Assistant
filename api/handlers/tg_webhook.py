@@ -598,22 +598,23 @@ async def _handle_research(chat_id: str, text: str):
     if len(parts) < 2:
         await send_telegram_message(
             chat_id,
-            "❌ <b>格式錯誤</b>\n使用方法：<code>/research &lt;研究主題&gt; [fast|deep]</code>"
+            "❌ <b>格式錯誤</b>\n使用方法：<code>/research &lt;研究主題&gt; [fast|deep]</code>\n範例：<code>/research 台股趨勢 deep</code>"
         )
         return
 
     full_content = parts[1].strip()
     
-    # 解析模式
-    mode = "fast" # 預設
+    # 預設模式
+    mode = "fast"
     topic = full_content
     
-    if full_content.lower().endswith(" deep"):
-        mode = "deep"
-        topic = full_content[:-5].strip()
-    elif full_content.lower().endswith(" fast"):
-        mode = "fast"
-        topic = full_content[:-5].strip()
+    # 檢查末尾是否有模式關鍵字
+    words = full_content.split()
+    if len(words) > 1:
+        last_word = words[-1].lower()
+        if last_word in ["fast", "deep"]:
+            mode = last_word
+            topic = " ".join(words[:-1]).strip()
 
     # 立即回應「處理中」
     resp_data = await send_telegram_message(

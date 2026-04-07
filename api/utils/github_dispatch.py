@@ -72,9 +72,16 @@ async def dispatch_batch_workflow(urls: str, prompt: str = "", chat_id: str = ""
 
 async def dispatch_research_workflow(topic: str, mode: str = "fast", chat_id: str = "", message_id: str = ""):
     """觸發深度研究工作流 (Deep Research)"""
-    return await _dispatch("nlm-research.yml", {
-        "topic": topic, "mode": mode, "chat_id": str(chat_id), "message_id": str(message_id)
-    })
+    inputs = {
+        "topic": topic,
+        "chat_id": str(chat_id),
+        "message_id": str(message_id)
+    }
+    # 只有當使用者指定 deep 時才傳送 mode，增加向下相容性
+    if mode == "deep":
+        inputs["mode"] = "deep"
+        
+    return await _dispatch("nlm-research.yml", inputs)
 
 
 async def dispatch_update_cron_workflow() -> bool:
