@@ -20,9 +20,10 @@ async def main():
 
     topic = sys.argv[1]
     chat_id = sys.argv[2]
-    msg_id = sys.argv[3] if len(sys.argv) >= 4 else None
+    msg_id = sys.argv[3] if len(sys.argv) >= 4 and sys.argv[3] != "" else None
+    mode = sys.argv[4] if len(sys.argv) >= 5 else "fast"
 
-    print(f"--- 🔎 深度研究任務啟動: {topic} ---")
+    print(f"--- 🔎 深度研究任務啟動: {topic} (模式: {mode}) ---")
     
     # 1. 認證
     if not setup_nlm_auth():
@@ -33,7 +34,7 @@ async def main():
     nm = NotebookManager()
     
     # 在 NotebookManager 中新增一個 research_topic 方法
-    success, result = await nm.research_topic(topic)
+    success, result = await nm.research_topic(topic, mode=mode)
     
     # 3. 清理之前的提示訊息
     if msg_id:

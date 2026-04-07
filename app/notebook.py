@@ -211,7 +211,7 @@ class NotebookService:
         finally:
             if nb_id: self.run_nlm("notebook", "delete", nb_id, "--confirm")
 
-    async def research_topic(self, topic: str):
+    async def research_topic(self, topic: str, mode: str = "fast"):
         """
         /// 執行深度研究 (Deep Research)
         """
@@ -223,23 +223,27 @@ class NotebookService:
             match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
             nb_id = match.group(1) if match else nb_name
 
-            print(f"🔎 啟動研究代理人 (Fast Mode): {topic}")
-            start_res = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", "fast", topic)
+            print(f"🔎 啟動研究代理人 ({mode.upper()}): {topic}")
+            start_res = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", mode, topic)
             if start_res.returncode != 0: return False, "啟動失敗"
 
-            print("⏳ 正在輪詢研究進度 (每 60 秒一次)...")
+            # 動態頻率：deep 1分鐘, fast 30秒
+            interval = 60 if mode == "deep" else 30
+            timeout = 1200 if mode == "deep" else 600
+            
+            print(f"⏳ 正在輪詢研究進度 (每 {interval} 秒一次)...")
             start_time = time.time()
             is_done = False
-            while time.time() - start_time < 600:
+            while time.time() - start_time < timeout:
                 status_res = self.run_nlm("research", "status", nb_id, "--max-wait", "0", verbose=False)
                 out = status_res.stdout.strip().lower()
                 if any(k in out for k in ["completed", "success", "no active research", "ready to import"]):
                     is_done = True
                     break
                 print(f"📊 目前狀態: {out.splitlines()[0] if out else '等待中'}")
-                time.sleep(60)
+                time.sleep(interval)
 
-            if not is_done: return False, "研究超時 (10 分鐘)"
+            if not is_done: return False, f"研究超時 ({timeout//60} 分鐘)"
             self.run_nlm("research", "import", nb_id)
             prompt = f"針對「{topic}」，產出結構完整的繁體中文研究報告。"
             res_query = self.run_nlm("query", "notebook", nb_id, prompt)

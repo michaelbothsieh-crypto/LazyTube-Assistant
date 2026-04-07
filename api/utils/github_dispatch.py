@@ -70,10 +70,10 @@ async def dispatch_batch_workflow(urls: str, prompt: str = "", chat_id: str = ""
     })
 
 
-async def dispatch_research_workflow(topic: str, chat_id: str = "", message_id: str = ""):
+async def dispatch_research_workflow(topic: str, mode: str = "fast", chat_id: str = "", message_id: str = ""):
     """觸發深度研究工作流 (Deep Research)"""
     return await _dispatch("nlm-research.yml", {
-        "topic": topic, "chat_id": str(chat_id), "message_id": str(message_id)
+        "topic": topic, "mode": mode, "chat_id": str(chat_id), "message_id": str(message_id)
     })
 
 

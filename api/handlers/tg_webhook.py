@@ -590,7 +590,7 @@ async def _handle_batch(chat_id: str, text: str):
 async def _handle_research(chat_id: str, text: str):
     """
     解析 /research 指令並觸發 GitHub Actions
-    格式: /research <主題>
+    格式: /research <主題> [fast|deep]
     """
     from api.utils.github_dispatch import dispatch_research_workflow
     
@@ -598,18 +598,29 @@ async def _handle_research(chat_id: str, text: str):
     if len(parts) < 2:
         await send_telegram_message(
             chat_id,
-            "❌ <b>格式錯誤</b>\n使用方法：<code>/research &lt;研究主題&gt;</code>"
+            "❌ <b>格式錯誤</b>\n使用方法：<code>/research &lt;研究主題&gt; [fast|deep]</code>"
         )
         return
 
-    topic = parts[1].strip()
+    full_content = parts[1].strip()
     
+    # 解析模式
+    mode = "fast" # 預設
+    topic = full_content
+    
+    if full_content.lower().endswith(" deep"):
+        mode = "deep"
+        topic = full_content[:-5].strip()
+    elif full_content.lower().endswith(" fast"):
+        mode = "fast"
+        topic = full_content[:-5].strip()
+
     # 立即回應「處理中」
     resp_data = await send_telegram_message(
         chat_id,
-        f"🔎 <b>深度研究代理人已啟動</b>\n\n"
+        f"🔎 <b>深度研究代理人已啟動 ({mode.upper()})</b>\n\n"
         f"主題：<code>{topic}</code>\n\n"
-        f"<i>AI 正在搜尋網路、蒐集資料並產出報告 (約 5-10 分鐘)。</i>"
+        f"<i>AI 正在搜尋網路並產出報告 (模式: {mode})。</i>"
     )
     
     msg_id = str(resp_data.get("result", {}).get("message_id", "")) if resp_data and resp_data.get("ok") else ""
@@ -617,6 +628,7 @@ async def _handle_research(chat_id: str, text: str):
     # 觸發 Workflow
     success = await dispatch_research_workflow(
         topic=topic,
+        mode=mode,
         chat_id=chat_id,
         message_id=msg_id
     )
