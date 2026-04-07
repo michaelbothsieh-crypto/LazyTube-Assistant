@@ -546,38 +546,39 @@ class NotebookService:
             if res_research.returncode != 0:
                 return False, f"研究啟動失敗: {res_research.stderr or res_research.stdout}"
 
-            print("⏳ 正在等待研究代理人完成工作 (此過程約需 3-8 分鐘)...")
+            print("⏳ 正在等待研究代理人完成工作 (Deep Mode 可能需要 5-10 分鐘)...")
             start_time = time.time()
             is_done = False
-            while time.time() - start_time < 600: # 最多等 10 分鐘
+            while time.time() - start_time < 1200: # 最多等 20 分鐘
                 status_res = self.run_nlm("research", "status", "--json", verbose=False)
                 if status_res.returncode == 0:
                     try:
                         status_data = json.loads(status_res.stdout)
-                        # 0.5.x 版回傳是一個列表，尋找 active 任務
                         if isinstance(status_data, list):
-                            if not status_data: # 列表為空代表目前沒有正在執行的任務
+                            if not status_data: 
                                 is_done = True
                                 break
                             
                             active_found = False
                             for task in status_data:
                                 t_status = str(task.get("status", "")).lower()
-                                if t_status in ["active", "pending", "running"]:
+                                if t_status in ["active", "pending", "running", "queued"]:
                                     active_found = True
+                                    print(f"📊 研究進行中... 狀態: {t_status}")
                                     break
                             
                             if not active_found:
                                 is_done = True
                                 break
                     except:
-                        if "no active research" in status_res.stdout.lower() or "completed" in status_res.stdout.lower():
+                        out_lower = status_res.stdout.lower()
+                        if "no active research" in out_lower or "completed" in out_lower:
                             is_done = True
                             break
-                time.sleep(15)
+                time.sleep(20)
 
             if not is_done:
-                return False, "研究任務超時 (10 分鐘)"
+                return False, "研究任務超時 (20 分鐘)"
 
             print("📥 正在將研究成果匯入筆記本...")
             # 關鍵：研究完成後必須執行 import 才能將來源加入筆記本
