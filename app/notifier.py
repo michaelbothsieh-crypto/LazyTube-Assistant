@@ -170,7 +170,7 @@ class Notifier:
         safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(target_chat_id))[:50]
         blob_path = f"artifacts/{safe_chat_id}/{int(time.time())}_{safe_filename}"
         
-        api_url = f"https://blob.vercel-storage.com/v1/upload/{blob_path}"
+        api_url = f"https://blob.vercel-storage.com/{blob_path}"
         
         try:
             with open(file_path, "rb") as f:
@@ -318,11 +318,9 @@ class Notifier:
         import markdown
         from datetime import datetime
         
-        # 轉換 Markdown 為 HTML (支援表格與腳注)
         html_body = markdown.markdown(markdown_content, extensions=['extra', 'toc', 'tables'])
         gen_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # 專業 HTML 模板 (內嵌 CSS)
         template = f"""
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -331,63 +329,30 @@ class Notifier:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - 深度研究報告</title>
     <style>
-        :root {{
-            --primary-color: #1a73e8;
-            --bg-color: #f8f9fa;
-            --text-color: #202124;
-            --card-bg: #ffffff;
-            --border-color: #dadce0;
-        }}
-        body {{
-            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
-            line-height: 1.6;
-            color: var(--text-color);
-            background-color: var(--bg-color);
-            margin: 0; padding: 0;
-        }}
+        :root {{ --primary-color: #1a73e8; --bg-color: #f8f9fa; --text-color: #202124; --card-bg: #ffffff; --border-color: #dadce0; }}
+        body {{ font-family: 'Segoe UI', Roboto, Arial, 'PingFang TC', sans-serif; line-height: 1.6; color: var(--text-color); background-color: var(--bg-color); margin: 0; padding: 0; }}
         .container {{ max-width: 900px; margin: 40px auto; padding: 0 20px; }}
-        header {{
-            text-align: center; margin-bottom: 40px; padding-bottom: 20px;
-            border-bottom: 2px solid var(--primary-color);
-        }}
+        header {{ text-align: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid var(--primary-color); }}
         h1 {{ color: var(--primary-color); margin: 0; }}
         .meta {{ color: #5f6368; font-size: 0.9em; margin-top: 10px; }}
-        .report-card {{
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }}
+        .report-card {{ background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
         h2 {{ border-left: 5px solid var(--primary-color); padding-left: 15px; margin-top: 30px; color: #174ea6; }}
-        h3 {{ color: #185abc; }}
-        blockquote {{
-            background: #e8f0fe; border-left: 5px solid var(--primary-color);
-            margin: 20px 0; padding: 15px 20px; font-style: italic;
-        }}
+        blockquote {{ background: #e8f0fe; border-left: 5px solid var(--primary-color); margin: 20px 0; padding: 15px 20px; font-style: italic; }}
         table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
         th, td {{ border: 1px solid var(--border-color); padding: 12px; text-align: left; }}
         th {{ background: #f1f3f4; }}
         footer {{ text-align: center; margin-top: 40px; padding: 20px; color: #70757a; font-size: 0.8em; }}
-        @media (max-width: 600px) {{
-            .container {{ margin: 10px auto; }}
-            .report-card {{ padding: 20px; }}
-        }}
+        @media (max-width: 600px) {{ .container {{ margin: 10px auto; }} .report-card {{ padding: 20px; }} }}
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>{title}</h1>
-            <div class="meta">深度研究報告 • 生成時間：{gen_time} • Powered by LazyTube AI</div>
+            <div class="meta">深度研究報告 • 生成時間：{gen_time}</div>
         </header>
-        <div class="report-card">
-            {html_body}
-        </div>
-        <footer>
-            本報告由 AI 自動生成。內容僅供參考，請自行評估資訊準確性。<br>
-            &copy; {datetime.now().year} LazyTube-Assistant
-        </footer>
+        <div class="report-card">{html_body}</div>
+        <footer>&copy; {datetime.now().year} LazyTube-Assistant</footer>
     </div>
 </body>
 </html>
@@ -397,29 +362,19 @@ class Notifier:
     @classmethod
     def upload_report(cls, title: str, html_content: str, chat_id: str) -> Optional[str]:
         """
-        /// 上傳 HTML 報告並執行 30 天清理
+        /// 上傳 HTML 報告
         """
-        # 1. 執行 30 天自動清理
-        try:
-            cls.cleanup_old_reports()
-        except Exception as e:
-            print(f"⚠️ 清理舊報告失敗: {e}")
+        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if not token: return None
 
-        # 2. 儲存臨時檔案
         import uuid
         file_name = f"report_{uuid.uuid4().hex[:8]}.html"
         tmp_path = f"/tmp/{file_name}"
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
-        # 3. 上傳至 Vercel Blob
-        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-        if not token: return None
-
         safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(chat_id))[:30]
-        timestamp = int(time.time())
-        blob_path = f"reports/{safe_chat_id}/{timestamp}_{file_name}"
-        # 修正：直接使用路徑作為 URL
+        blob_path = f"reports/{safe_chat_id}/{int(time.time())}_{file_name}"
         api_url = f"https://blob.vercel-storage.com/{blob_path}"
         
         try:
@@ -444,31 +399,20 @@ class Notifier:
         """
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return
-
         list_url = "https://blob.vercel-storage.com?prefix=reports/"
-        headers = {"Authorization": f"Bearer {token}"}
-        
         try:
-            resp = requests.get(list_url, headers=headers, timeout=30)
+            resp = requests.get(list_url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 now = time.time()
-                retention_sec = 30 * 24 * 60 * 60 # 30 天
-                
                 to_delete = []
                 for blob in data.get("blobs", []):
                     try:
-                        # 解析 reports/chat_id/timestamp_filename
-                        pathname = blob["pathname"]
-                        parts = pathname.split("/")
-                        if len(parts) >= 3:
-                            ts = int(parts[2].split("_")[0])
-                            if now - ts > retention_sec:
-                                to_delete.append(blob["url"])
+                        ts = int(blob["pathname"].split("/")[2].split("_")[0])
+                        if now - ts > 30 * 86400: to_delete.append(blob["url"])
                     except: continue
-                
                 if to_delete:
-                    print(f"🧹 偵測到 {len(to_delete)} 份過期報告，執行清理...")
-                    delete_url = "https://blob.vercel-storage.com/v1/delete"
-                    requests.post(delete_url, json={"urls": to_delete}, headers=headers, timeout=30)
+                    requests.post("https://blob.vercel-storage.com/v1/delete", 
+                                  json={"urls": to_delete}, 
+                                  headers={"Authorization": f"Bearer {token}"}, timeout=30)
         except: pass

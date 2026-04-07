@@ -49,20 +49,32 @@ async def main():
         # 5. 回傳結果
         print("✅ 研究完成")
         
-        # 提取前 300 字作為精簡摘要
+        # 提取前 300 字作為精簡摘要預覽
         preview_text = result[:400] + "..." if len(result) > 400 else result
         
-        report_msg = (
-            f"🔎 <b>深度研究完成：{topic}</b>\n\n"
-            f"📝 <b>核心摘要預覽：</b>\n{preview_text}\n\n"
-        )
-        
         if report_url:
-            report_msg += f"🌐 <b>完整專業報告 (Web)：</b>\n<a href='{report_url}'>👉 點此線上瀏覽完整研究成果</a>\n"
+            report_msg = (
+                f"🔎 <b>深度研究完成：{topic}</b>\n\n"
+                f"📝 <b>核心摘要預覽：</b>\n{preview_text}\n\n"
+                f"🌐 <b>完整專業報告 (Web)：</b>\n<a href='{report_url}'>👉 點此線上瀏覽完整研究成果</a>\n"
+            )
+            Notifier.send_text(chat_id, report_msg, html=True)
         else:
-            report_msg += f"⚠️ 報告上傳失敗，僅提供文字預覽。"
+            # 備援方案：上傳失敗時直接傳送檔案附件
+            report_msg = (
+                f"🔎 <b>深度研究完成：{topic}</b>\n\n"
+                f"📝 <b>核心摘要預覽：</b>\n{preview_text}\n\n"
+                f"⚠️ <b>提示</b>：雲端儲存額度已滿，改以「檔案附件」傳送完整報告。"
+            )
+            Notifier.send_text(chat_id, report_msg, html=True)
             
-        Notifier.send_text(chat_id, report_msg, html=True)
+            # 建立臨時備援檔案並傳送
+            import uuid
+            fallback_path = f"/tmp/report_fallback_{uuid.uuid4().hex[:4]}.html"
+            with open(fallback_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            
+            Notifier.send_document(chat_id, fallback_path, caption=f"📊 完整研究報告: {topic}")
     else:
         print(f"❌ 研究失敗: {result}")
         Notifier.send_text(chat_id, f"❌ 深度研究失敗: {result}", html=True)
