@@ -525,13 +525,12 @@ class NotebookService:
     async def research_topic(self, topic: str):
         """
         /// 執行深度研究 (Deep Research)
-        /// topic: 研究主題
-        /// 回傳 (success, result)
+        /// 遵循官方 v0.5.x 指令集規範
         """
         nb_id = None
         try:
             nb_name = f"RESEARCH_{uuid.uuid4().hex[:4].upper()}"
-            print(f"📁 正在建立研究筆記本: {nb_name}...")
+            print(f"📁 建立臨時研究筆記本: {nb_name}")
             res = self.run_nlm("notebook", "create", nb_name)
             if res.returncode != 0:
                 return False, f"建立筆記本失敗: {res.stderr or res.stdout}"
@@ -539,80 +538,63 @@ class NotebookService:
             match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
             nb_id = match.group(1) if match else nb_name
 
-            print(f"🔎 正在啟動深度研究: {topic}...")
-            # 呼叫 nlm research start --notebook-id <nb_id> --mode deep <topic>
-            res_research = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", "deep", topic)
-            
-            if res_research.returncode != 0:
-                return False, f"研究啟動失敗: {res_research.stderr or res_research.stdout}"
+            print(f"🔎 啟動研究代理人: {topic}")
+            # 規範: nlm research start [OPTIONS] QUERY
+            start_res = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", "deep", topic)
+            if start_res.returncode != 0:
+                return False, f"啟動失敗: {start_res.stderr or start_res.stdout}"
 
-            print("⏳ 正在等待研究代理人完成工作 (Deep Mode 可能需要 5-10 分鐘)...")
+            print("⏳ 正在輪詢研究進度 (每 30 秒一次，上限 20 分鐘)...")
             start_time = time.time()
             is_done = False
-            while time.time() - start_time < 1200: # 最多等 20 分鐘
-                status_res = self.run_nlm("research", "status", "--json", verbose=False)
-                if status_res.returncode == 0:
-                    try:
-                        print(f"📊 目前研究任務狀態清單: {status_res.stdout.strip()}")
-                        status_data = json.loads(status_res.stdout)
-                        if isinstance(status_data, list):
-                            if not status_data: 
-                                is_done = True
-                                break
-                            
-                            active_found = False
-                            for task in status_data:
-                                t_status = str(task.get("status", "")).lower()
-                                # 只要還有一個任務在 active/pending/running/queued 且 notebook_id 相同或未知，就繼續等
-                                t_nb_id = task.get("notebook_id")
-                                if t_status in ["active", "pending", "running", "queued"]:
-                                    if not t_nb_id or t_nb_id == nb_id:
-                                        active_found = True
-                                        print(f"📊 研究進行中... 狀態: {t_status}")
-                                        break
-                            
-                            if not active_found:
-                                is_done = True
-                                break
-                    except Exception as e:
-                        print(f"⚠️ 解析狀態 JSON 失敗: {e}")
-                        out_lower = status_res.stdout.lower()
-                        if "no active research" in out_lower or "completed" in out_lower:
-                            is_done = True
-                            break
-                time.sleep(20)
+            while time.time() - start_time < 1200:
+                # 規範: nlm research status [OPTIONS] NOTEBOOK_ID
+                # 使用 --max-wait 0 進行單次檢查
+                status_res = self.run_nlm("research", "status", nb_id, "--max-wait", "0", verbose=False)
+                out = status_res.stdout.lower()
+                
+                # 偵測完成信號：
+                # 1. 輸出包含 "completed" 或 "success"
+                # 2. 或是輸出包含 "no active research" (代表已經轉入待匯入狀態)
+                if any(k in out for k in ["completed", "success", "no active research", "ready to import"]):
+                    is_done = True
+                    break
+                
+                # 印出狀態日誌方便觀察
+                status_line = out.split("\n")[0][:100]
+                print(f"📊 目前狀態: {status_line}")
+                time.sleep(30)
 
             if not is_done:
-                return False, "研究任務超時 (20 分鐘)"
+                return False, "研究超時 (20 分鐘)"
 
-            print("📥 正在將研究成果匯入筆記本...")
-            # 關鍵：研究完成後必須執行 import 才能將來源加入筆記本
-            # 正確格式: nlm research import <nb_id>
+            print("📥 匯入研究成果...")
+            # 規範: nlm research import [OPTIONS] NOTEBOOK_ID
             import_res = self.run_nlm("research", "import", nb_id)
             if import_res.returncode != 0:
-                print(f"⚠️ 匯入失敗或無資料，嘗試繼續產出報告... ({import_res.stderr or import_res.stdout})")
+                print(f"⚠️ 匯入回傳: {import_res.stderr or import_res.stdout}")
 
-            print("📝 研究完成，正在產出總結報告...")
-            # 研究完成後，資料已匯入筆記本，執行 query 產出報告
-            prompt = f"針對主題「{topic}」，請根據研究蒐集到的所有資料，產出一份深度且結構清晰的繁體中文研究報告。包含核心發現、技術細節與結論。"
-            res_query = self.run_nlm("query", "notebook", nb_id, prompt)
+            print("📝 產出深度研究報告...")
+            prompt = f"針對「{topic}」，請根據研究蒐集到的所有來源內容，產出一份結構完整、具備專業分析且完全使用繁體中文的研究報告。包含關鍵發現與結論。"
             
-            if res_query.returncode == 0:
-                summary = res_query.stdout.strip()
+            # 使用官方建議的 query notebook 指令
+            query_res = self.run_nlm("query", "notebook", nb_id, prompt)
+            
+            if query_res.returncode == 0:
+                summary = query_res.stdout.strip()
                 try:
-                    data = json.loads(res_query.stdout)
-                    summary = data.get("value", {}).get("answer", res_query.stdout)
+                    data = json.loads(query_res.stdout)
+                    summary = data.get("value", {}).get("answer", summary)
                 except: pass
                 
-                # 清理
                 summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
                 return True, summary
             else:
-                return False, f"報告產出失敗: {res_query.stderr or res_query.stdout}"
+                return False, f"報告產出失敗: {query_res.stderr or query_res.stdout}"
 
         finally:
             if nb_id:
-                print(f"🧹 正在刪除研究筆記本: {nb_id}...")
+                print(f"🧹 刪除臨時筆記本: {nb_id}")
                 self.run_nlm("notebook", "delete", nb_id, "--confirm")
 
 
