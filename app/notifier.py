@@ -416,7 +416,7 @@ class Notifier:
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token: return None
 
-        safe_chat_id = "".join(c if c.isalnum() else "_" for ch in str(chat_id))[:30]
+        safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(chat_id))[:30]
         timestamp = int(time.time())
         blob_path = f"reports/{safe_chat_id}/{timestamp}_{file_name}"
         api_url = f"https://blob.vercel-storage.com/v1/upload/{blob_path}"
