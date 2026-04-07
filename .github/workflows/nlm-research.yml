@@ -1,0 +1,61 @@
+name: NLM Deep Research
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: '研究主題'
+        required: true
+        type: string
+      chat_id:
+        description: '回傳結果的 Telegram/LINE ID'
+        required: true
+        type: string
+      message_id:
+        description: '要刪除的「處理中」訊息 ID'
+        required: false
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  nlm-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run NLM Deep Research
+      env:
+        BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+        YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+        YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        INPUT_MSG_ID: ${{ inputs.message_id }}
+      run: |
+        python jobs/on_demand_research.py "${{ inputs.topic }}" "${{ inputs.chat_id }}" "${{ inputs.message_id }}"
