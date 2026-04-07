@@ -16,20 +16,36 @@ def dl(name, default):
     if not token:
         print(f"⚠️ 缺少 BLOB_READ_WRITE_TOKEN，無法下載 {name}")
         return False
-    headers = {'Authorization': f'Bearer {token}'}
+    
+    # 這裡從「List 模式」改為「直接 GET 模式」，以節省 Advanced Operations 額度
+    url = f"https://blob.vercel-storage.com/state/{name}"
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'x-api-version': '1'
+    }
+    
     try:
-        list_url = f'https://blob.vercel-storage.com?prefix=state/{name}'
-        req = r.Request(list_url, headers=headers)
+        req = r.Request(url, headers=headers)
         with r.urlopen(req) as resp:
-            data = json.loads(resp.read().decode())
-            blobs = data.get('blobs', [])
-            if blobs:
-                with r.urlopen(blobs[0]['url']) as f_resp:
-                    content = f_resp.read()
-                    with open(name, 'wb') as f: f.write(content)
+            content = resp.read()
+            # 如果回傳的是 JSON (代表檔案不存在或噴出錯誤)，Vercel 會回傳錯誤訊息
+            # 正常檔案下載應該是 binary
+            if content.startswith(b'{"error":'):
+                print(f"⚠️ 雲端尚未有 {name} 紀錄，將使用預設值")
+                with open(name, 'w') as f: f.write(default)
                 return True
+                
+            with open(name, 'wb') as f: f.write(content)
+            return True
+    except r.HTTPError as e:
+        if e.code == 404:
+            print(f"ℹ️ 雲端無 {name} (404)，建立初始檔案")
+            with open(name, 'w') as f: f.write(default)
+            return True
+        print(f"⚠️ 下載 {name} 失敗: HTTP {e.code}")
     except Exception as e:
-        print(f"⚠️ 下載 {name} 失敗: {e}")
+        print(f"⚠️ 下載 {name} 異常: {e}")
+    
     with open(name, 'w') as f: f.write(default)
     return False
 
@@ -59,22 +75,12 @@ def main():
         target_chat_id = sys.argv[2] if len(sys.argv) > 2 else ""
         dl('processed_videos.txt', '')
         dl('last_check.txt', '')
-        for i in range(5):
-            success = dl('subscriptions.json', '{}')
-            if not target_chat_id and success:
-                print("✅ Downloaded subscriptions.json")
-                return
-            if success and target_chat_id:
-                try:
-                    with open('subscriptions.json', 'r') as f:
-                        s = json.load(f)
-                        if target_chat_id in s.keys():
-                            print(f"✅ Found {target_chat_id}"); return
-                except json.JSONDecodeError as e:
-                    print(f"⚠️ subscriptions.json 解析失敗 (attempt {i+1}): {e}")
-            if i < 4:
-                print(f"⏳ 等待 Blob 同步... (attempt {i+1}/5)")
-                time.sleep(10)
+        
+        # 改為直接下載，不再使用 Advanced Operations 的 List
+        success = dl('subscriptions.json', '{}')
+        if success:
+            print("✅ 狀態還原完成")
+        return
 
     elif action == "persist":
         up('processed_videos.txt', 'processed_videos.txt')
