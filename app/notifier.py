@@ -419,7 +419,8 @@ class Notifier:
         safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(chat_id))[:30]
         timestamp = int(time.time())
         blob_path = f"reports/{safe_chat_id}/{timestamp}_{file_name}"
-        api_url = f"https://blob.vercel-storage.com/v1/upload/{blob_path}"
+        # 修正：直接使用路徑作為 URL
+        api_url = f"https://blob.vercel-storage.com/{blob_path}"
         
         try:
             with open(tmp_path, "rb") as f:
@@ -430,8 +431,10 @@ class Notifier:
                 }, timeout=60)
                 if resp.status_code == 200:
                     return resp.json().get("url")
+                else:
+                    print(f"❌ Vercel 上傳失敗 (Status {resp.status_code}): {resp.text}")
         except Exception as e:
-            print(f"❌ 報告上傳失敗: {e}")
+            print(f"❌ 報告上傳異常: {e}")
         return None
 
     @classmethod

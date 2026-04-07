@@ -249,8 +249,20 @@ class NotebookService:
             res_query = self.run_nlm("query", "notebook", nb_id, prompt)
             if res_query.returncode == 0:
                 summary = res_query.stdout.strip()
+                # 強化 JSON 提取邏輯
+                try:
+                    data = json.loads(summary)
+                    if isinstance(data, dict):
+                        # 處理 {"value": {"answer": "..."}}
+                        if "value" in data and isinstance(data["value"], dict):
+                            summary = data["value"].get("answer", summary)
+                        # 處理 {"answer": "..."}
+                        elif "answer" in data:
+                            summary = data["answer"]
+                except: pass
+                
                 summary = re.sub(r'\*\*(Thinking|Thought)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
-                return True, summary
+                return True, summary.strip()
             return False, "報告產出失敗"
         finally:
             if nb_id: self.run_nlm("notebook", "delete", nb_id, "--confirm")
