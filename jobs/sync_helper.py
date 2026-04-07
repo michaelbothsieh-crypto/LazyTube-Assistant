@@ -11,129 +11,84 @@ import urllib.request as r
 def get_h(cid):
     return hashlib.sha256(str(cid).encode()).hexdigest()[:12]
 
-def dl(name, default):
+def dl_state():
+    """下載合併後的 state.json 並拆分到本地檔案"""
     token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-    if not token:
-        print(f"⚠️ 缺少 BLOB_READ_WRITE_TOKEN，無法下載 {name}")
-        return False
+    if not token: return False
     
-    # 這裡從「List 模式」改為「直接 GET 模式」，以節省 Advanced Operations 額度
-    url = f"https://blob.vercel-storage.com/state/{name}"
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'x-api-version': '1'
-    }
-    
+    headers = {'Authorization': f'Bearer {token}'}
     try:
-        req = r.Request(url, headers=headers)
+        # 使用 list 找到 state.json 的真正 URL (Advanced Operation, 消耗 1 次)
+        list_url = 'https://blob.vercel-storage.com?prefix=state/state.json'
+        req = r.Request(list_url, headers=headers)
         with r.urlopen(req) as resp:
-            content = resp.read()
-            # 如果回傳的是 JSON (代表檔案不存在或噴出錯誤)，Vercel 會回傳錯誤訊息
-            # 正常檔案下載應該是 binary
-            if content.startswith(b'{"error":'):
-                print(f"⚠️ 雲端尚未有 {name} 紀錄，將使用預設值")
-                with open(name, 'w') as f: f.write(default)
-                return True
-                
-            with open(name, 'wb') as f: f.write(content)
-            return True
-    except r.HTTPError as e:
-        if e.code == 404:
-            print(f"ℹ️ 雲端無 {name} (404)，建立初始檔案")
-            with open(name, 'w') as f: f.write(default)
-            return True
-        print(f"⚠️ 下載 {name} 失敗: HTTP {e.code}")
+            data = json.loads(resp.read().decode())
+            blobs = data.get('blobs', [])
+            if blobs:
+                # 取得真正具有隨機後綴的下載連結 (Simple Operation)
+                with r.urlopen(blobs[0]['url']) as f_resp:
+                    content = json.loads(f_resp.read().decode())
+                    
+                    # 拆分回原本的檔案供主程式使用
+                    with open('processed_videos.txt', 'w') as f: 
+                        f.write("\n".join(content.get('processed_videos', [])))
+                    with open('last_check.txt', 'w') as f: 
+                        f.write(content.get('last_check', ''))
+                    with open('subscriptions.json', 'w') as f: 
+                        json.dump(content.get('subscriptions', {}), f, ensure_ascii=False, indent=2)
+                    print(f"✅ 狀態已從雲端 state.json 還原 (包含 {len(content.get('processed_videos', []))} 筆紀錄)")
+                    return True
     except Exception as e:
-        print(f"⚠️ 下載 {name} 異常: {e}")
+        print(f"⚠️ 雲端 state.json 讀取失敗或尚未建立: {e}")
     
-    with open(name, 'w') as f: f.write(default)
+    # 建立空的初始檔案
+    with open('processed_videos.txt', 'w') as f: f.write('')
+    with open('last_check.txt', 'w') as f: f.write('')
+    with open('subscriptions.json', 'w') as f: f.write('{}')
     return False
 
-def up(name, local_path):
+def up_state():
+    """將本地三個檔案合併並上傳為 state.json"""
     token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-    if not os.path.exists(local_path): return
+    if not token: return
+    
     try:
-        with open(local_path, 'rb') as f: data = f.read()
-        if len(data) == 0: data = b"\n"
-        url = f"https://blob.vercel-storage.com/state/{name}"
+        # 讀取並打包
+        state = {'processed_videos': [], 'last_check': '', 'subscriptions': {}}
+        if os.path.exists('processed_videos.txt'):
+            with open('processed_videos.txt', 'r') as f:
+                state['processed_videos'] = [line.strip() for line in f if line.strip()]
+        if os.path.exists('last_check.txt'):
+            with open('last_check.txt', 'r') as f:
+                state['last_check'] = f.read().strip()
+        if os.path.exists('subscriptions.json'):
+            with open('subscriptions.json', 'r') as f:
+                try: state['subscriptions'] = json.load(f)
+                except: pass
+
+        data = json.dumps(state, ensure_ascii=False).encode('utf-8')
+        url = "https://blob.vercel-storage.com/state/state.json"
         req = r.Request(url, data=data, method='PUT', headers={
             'Authorization': f'Bearer {token}',
             'x-api-version': '1',
             'x-add-random-suffix': '0',
-            'content-type': 'application/octet-stream'
+            'content-type': 'application/json'
         })
         r.urlopen(req)
-        print(f"✅ Persisted {name}")
+        print("✅ 狀態已打包上傳至 state.json")
     except Exception as e:
-        print(f"❌ Persist {name} failed: {e}")
+        print(f"❌ 狀態打包上傳失敗: {e}")
 
 def main():
     if len(sys.argv) < 2: return
     action = sys.argv[1]
 
     if action == "restore":
-        target_chat_id = sys.argv[2] if len(sys.argv) > 2 else ""
-        dl('processed_videos.txt', '')
-        dl('last_check.txt', '')
-        
-        # 改為直接下載，不再使用 Advanced Operations 的 List
-        success = dl('subscriptions.json', '{}')
-        if success:
-            print("✅ 狀態還原完成")
-        return
-
+        dl_state()
     elif action == "persist":
-        up('processed_videos.txt', 'processed_videos.txt')
-        up('last_check.txt', 'last_check.txt')
-
-        # 訂閱清單採用「下載-合併-上傳」策略
-        local_file = 'subscriptions.json'
-        if os.path.exists(local_file):
-            print("🔄 Merging subscription updates into cloud data...")
-            try:
-                with open(local_file, 'r') as f: local_subs = json.load(f)
-            except json.JSONDecodeError as e:
-                print(f"❌ 本地 {local_file} 解析失敗: {e}")
-                return
-
-            if dl('subscriptions.json', '{}'):
-                try:
-                    with open(local_file, 'r') as f: cloud_subs = json.load(f)
-                except json.JSONDecodeError as e:
-                    print(f"❌ 雲端資料解析失敗: {e}")
-                    # 雲端損壞則直接上傳本地版本
-                    up('subscriptions.json', local_file)
-                    return
-
-                # --- 改進的合併邏輯 ---
-                # 1. 確保本地所有群組都在雲端中存在
-                for cid, l_group in local_subs.items():
-                    if cid not in cloud_subs:
-                        cloud_subs[cid] = l_group
-                        continue
-                    
-                    # 2. 針對群組內的每個頻道進行比對與更新
-                    c_group = cloud_subs[cid]
-                    for l_sub in l_group:
-                        found = False
-                        for c_sub in c_group:
-                            if l_sub['channel_id'] == c_sub['channel_id']:
-                                # 更新狀態資訊
-                                c_sub['last_check'] = l_sub['last_check']
-                                c_sub['is_first_run'] = l_sub.get('is_first_run', False)
-                                if 'signup_msg_id' in l_sub:
-                                    c_sub['signup_msg_id'] = l_sub['signup_msg_id']
-                                found = True
-                                break
-                        
-                        # 3. 如果是新加入的頻道，則新增至雲端群組
-                        if not found:
-                            c_group.append(l_sub)
-
-                # 寫回 local 並上傳
-                with open(local_file, 'w', encoding='utf-8') as f:
-                    json.dump(cloud_subs, f, ensure_ascii=False, indent=2)
-                up('subscriptions.json', local_file)
+        # 這裡可以保留原本的個別上傳 (Simple Ops 是免費且無上限的)
+        # 但我們主要透過 up_state 確保資料一致性
+        up_state()
 
 
 if __name__ == "__main__":
