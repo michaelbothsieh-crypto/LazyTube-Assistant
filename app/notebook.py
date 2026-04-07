@@ -544,26 +544,22 @@ class NotebookService:
             if start_res.returncode != 0:
                 return False, f"啟動失敗: {start_res.stderr or start_res.stdout}"
 
-            print("⏳ 正在輪詢研究進度 (每 30 秒一次，上限 20 分鐘)...")
+            print("⏳ 正在輪詢研究進度 (每 60 秒一次，上限 20 分鐘)...")
             start_time = time.time()
             is_done = False
             while time.time() - start_time < 1200:
                 # 規範: nlm research status [OPTIONS] NOTEBOOK_ID
-                # 使用 --max-wait 0 進行單次檢查
                 status_res = self.run_nlm("research", "status", nb_id, "--max-wait", "0", verbose=False)
-                out = status_res.stdout.lower()
+                out = status_res.stdout.strip().lower()
                 
-                # 偵測完成信號：
-                # 1. 輸出包含 "completed" 或 "success"
-                # 2. 或是輸出包含 "no active research" (代表已經轉入待匯入狀態)
                 if any(k in out for k in ["completed", "success", "no active research", "ready to import"]):
                     is_done = True
                     break
                 
                 # 印出狀態日誌方便觀察
-                status_line = out.split("\n")[0][:100]
+                status_line = out.split("\n")[0][:100] if out else "等待伺服器回應中..."
                 print(f"📊 目前狀態: {status_line}")
-                time.sleep(30)
+                time.sleep(60)
 
             if not is_done:
                 return False, "研究超時 (20 分鐘)"
