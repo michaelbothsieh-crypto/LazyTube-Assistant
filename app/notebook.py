@@ -521,3 +521,79 @@ class NotebookService:
                 self.run_nlm("notebook", "delete", nb_id, "--confirm")
 
         return target_path
+
+    async def research_topic(self, topic: str):
+        """
+        /// 執行深度研究 (Deep Research)
+        /// topic: 研究主題
+        /// 回傳 (success, result)
+        """
+        nb_id = None
+        try:
+            nb_name = f"RESEARCH_{uuid.uuid4().hex[:4].upper()}"
+            print(f"📁 正在建立研究筆記本: {nb_name}...")
+            res = self.run_nlm("notebook", "create", nb_name)
+            if res.returncode != 0:
+                return False, f"建立筆記本失敗: {res.stderr or res.stdout}"
+            
+            match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
+            nb_id = match.group(1) if match else nb_name
+
+            print(f"🔎 正在啟動深度研究: {topic}...")
+            # 呼叫 nlm research start <notebook_id> <topic>
+            res_research = self.run_nlm("research", "start", nb_id, topic, "--confirm")
+            
+            if res_research.returncode != 0:
+                return False, f"研究啟動失敗: {res_research.stderr or res_research.stdout}"
+
+            print("⏳ 正在等待研究代理人完成工作 (此過程約需 3-8 分鐘)...")
+            start_time = time.time()
+            is_done = False
+            while time.time() - start_time < 600: # 最多等 10 分鐘
+                status_res = self.run_nlm("research", "status", nb_id, "--json", verbose=False)
+                if status_res.returncode == 0:
+                    try:
+                        status_data = json.loads(status_res.stdout)
+                        # 假設回傳格式包含 status 欄位
+                        current_status = str(status_data.get("status", "")).lower()
+                        if current_status in ["completed", "success"]:
+                            is_done = True
+                            break
+                        elif current_status in ["failed", "error"]:
+                            return False, f"研究代理人執行出錯: {status_data.get('error', '未知錯誤')}"
+                    except:
+                        # 如果 JSON 解析失敗，嘗試關鍵字比對
+                        if "completed" in status_res.stdout.lower():
+                            is_done = True
+                            break
+                time.sleep(15)
+
+            if not is_done:
+                return False, "研究任務超時 (10 分鐘)"
+
+            print("📝 研究完成，正在產出總結報告...")
+            # 研究完成後，資料已匯入筆記本，執行 query 產出報告
+            prompt = f"針對主題「{topic}」，請根據研究蒐集到的所有資料，產出一份深度且結構清晰的繁體中文研究報告。包含核心發現、技術細節與結論。"
+            res_query = self.run_nlm("query", "notebook", nb_id, prompt)
+            
+            if res_query.returncode == 0:
+                summary = res_query.stdout.strip()
+                try:
+                    data = json.loads(res_query.stdout)
+                    summary = data.get("value", {}).get("answer", res_query.stdout)
+                except: pass
+                
+                # 清理
+                summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
+                return True, summary
+            else:
+                return False, f"報告產出失敗: {res_query.stderr or res_query.stdout}"
+
+        finally:
+            if nb_id:
+                print(f"🧹 正在刪除研究筆記本: {nb_id}...")
+                self.run_nlm("notebook", "delete", nb_id, "--confirm")
+
+
+# 別名相容性
+NotebookManager = NotebookService

@@ -70,6 +70,13 @@ async def dispatch_batch_workflow(urls: str, prompt: str = "", chat_id: str = ""
     })
 
 
+async def dispatch_research_workflow(topic: str, chat_id: str = "", message_id: str = ""):
+    """觸發深度研究工作流 (Deep Research)"""
+    return await _dispatch("nlm-research.yml", {
+        "topic": topic, "chat_id": str(chat_id), "message_id": str(message_id)
+    })
+
+
 async def dispatch_update_cron_workflow() -> bool:
     """訂閱變更後觸發，自動重新計算並更新 master-scheduler 的 cron"""
     return await _dispatch("update-cron.yml", {}, timeout=5.0)

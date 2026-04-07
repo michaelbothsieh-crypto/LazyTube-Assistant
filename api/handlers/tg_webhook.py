@@ -115,6 +115,9 @@ async def handle_telegram_update(update: dict):
     elif text.startswith("/batch"):
         await _handle_batch(chat_id, text)
 
+    elif text.startswith("/research"):
+        await _handle_research(chat_id, text)
+
     else:
         # 非指令訊息，安靜地忽略，不留 Log
         return
@@ -582,3 +585,41 @@ async def _handle_batch(chat_id: str, text: str):
     
     if not success:
         await send_telegram_message(chat_id, "❌ <b>觸發批次任務失敗</b>。")
+
+
+async def _handle_research(chat_id: str, text: str):
+    """
+    解析 /research 指令並觸發 GitHub Actions
+    格式: /research <主題>
+    """
+    from api.utils.github_dispatch import dispatch_research_workflow
+    
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        await send_telegram_message(
+            chat_id,
+            "❌ <b>格式錯誤</b>\n使用方法：<code>/research &lt;研究主題&gt;</code>"
+        )
+        return
+
+    topic = parts[1].strip()
+    
+    # 立即回應「處理中」
+    resp_data = await send_telegram_message(
+        chat_id,
+        f"🔎 <b>深度研究代理人已啟動</b>\n\n"
+        f"主題：<code>{topic}</code>\n\n"
+        f"<i>AI 正在搜尋網路、蒐集資料並產出報告 (約 5-10 分鐘)。</i>"
+    )
+    
+    msg_id = str(resp_data.get("result", {}).get("message_id", "")) if resp_data and resp_data.get("ok") else ""
+
+    # 觸發 Workflow
+    success = await dispatch_research_workflow(
+        topic=topic,
+        chat_id=chat_id,
+        message_id=msg_id
+    )
+    
+    if not success:
+        await send_telegram_message(chat_id, "❌ <b>觸發研究任務失敗</b>。")
