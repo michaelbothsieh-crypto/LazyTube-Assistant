@@ -42,3 +42,7 @@ class AuthManager:
         except Exception as e:
             print(f"❌ 憑證佈署失敗: {e}")
             return False
+
+# 別名相容性
+def setup_nlm_auth():
+    return AuthManager.deploy_credentials()
