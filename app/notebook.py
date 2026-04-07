@@ -553,6 +553,7 @@ class NotebookService:
                 status_res = self.run_nlm("research", "status", "--json", verbose=False)
                 if status_res.returncode == 0:
                     try:
+                        print(f"📊 目前研究任務狀態清單: {status_res.stdout.strip()}")
                         status_data = json.loads(status_res.stdout)
                         if isinstance(status_data, list):
                             if not status_data: 
@@ -562,15 +563,19 @@ class NotebookService:
                             active_found = False
                             for task in status_data:
                                 t_status = str(task.get("status", "")).lower()
+                                # 只要還有一個任務在 active/pending/running/queued 且 notebook_id 相同或未知，就繼續等
+                                t_nb_id = task.get("notebook_id")
                                 if t_status in ["active", "pending", "running", "queued"]:
-                                    active_found = True
-                                    print(f"📊 研究進行中... 狀態: {t_status}")
-                                    break
+                                    if not t_nb_id or t_nb_id == nb_id:
+                                        active_found = True
+                                        print(f"📊 研究進行中... 狀態: {t_status}")
+                                        break
                             
                             if not active_found:
                                 is_done = True
                                 break
-                    except:
+                    except Exception as e:
+                        print(f"⚠️ 解析狀態 JSON 失敗: {e}")
                         out_lower = status_res.stdout.lower()
                         if "no active research" in out_lower or "completed" in out_lower:
                             is_done = True
@@ -582,9 +587,10 @@ class NotebookService:
 
             print("📥 正在將研究成果匯入筆記本...")
             # 關鍵：研究完成後必須執行 import 才能將來源加入筆記本
-            import_res = self.run_nlm("research", "import", "--notebook-id", nb_id, "--all", "--confirm")
+            # 正確格式: nlm research import <nb_id>
+            import_res = self.run_nlm("research", "import", nb_id)
             if import_res.returncode != 0:
-                print(f"⚠️ 匯入部分失敗，嘗試繼續產出報告... ({import_res.stderr or import_res.stdout})")
+                print(f"⚠️ 匯入失敗或無資料，嘗試繼續產出報告... ({import_res.stderr or import_res.stdout})")
 
             print("📝 研究完成，正在產出總結報告...")
             # 研究完成後，資料已匯入筆記本，執行 query 產出報告
