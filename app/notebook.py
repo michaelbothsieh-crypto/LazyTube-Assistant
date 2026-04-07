@@ -537,19 +537,20 @@ class NotebookService:
             
             match = re.search(r"ID:\s*([a-zA-Z0-9\-]+)", res.stdout)
             nb_id = match.group(1) if match else nb_name
+print(f"🔎 啟動研究代理人 (Fast Mode): {topic}")
+# 規範: nlm research start [OPTIONS] QUERY
+# 切換為 fast 模式以加速處理
+start_res = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", "fast", topic)
+if start_res.returncode != 0:
+    return False, f"啟動失敗: {start_res.stderr or start_res.stdout}"
 
-            print(f"🔎 啟動研究代理人: {topic}")
-            # 規範: nlm research start [OPTIONS] QUERY
-            start_res = self.run_nlm("research", "start", "--notebook-id", nb_id, "--mode", "deep", topic)
-            if start_res.returncode != 0:
-                return False, f"啟動失敗: {start_res.stderr or start_res.stdout}"
+print("⏳ 正在輪詢研究進度 (每 60 秒一次)...")
+start_time = time.time()
+is_done = False
+while time.time() - start_time < 600: # Fast 模式下超時縮短為 10 分鐘
+    # 規範: nlm research status [OPTIONS] NOTEBOOK_ID
+    status_res = self.run_nlm("research", "status", nb_id, "--max-wait", "0", verbose=False)
 
-            print("⏳ 正在輪詢研究進度 (每 60 秒一次，上限 20 分鐘)...")
-            start_time = time.time()
-            is_done = False
-            while time.time() - start_time < 1200:
-                # 規範: nlm research status [OPTIONS] NOTEBOOK_ID
-                status_res = self.run_nlm("research", "status", nb_id, "--max-wait", "0", verbose=False)
                 out = status_res.stdout.strip().lower()
                 
                 if any(k in out for k in ["completed", "success", "no active research", "ready to import"]):
