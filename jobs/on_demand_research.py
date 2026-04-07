@@ -26,7 +26,7 @@ async def main():
     
     # 1. 認證
     if not setup_nlm_auth():
-        Notifier.send_status(chat_id, f"❌ 認證失敗，請檢查 NLM_COOKIE_BASE64。", msg_id)
+        Notifier.send_text(chat_id, f"❌ 認證失敗，請檢查 NLM_COOKIE_BASE64。", html=True)
         return
 
     # 2. 執行研究 (使用 NotebookManager)
@@ -35,14 +35,18 @@ async def main():
     # 在 NotebookManager 中新增一個 research_topic 方法
     success, result = await nm.research_topic(topic)
     
+    # 3. 清理之前的提示訊息
+    if msg_id:
+        Notifier.delete_pending_message(chat_id, msg_id)
+
     if success:
-        # 3. 回傳結果
+        # 4. 回傳結果
         print("✅ 研究完成")
         report_text = f"🔎 <b>深度研究報告：{topic}</b>\n\n{result}"
-        Notifier.send_status(chat_id, report_text, msg_id)
+        Notifier.send_text(chat_id, report_text, html=True)
     else:
         print(f"❌ 研究失敗: {result}")
-        Notifier.send_status(chat_id, f"❌ 深度研究失敗: {result}", msg_id)
+        Notifier.send_text(chat_id, f"❌ 深度研究失敗: {result}", html=True)
 
 if __name__ == "__main__":
     asyncio.run(main())

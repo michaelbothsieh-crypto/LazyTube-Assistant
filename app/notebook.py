@@ -541,7 +541,7 @@ class NotebookService:
 
             print(f"🔎 正在啟動深度研究: {topic}...")
             # 呼叫 nlm research start <notebook_id> <topic>
-            res_research = self.run_nlm("research", "start", nb_id, topic, "--confirm")
+            res_research = self.run_nlm("research", "start", nb_id, topic)
             
             if res_research.returncode != 0:
                 return False, f"研究啟動失敗: {res_research.stderr or res_research.stdout}"
