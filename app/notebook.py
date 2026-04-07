@@ -245,24 +245,40 @@ class NotebookService:
 
             if not is_done: return False, f"研究超時 ({timeout//60} 分鐘)"
             self.run_nlm("research", "import", nb_id)
-            prompt = f"針對「{topic}」，產出結構完整的繁體中文研究報告。"
+
+            # 強化後的台灣專業財經 Prompt
+            prompt = (
+                f"你是一位專業的資深財經分析師。請針對主題「{topic}」，根據研究蒐集到的資料，"
+                "產出一份結構嚴謹、分析深刻的『繁體中文（台灣用語）』研究報告。\\n\\n"
+                "【報告要求】：\\n"
+                "1. 必須包含：核心摘要、技術/產業趨勢、市場風險預估、結論。\\n"
+                "2. 語氣必須專業，使用台灣開發者與投資者慣用的財經術語。\\n"
+                "3. 嚴禁輸出任何英文的思考過程、工具呼叫說明（如 Defining Tool Parameters）或前言結語。\\n"
+                "4. 直接輸出報告內容，不要有任何『好的，我為您準備...』之類的贅詞。"
+            )
+
             res_query = self.run_nlm("query", "notebook", nb_id, prompt)
             if res_query.returncode == 0:
                 summary = res_query.stdout.strip()
-                # 強化 JSON 提取邏輯
+                # 強化 JSON 提取
                 try:
                     data = json.loads(summary)
                     if isinstance(data, dict):
-                        # 處理 {"value": {"answer": "..."}}
                         if "value" in data and isinstance(data["value"], dict):
                             summary = data["value"].get("answer", summary)
-                        # 處理 {"answer": "..."}
                         elif "answer" in data:
                             summary = data["answer"]
                 except: pass
-                
-                summary = re.sub(r'\*\*(Thinking|Thought)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
+
+                # --- 強力過濾英文垃圾與 Meta 說明 ---
+                # 1. 移除被 ** 包裹的 AI 標籤 (Thinking, Thought, Defining... 等)
+                summary = re.sub(r'\*\*(Thinking|Thought|Analysis|Defining|Finalizing).*?\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
+                # 2. 移除常見的英文開頭段落 (針對 NotebookLM 贅詞)
+                summary = re.sub(r'I\'ve (finalized|decided|started).*?\.', '', summary, flags=re.IGNORECASE)
+                summary = re.sub(r'Defining Tool Parameters.*?\.', '', summary, flags=re.IGNORECASE)
+
                 return True, summary.strip()
+
             return False, "報告產出失敗"
         finally:
             if nb_id: self.run_nlm("notebook", "delete", nb_id, "--confirm")
