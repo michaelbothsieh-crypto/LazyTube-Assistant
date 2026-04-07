@@ -40,10 +40,28 @@ async def main():
         Notifier.delete_pending_message(chat_id, msg_id)
 
     if success:
-        # 4. 回傳結果
+        # 4. 生成並上傳 HTML 報告
+        print("🎨 正在生成專業 HTML 報告...")
+        html_content = Notifier.generate_html_report(topic, result)
+        report_url = Notifier.upload_report(topic, html_content, chat_id)
+        
+        # 5. 回傳結果
         print("✅ 研究完成")
-        report_text = f"🔎 <b>深度研究報告：{topic}</b>\n\n{result}"
-        Notifier.send_text(chat_id, report_text, html=True)
+        
+        # 提取前 300 字作為精簡摘要
+        preview_text = result[:400] + "..." if len(result) > 400 else result
+        
+        report_msg = (
+            f"🔎 <b>深度研究完成：{topic}</b>\n\n"
+            f"📝 <b>核心摘要預覽：</b>\n{preview_text}\n\n"
+        )
+        
+        if report_url:
+            report_msg += f"🌐 <b>完整專業報告 (Web)：</b>\n<a href='{report_url}'>👉 點此線上瀏覽完整研究成果</a>\n"
+        else:
+            report_msg += f"⚠️ 報告上傳失敗，僅提供文字預覽。"
+            
+        Notifier.send_text(chat_id, report_msg, html=True)
     else:
         print(f"❌ 研究失敗: {result}")
         Notifier.send_text(chat_id, f"❌ 深度研究失敗: {result}", html=True)

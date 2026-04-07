@@ -159,51 +159,36 @@ class Notifier:
     def _upload_to_vercel_blob(file_path: str, target_chat_id: str) -> Optional[str]:
         """
         將檔案上傳至 Vercel Blob 並取得公開網址。
-        取代原本上傳至 GitHub 的舊邏輯。
         """
         token = os.environ.get("BLOB_READ_WRITE_TOKEN")
         if not token:
-            print("❌ 缺少 BLOB_READ_WRITE_TOKEN，無法上傳至 Vercel Blob")
+            print("❌ 缺少 BLOB_READ_WRITE_TOKEN")
             return None
 
         filename = os.path.basename(file_path)
-        # 移除檔名中的特殊字元避免上傳失敗
         safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-").strip()
         safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(target_chat_id))[:50]
-        # 使用時間戳與 ChatID 建立唯一路徑
         blob_path = f"artifacts/{safe_chat_id}/{int(time.time())}_{safe_filename}"
         
-        # Vercel Blob REST API 端點
         api_url = f"https://blob.vercel-storage.com/v1/upload/{blob_path}"
         
         try:
-            file_size = os.path.getsize(file_path)
-            print(f"☁️ 正在上傳至 Vercel Blob: {safe_filename} ({file_size} bytes)...")
-            
             with open(file_path, "rb") as f:
                 headers = {
                     "Authorization": f"Bearer {token}",
                     "x-api-version": "1",
                 }
-                # 使用 PUT 方法直接上傳二進位檔案流
                 resp = requests.put(api_url, data=f, headers=headers, timeout=120)
-                
                 if resp.status_code == 200:
-                    url = resp.json().get("url")
-                    print(f"✅ 上傳成功: {url}")
-                    return url
-                
-                print(f"❌ Vercel Blob 上傳失敗: {resp.status_code} {resp.text}")
+                    return resp.json().get("url")
                 return None
-        except Exception as e:
-            print(f"❌ Vercel Blob 上傳異常: {e}")
+        except Exception:
             return None
 
     @staticmethod
     def delete_pending_message(chat_id: str, message_id: str) -> None:
         """
         /// 刪除 Telegram「處理中」的等待提示訊息
-        /// 僅對 Telegram 使用者生效（LINE 使用者略過）
         """
         if not message_id or str(chat_id).startswith(("U", "C", "R")):
             return
@@ -213,16 +198,12 @@ class Notifier:
         import requests as _requests
         del_url = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/deleteMessage"
         try:
-            del_resp = _requests.post(del_url, json={
+            _requests.post(del_url, json={
                 "chat_id": chat_id,
                 "message_id": int(message_id)
             }, timeout=10)
-            if del_resp.status_code == 200:
-                print("✅ 訊息刪除成功")
-            else:
-                print(f"⚠️ 訊息刪除失敗: {del_resp.status_code} {del_resp.text}")
-        except Exception as e:
-            print(f"❌ 刪除訊息發生異常: {e}")
+        except Exception:
+            pass
 
     @classmethod
     def send_error(cls, target_chat_id, error_msg, url=None):
@@ -273,21 +254,11 @@ class Notifier:
     def _send_photo_to_line(cls, chat_id, file_path, caption=None):
         image_url = cls._upload_to_vercel_blob(file_path, chat_id)
         if not image_url:
-            fallback = "⚠️ 圖片已生成，但目前無法建立公開網址。"
-            if caption:
-                fallback = f"{caption}\n\n{fallback}"
-            return cls._send_to_line(chat_id, fallback)
-
+            return False
         messages = []
         if caption:
             messages.append({"type": "text", "text": caption[:5000]})
-        messages.append(
-            {
-                "type": "image",
-                "originalContentUrl": image_url,
-                "previewImageUrl": image_url,
-            }
-        )
+        messages.append({"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url})
         return cls._push_line_messages(chat_id, messages)
 
     @classmethod
@@ -321,153 +292,180 @@ class Notifier:
         except Exception:
             return False
 
-    @staticmethod
-    def _upload_to_github(file_path: str, target_chat_id: str) -> Optional[str]:
-        """
-        當 Vercel Blob 失敗時的備援方案：將檔案 Commit 到 GitHub Repo 並取得 Raw 連結。
-        """
-        import subprocess
-        import shutil
-        
-        token = os.environ.get("GITHUB_TOKEN")
-        if not token:
-            print("❌ 缺少 GITHUB_TOKEN，無法執行 GitHub 備援上傳")
-            return None
-
-        filename = os.path.basename(file_path)
-        ext = filename.split(".")[-1].lower() if "." in filename else "bin"
-        # 決定目標檔名：latest-file 或 latest-pic (為了保持連結穩定或方便手機快取)
-        target_name = "latest-pic.png" if ext in ["png", "jpg", "jpeg", "gif"] else "latest-file.pdf"
-        if ext not in ["png", "jpg", "jpeg", "gif", "pdf"]:
-            target_name = f"latest-file.{ext}"
-
-        safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(target_chat_id))[:50]
-        rel_dir = os.path.join("generated", "line", safe_chat_id)
-        os.makedirs(rel_dir, exist_ok=True)
-        
-        dest_path = os.path.join(rel_dir, target_name)
-        shutil.copy2(file_path, dest_path)
-        
-        print(f"📦 正在將檔案提交至 GitHub: {dest_path}...")
-        
-        try:
-            # 配置 Git (如果尚未配置)
-            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=False)
-            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], check=False)
-            
-            # 提交並推送到 GitHub
-            subprocess.run(["git", "add", dest_path], check=True)
-            commit_msg = f"chore: publish LINE artifact ({target_name}) [skip ci]"
-            subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-            
-            # 使用 Token 進行推播 (在 GitHub Actions 環境下通常不需要特別處理，但為了保險)
-            subprocess.run(["git", "push"], check=True)
-            
-            # 取得 Repo 資訊
-            repo_info = "michaelbothsieh-crypto/LazyTube-Assistant"
-            try:
-                remote_url = subprocess.check_output(["git", "remote", "get-url", "origin"], text=True).strip()
-                if "github.com" in remote_url:
-                    repo_info = remote_url.split("github.com")[-1].replace(":", "/").lstrip("/").replace(".git", "")
-            except:
-                pass
-            raw_url = f"https://raw.githubusercontent.com/{repo_info}/main/generated/line/{safe_chat_id}/{target_name}?t={int(time.time())}"
-            print(f"✅ GitHub 備援上傳成功: {raw_url}")
-            return raw_url
-            
-        except Exception as e:
-            print(f"❌ GitHub 提交失敗: {e}")
-            return None
-
     @classmethod
     def _send_document_to_line(cls, chat_id, file_path, caption=None):
-        # 1. 優先嘗試 Vercel Blob (支援大檔案，連結持久)
         public_url = cls._upload_to_vercel_blob(file_path, chat_id)
-        
-        # 2. 如果 Vercel Blob 失敗 (例如檔案 > 4.5MB)，嘗試 GitHub Fallback
         if not public_url:
-            print("⚠️ Vercel Blob 上傳失敗，嘗試 GitHub 備援...")
-            public_url = cls._upload_to_github(file_path, chat_id)
-
-        if not public_url:
-            fallback = "⚠️ 檔案已生成，但目前無法建立公開下載連結。"
-            if caption:
-                fallback = f"{caption}\n\n{fallback}"
-            return cls._send_to_line(chat_id, fallback)
+            return False
 
         filename = os.path.basename(file_path)
-        file_size = os.path.getsize(file_path)
-        size_str = f"{file_size / 1024 / 1024:.2f} MB" if file_size > 1024 * 1024 else f"{file_size / 1024:.1f} KB"
-        
-        # 根據副檔名顯示不同圖示
-        ext = filename.split(".")[-1].lower() if "." in filename else ""
-        icon = "📊" if ext == "pdf" else "📝" if ext == "md" else "📂"
-        label = "PDF 簡報" if ext == "pdf" else "摘要報告" if ext == "md" else "檔案下載"
-
-        # 使用 Flex Message 繞過 LINE 帳號對 'file' 類型的權限限制
-        flex_contents = {
-            "type": "bubble",
-            "size": "kilo",
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": f"{icon} {label}生成完畢",
-                        "weight": "bold",
-                        "color": "#1DB446",
-                        "size": "sm"
-                    }
-                ]
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": filename,
-                        "weight": "bold",
-                        "size": "md",
-                        "wrap": True,
-                        "maxLines": 3
-                    },
-                    {
-                        "type": "text",
-                        "text": size_str,
-                        "size": "xs",
-                        "color": "#aaaaaa",
-                        "margin": "sm"
-                    }
-                ]
-            },
-            "footer": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "button",
-                        "action": {
-                            "type": "uri",
-                            "label": "📥 點擊下載檔案",
-                            "uri": public_url
-                        },
-                        "style": "primary",
-                        "color": "#1DB446"
-                    }
-                ]
-            }
-        }
-
         messages = []
         if caption:
             messages.append({"type": "text", "text": caption[:5000]})
-        
         messages.append({
-            "type": "flex",
-            "altText": f"📊 {filename} 下載連結",
-            "contents": flex_contents
+            "type": "text",
+            "text": f"📥 檔案已上傳：{filename}\n🔗 下載連結：{public_url}"
         })
-        
         return cls._push_line_messages(chat_id, messages)
+
+    # --- HTML 專業報告相關 ---
+
+    @classmethod
+    def generate_html_report(cls, title: str, markdown_content: str) -> str:
+        """
+        /// 將 Markdown 轉換為專業設計的 HTML 報告
+        """
+        import markdown
+        from datetime import datetime
+        
+        # 轉換 Markdown 為 HTML (支援表格與腳注)
+        html_body = markdown.markdown(markdown_content, extensions=['extra', 'toc', 'tables'])
+        gen_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        # 專業 HTML 模板 (內嵌 CSS)
+        template = f"""
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} - 深度研究報告</title>
+    <style>
+        :root {{
+            --primary-color: #1a73e8;
+            --bg-color: #f8f9fa;
+            --text-color: #202124;
+            --card-bg: #ffffff;
+            --border-color: #dadce0;
+        }}
+        body {{
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0; padding: 0;
+        }}
+        .container {{ max-width: 900px; margin: 40px auto; padding: 0 20px; }}
+        header {{
+            text-align: center; margin-bottom: 40px; padding-bottom: 20px;
+            border-bottom: 2px solid var(--primary-color);
+        }}
+        h1 {{ color: var(--primary-color); margin: 0; }}
+        .meta {{ color: #5f6368; font-size: 0.9em; margin-top: 10px; }}
+        .report-card {{
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }}
+        h2 {{ border-left: 5px solid var(--primary-color); padding-left: 15px; margin-top: 30px; color: #174ea6; }}
+        h3 {{ color: #185abc; }}
+        blockquote {{
+            background: #e8f0fe; border-left: 5px solid var(--primary-color);
+            margin: 20px 0; padding: 15px 20px; font-style: italic;
+        }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+        th, td {{ border: 1px solid var(--border-color); padding: 12px; text-align: left; }}
+        th {{ background: #f1f3f4; }}
+        footer {{ text-align: center; margin-top: 40px; padding: 20px; color: #70757a; font-size: 0.8em; }}
+        @media (max-width: 600px) {{
+            .container {{ margin: 10px auto; }}
+            .report-card {{ padding: 20px; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{title}</h1>
+            <div class="meta">深度研究報告 • 生成時間：{gen_time} • Powered by LazyTube AI</div>
+        </header>
+        <div class="report-card">
+            {html_body}
+        </div>
+        <footer>
+            本報告由 AI 自動生成。內容僅供參考，請自行評估資訊準確性。<br>
+            &copy; {datetime.now().year} LazyTube-Assistant
+        </footer>
+    </div>
+</body>
+</html>
+"""
+        return template
+
+    @classmethod
+    def upload_report(cls, title: str, html_content: str, chat_id: str) -> Optional[str]:
+        """
+        /// 上傳 HTML 報告並執行 30 天清理
+        """
+        # 1. 執行 30 天自動清理
+        try:
+            cls.cleanup_old_reports()
+        except Exception as e:
+            print(f"⚠️ 清理舊報告失敗: {e}")
+
+        # 2. 儲存臨時檔案
+        import uuid
+        file_name = f"report_{uuid.uuid4().hex[:8]}.html"
+        tmp_path = f"/tmp/{file_name}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+
+        # 3. 上傳至 Vercel Blob
+        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if not token: return None
+
+        safe_chat_id = "".join(c if c.isalnum() else "_" for ch in str(chat_id))[:30]
+        timestamp = int(time.time())
+        blob_path = f"reports/{safe_chat_id}/{timestamp}_{file_name}"
+        api_url = f"https://blob.vercel-storage.com/v1/upload/{blob_path}"
+        
+        try:
+            with open(tmp_path, "rb") as f:
+                resp = requests.put(api_url, data=f, headers={
+                    "Authorization": f"Bearer {token}",
+                    "x-api-version": "1",
+                    "content-type": "text/html"
+                }, timeout=60)
+                if resp.status_code == 200:
+                    return resp.json().get("url")
+        except Exception as e:
+            print(f"❌ 報告上傳失敗: {e}")
+        return None
+
+    @classmethod
+    def cleanup_old_reports(cls):
+        """
+        /// 自動清理 30 天前的舊報告
+        """
+        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
+        if not token: return
+
+        list_url = "https://blob.vercel-storage.com?prefix=reports/"
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        try:
+            resp = requests.get(list_url, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                now = time.time()
+                retention_sec = 30 * 24 * 60 * 60 # 30 天
+                
+                to_delete = []
+                for blob in data.get("blobs", []):
+                    try:
+                        # 解析 reports/chat_id/timestamp_filename
+                        pathname = blob["pathname"]
+                        parts = pathname.split("/")
+                        if len(parts) >= 3:
+                            ts = int(parts[2].split("_")[0])
+                            if now - ts > retention_sec:
+                                to_delete.append(blob["url"])
+                    except: continue
+                
+                if to_delete:
+                    print(f"🧹 偵測到 {len(to_delete)} 份過期報告，執行清理...")
+                    delete_url = "https://blob.vercel-storage.com/v1/delete"
+                    requests.post(delete_url, json={"urls": to_delete}, headers=headers, timeout=30)
+        except: pass
