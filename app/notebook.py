@@ -170,13 +170,20 @@ class NotebookService:
             with ThreadPoolExecutor(max_workers=5) as executor:
                 executor.map(lambda u: self._add_source_with_proxy(nb_id, u.strip()), urls)
             
-            # Wait for processing
             time.sleep(15)
             user_intent = get_nlm_prompt(custom_prompt)
-            final_prompt = f"{user_intent}\n\n【請完全以繁體中文回答。】"
+            final_prompt = f"{user_intent}\n\n【請完全以繁體中文回答，嚴禁輸出 JSON 或思考過程。】"
             res = self.run_nlm("query", "notebook", nb_id, final_prompt)
             if res.returncode != 0: return "❌ 批次摘要失敗"
-            return res.stdout.strip()
+            
+            summary = res.stdout.strip()
+            try:
+                data = json.loads(summary)
+                if isinstance(data, dict):
+                    summary = data.get("value", {}).get("answer", data.get("answer", summary))
+            except: pass
+            summary = re.sub(r'\*\*(Thinking|Thought|Analysis).*?\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
+            return summary.strip()
         finally:
             if nb_id: self.run_nlm("notebook", "delete", nb_id, "--confirm")
 
@@ -191,6 +198,11 @@ class NotebookService:
             res = self.run_nlm("query", "notebook", nb_id, prompt)
             if res.returncode == 0:
                 summary = res.stdout.strip()
+                try:
+                    data = json.loads(summary)
+                    if isinstance(data, dict):
+                        summary = data.get("value", {}).get("answer", data.get("answer", summary))
+                except: pass
                 summary = re.sub(r'\*\*(Thinking|Summarizing|Analysis|Thought|思考過程)\*\*[\s\n]*', '', summary, flags=re.IGNORECASE)
                 return summary.strip()
             return f"❌ 摘要產出失敗"
