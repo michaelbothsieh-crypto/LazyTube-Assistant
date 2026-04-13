@@ -44,6 +44,7 @@ jobs:
         continue-on-error: true
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          BLOB_STATE_URL: ${{ secrets.BLOB_STATE_URL }}
         run: |
           python jobs/sync_helper.py restore
 
@@ -61,9 +62,11 @@ jobs:
         run: |
           python jobs/main.py
 
-      - name: Persist state to Vercel Blob
+      - name: Persist state to GitHub
         if: always()
         env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_PAT_WORKFLOW: ${{ secrets.GH_PAT_WORKFLOW }}
+          GH_REPO_OWNER: ${{ secrets.GH_REPO_OWNER }}
+          GH_REPO_NAME: ${{ secrets.GH_REPO_NAME }}
         run: |
           python jobs/sync_helper.py persist
