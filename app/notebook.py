@@ -49,7 +49,7 @@ class NotebookService:
 
     def _add_source_with_proxy(self, nb_id, url, wait=True):
         """
-        /// 核心代理匯入邏輯 (優化版：優先嘗試最快路徑)
+        /// 核心代理匯入邏輯 (強化版)
         """
         wait_flag = ["--wait"] if wait else []
         
@@ -58,22 +58,32 @@ class NotebookService:
             res = self.run_nlm("source", "add", nb_id, "--url", url, *wait_flag)
             if res.returncode == 0: return True
 
-        # 2. 策略路徑：Jina Reader
-        encoded_url = urllib.parse.quote(url, safe="")
+        # 網址標準化：先解碼再編碼，防止雙重編碼問題
+        decoded_url = urllib.parse.unquote(url)
+        encoded_url = urllib.parse.quote(decoded_url, safe="")
+
+        # 2. 策略路徑：Jina Reader (加上快取穿透)
         proxy_url = f"https://r.jina.ai/{encoded_url}"
+        # 透過 run_nlm 呼叫時，NotebookLM 會去抓取 Jina 的結果
         res = self.run_nlm("source", "add", nb_id, "--url", proxy_url, *wait_flag)
         if res.returncode == 0: return True
 
-        # 3. 備援路徑：Cloudflare Worker
+        # 3. 備援路徑：Cloudflare Worker (Puppeteer 渲染)
         try:
-            cf_res = requests.get(f"https://lazypipe-worker.hsieh130.workers.dev/?url={encoded_url}", timeout=20)
-            if cf_res.status_code == 200 and cf_res.json().get("success"):
-                content = self._clean_content(cf_res.json().get("content", ""))
-                tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
-                with open(tmp_txt, "w", encoding="utf-8") as f: f.write(content)
-                res = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
-                return res.returncode == 0
-        except: pass
+            print(f"📡 Jina 失敗，啟動備援爬蟲：{decoded_url[:50]}...")
+            # 增加超時時間至 40 秒，因為 Puppeteer 啟動較慢
+            cf_res = requests.get(f"https://lazypipe-worker.hsieh130.workers.dev/?url={encoded_url}", timeout=40)
+            if cf_res.status_code == 200:
+                resp_json = cf_res.json()
+                if resp_json.get("success"):
+                    content = self._clean_content(resp_json.get("content", ""))
+                    if len(content) > 50: # 確保抓到的不是空內容
+                        tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
+                        with open(tmp_txt, "w", encoding="utf-8") as f: f.write(content)
+                        res = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
+                        return res.returncode == 0
+        except Exception as e:
+            print(f"⚠️ 備援爬蟲發生異常: {e}")
         return False
 
     def process_video(self, url, title, custom_prompt=None):
