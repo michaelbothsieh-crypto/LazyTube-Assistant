@@ -78,61 +78,66 @@ class YouTubeService:
 
     @retry(max_attempts=2)
     def get_channel_info(self, channel_url: str) -> dict:
-        """Resolve channel URL to channel ID and title."""
+        """Resolve channel URL to channel ID and title with maximum resilience."""
         import urllib.parse
         if not channel_url: return {}
         
-        # 0. 優先嘗試正則表達式抓取標準 UCID (這是最準確的)
-        match = re.search(r"(UC[a-zA-Z0-9_-]{22})", channel_url)
-        if match:
-            handle = match.group(1)
+        # 1. 清理與解碼
+        clean_url = channel_url.split("?")[0].split("#")[0].rstrip("/")
+        decoded_url = urllib.parse.unquote(clean_url)
+        
+        # 2. 收集所有可能的候選字串 (用來嘗試不同的 API 參數)
+        candidates = [] # List of (method, value)
+        
+        # 提取 UCID (24位元)
+        ucid_match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
+        if ucid_match:
+            candidates.append(("id", ucid_match.group(1)))
+        
+        # 提取 Handle (@name)
+        handle_match = re.search(r"/(@[a-zA-Z0-9._-]+)", decoded_url)
+        if handle_match:
+            candidates.append(("forHandle", handle_match.group(1)))
+        
+        # 提取路徑片段
+        if "youtube.com/" in decoded_url:
+            path_part = decoded_url.split("youtube.com/")[1]
+            parts = [p for p in path_part.split("/") if p]
+            if parts:
+                # 取得關鍵識別字 (例如 /c/name 中的 name)
+                val = parts[1] if parts[0] in ["c", "user", "channel"] and len(parts) > 1 else parts[0]
+                if val.startswith("@"):
+                    candidates.append(("forHandle", val))
+                else:
+                    candidates.append(("id", val))
+                    candidates.append(("forUsername", val))
+
+        # 3. 依序嘗試 API 呼叫，直到成功為止
+        processed_values = set()
+        for method, value in candidates:
+            cache_key = f"{method}:{value}"
+            if cache_key in processed_values: continue
+            processed_values.add(cache_key)
+            
             try:
-                res = self.service.channels().list(part="snippet", id=handle).execute()
+                kwargs = {method: value, "part": "snippet"}
+                res = self.service.channels().list(**kwargs).execute()
                 if res.get("items"):
                     item = res["items"][0]
                     return {"id": item["id"], "title": item["snippet"]["title"]}
-            except: pass
+            except:
+                continue
 
-        # 1. 清理網址：移除查詢參數與結尾斜線
-        raw_url = channel_url.split("?")[0].split("#")[0].rstrip("/")
-        decoded_url = urllib.parse.unquote(raw_url)
-        
-        handle = None
-        # 2. 處理 Handle 格式 (@username)
-        if "/@" in decoded_url:
-            parts = decoded_url.split("/@")
-            if len(parts) >= 2:
-                handle = "@" + parts[1].split("/")[0]
-        
-        # 3. 處理傳統網址格式 (/c/..., /user/...)
-        if not handle and "youtube.com/" in decoded_url:
-            url_path = decoded_url.split("youtube.com/")[1] if "youtube.com/" in decoded_url else ""
-            if url_path:
-                path_parts = url_path.split("/")
-                # 排除已處理過的 channel (因為上面第 0 步處理過了)
-                if path_parts[0] in ["c", "user"] and len(path_parts) >= 2:
-                    handle = path_parts[1]
-                elif path_parts[0] and path_parts[0] != "channel":
-                    handle = path_parts[0]
-
-        if not handle: return {}
-
+        # 4. 最終手段：使用搜尋 API (全文檢索)
         try:
-            # 4. 根據提取到的 handle 向 API 查詢
-            if handle.startswith("@"):
-                res = self.service.channels().list(part="snippet", forHandle=handle).execute()
-            else:
-                # 嘗試作為 Username 搜尋 (Legacy /user/ 格式)
-                res = self.service.channels().list(part="snippet", forUsername=handle).execute()
-                if not res.get("items"):
-                    # 最後手段：嘗試作為 ID 查詢
-                    res = self.service.channels().list(part="snippet", id=handle).execute()
-
-            if res.get("items"):
-                item = res["items"][0]
-                return {"id": item["id"], "title": item["snippet"]["title"]}
-        except Exception as error:
-            print(f"Failed to resolve channel info for {handle}: {error}")
+            search_res = self.service.search().list(
+                q=clean_url, type="channel", part="snippet", maxResults=1
+            ).execute()
+            if search_res.get("items"):
+                item = search_res["items"][0]
+                return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
+        except Exception as e:
+            print(f"Final search fallback failed: {e}")
 
         return {}
 
