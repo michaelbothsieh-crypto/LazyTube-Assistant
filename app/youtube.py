@@ -98,10 +98,19 @@ class YouTubeService:
             # 3. 優先權 2：檢查是否為 Handle (@username)
             handle_match = re.search(r"@([a-zA-Z0-9._-]+)", decoded_url)
             if handle_match:
-                handle = "@" + handle_match.group(1)
-                res = self.service.channels().list(part="snippet", forHandle=handle).execute()
+                # 關鍵修正：API 的 forHandle 不應包含 @
+                handle_name = handle_match.group(1)
+                res = self.service.channels().list(part="snippet", forHandle=handle_name).execute()
                 if res.get("items"):
                     return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
+                
+                # 保底：如果 forHandle 失敗，嘗試直接搜尋這個名稱
+                search_res = self.service.search().list(
+                    q=handle_name, type="channel", part="snippet", maxResults=1
+                ).execute()
+                if search_res.get("items"):
+                    item = search_res["items"][0]
+                    return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
 
             # 4. 優先權 3：處理 /user/ 格式 (Legacy)
             if "/user/" in decoded_url:
