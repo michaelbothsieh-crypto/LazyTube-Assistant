@@ -381,24 +381,29 @@ async def _handle_sub(chat_id: str, text: str):
         )
         return
 
+    # 解析參數：/sub <url> [prompt...] [hour]
     url = parts[1]
     custom_prompt = ""
     preferred_time = ""
 
-    # 解析最後一個參數是否為小時
+    # 判斷最後一個參數是否為小時 (支援 10, 10:00, 10:00:00)
     if len(parts) >= 3:
         last_part = parts[-1]
-        match = re.match(r"^(\d{1,2})(?::00)?$", last_part)
-        if match:
-            hour = int(match.group(1))
+        # 匹配 0-23 的數字，後面可選擇性帶有 :00
+        time_match = re.match(r"^(\d{1,2})(?::\d{2})?(?::\d{2})?$", last_part)
+        
+        if time_match:
+            hour = int(time_match.group(1))
             if 0 <= hour <= 23:
-                # 自動對齊到最近的有效時段
                 preferred_time = SubscriptionViewModel.snap_preferred_time(hour)
-                custom_prompt = get_nlm_prompt(" ".join(parts[2:-1]))
+                # Prompt 是介於 URL 與 Time 之間的內容
+                if len(parts) > 3:
+                    custom_prompt = get_nlm_prompt(" ".join(parts[2:-1]))
             else:
                 await send_telegram_message(chat_id, "❌ <b>時間錯誤</b>\n小時請輸入 0 到 23 之間的數字。")
                 return
         else:
+            # 最後一項不是時間，則從 index 2 開始全部視為 Prompt
             custom_prompt = get_nlm_prompt(" ".join(parts[2:]))
 
     # 先從 Blob 下載訂閱清單
