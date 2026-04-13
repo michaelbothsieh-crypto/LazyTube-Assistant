@@ -2,6 +2,8 @@ import re
 import time
 from functools import wraps
 from datetime import datetime
+import os
+import httpx
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -29,7 +31,7 @@ def retry(max_attempts=3, delay=2):
 
 
 class YouTubeService:
-    """YouTube API wrapper."""
+    """YouTube API wrapper with enhanced resolution logic."""
 
     def __init__(self):
         self.service = self._get_service()
@@ -46,6 +48,57 @@ class YouTubeService:
             if creds.expired and creds.refresh_token:
                 creds.refresh(Request())
         return build("youtube", "v3", credentials=creds)
+
+    @retry(max_attempts=2)
+    def get_channel_info(self, channel_url: str) -> dict:
+        """Resolve channel URL to channel ID and title with high precision."""
+        import urllib.parse
+        if not channel_url: return {}
+        
+        # 1. 基礎清理
+        clean_url = channel_url.split("?")[0].split("#")[0].strip().rstrip("/")
+        decoded_url = urllib.parse.unquote(clean_url)
+        
+        # 2. 優先處理：標準 UCID
+        ucid_match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
+        if ucid_match:
+            cid = ucid_match.group(1)
+            try:
+                res = self.service.channels().list(part="snippet", id=cid).execute()
+                if res.get("items"):
+                    item = res["items"][0]
+                    return {"id": item["id"], "title": item["snippet"]["title"]}
+            except: pass
+
+        # 3. 處理：Handle (@name)
+        handle_match = re.search(r"@([a-zA-Z0-9._-]+)", decoded_url)
+        if handle_match:
+            handle = handle_match.group(1)
+            # 嘗試兩種 API 調用方式 (帶與不帶 @)
+            for h in ["@" + handle, handle]:
+                try:
+                    res = self.service.channels().list(part="snippet", forHandle=h).execute()
+                    if res.get("items"):
+                        item = res["items"][0]
+                        return {"id": item["id"], "title": item["snippet"]["title"]}
+                except: continue
+
+        # 4. 保底方案：使用 Search API 並進行標題比對
+        try:
+            # 提取網址中可能的名稱作為關鍵字
+            q = handle_match.group(1) if handle_match else decoded_url.split("/")[-1]
+            search_res = self.service.search().list(
+                q=q, type="channel", part="snippet", maxResults=3
+            ).execute()
+            
+            for item in search_res.get("items", []):
+                title = item["snippet"]["title"].lower()
+                # 只有當關鍵字出現在標題中，才視為成功，防止跳到無關大頻道 (如 xL)
+                if q.lower() in title or title in q.lower():
+                    return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
+        except: pass
+
+        return {}
 
     @retry(max_attempts=2)
     def _get_playlist_items(self, playlist_id: str, limit: int = 5) -> list:
@@ -75,64 +128,6 @@ class YouTubeService:
             for item in res.get("items", []):
                 mapping[item["id"]] = item["contentDetails"]["relatedPlaylists"]["uploads"]
         return mapping
-
-    @retry(max_attempts=2)
-    def get_channel_info(self, channel_url: str) -> dict:
-        """Resolve channel URL to channel ID and title with physical scraping fallback."""
-        import urllib.parse
-        import httpx
-        if not channel_url: return {}
-        print(f"🔍 啟動高精度解析：{channel_url}")
-        
-        # 1. 基礎清理
-        clean_url = channel_url.split("?")[0].split("#")[0].strip().rstrip("/")
-        decoded_url = urllib.parse.unquote(clean_url)
-        
-        # 2. 嘗試從網址中直接提取 UCID
-        ucid_match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
-        if ucid_match:
-            cid = ucid_match.group(1)
-            try:
-                res = self.service.channels().list(part="snippet", id=cid).execute()
-                if res.get("items"):
-                    item = res["items"][0]
-                    return {"id": item["id"], "title": item["snippet"]["title"]}
-            except: pass
-
-        # 3. 如果是 Handle (@username)，嘗試物理爬取 (最精準)
-        if "@" in decoded_url:
-            try:
-                print("  → API 精確匹配失敗，啟動物理網頁解析...")
-                # 直接請求 YouTube 頁面並抓取 meta 標籤中的頻道 ID
-                with httpx.Client(timeout=10.0, follow_redirects=True) as client:
-                    resp = client.get(clean_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-                    if resp.status_code == 200:
-                        # 尋找 <link rel="canonical" href="https://www.youtube.com/channel/UCxxx">
-                        cid_match = re.search(r"youtube\.com/channel/(UC[a-zA-Z0-9_-]{22})", resp.text)
-                        if cid_match:
-                            cid = cid_match.group(1)
-                            print(f"  🎯 物理抓取成功，取得真 ID: {cid}")
-                            res = self.service.channels().list(part="snippet", id=cid).execute()
-                            if res.get("items"):
-                                item = res["items"][0]
-                                return {"id": item["id"], "title": item["snippet"]["title"]}
-            except Exception as e:
-                print(f"  ⚠️ 物理抓取失敗: {e}")
-
-        # 4. 嘗試最後的 API Handle 查詢 (不帶 @)
-        handle_match = re.search(r"@([a-zA-Z0-9._-]+)", decoded_url)
-        if handle_match:
-            handle_name = handle_match.group(1)
-            try:
-                res = self.service.channels().list(part="snippet", forHandle=handle_name).execute()
-                if res.get("items"):
-                    item = res["items"][0]
-                    return {"id": item["id"], "title": item["snippet"]["title"]}
-            except: pass
-
-        # 5. 絕不再使用 search API (避免出現 xL 等錯誤)
-        print("  ❌ 找不到該頻道，已窮盡所有精確匹配手段。")
-        return {}
 
     def _parse_duration_seconds(self, duration_text: str) -> int:
         if not duration_text:
