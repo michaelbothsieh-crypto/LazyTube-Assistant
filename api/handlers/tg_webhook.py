@@ -472,6 +472,8 @@ async def _handle_unsub(chat_id: str, text: str):
         # 關鍵：驗證雲端儲存是否成功
         ok = await StateManager.sync_to_blob("subscriptions.json")
         if ok:
+            from api.utils.github_dispatch import dispatch_update_cron_workflow
+            await dispatch_update_cron_workflow()
             await send_telegram_message(chat_id, res["message"])
         else:
             await send_telegram_message(chat_id, "⚠️ <b>取消成功但雲端同步失敗</b>\n請稍後使用 <code>/list</code> 確認狀態。")
@@ -636,3 +638,5 @@ async def _handle_research(chat_id: str, text: str):
     
     if not success:
         await send_telegram_message(chat_id, "❌ <b>觸發研究任務失敗</b>。")
+b>。")
+</b>。")

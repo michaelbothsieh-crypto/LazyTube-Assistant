@@ -3,11 +3,12 @@ from app.config import Config
 import os
 import httpx
 import json
+import base64
 
 class StateManager:
     """
-    /// 狀態管理模組
-    /// 負責狀態檔案的同步與讀寫邏輯 (具備防快取機制)
+    /// 狀態管理模組 (GitHub Git-Storage 版)
+    /// 替代 Vercel Blob，解決 1000 次額度限制問題。
     """
 
     @staticmethod
@@ -35,13 +36,11 @@ class StateManager:
 
     @staticmethod
     def is_processed(video_id: str) -> bool:
-        """檢查影片 ID 是否已經處理過"""
         processed_ids = StateManager.get_processed_ids()
         return video_id in processed_ids
 
     @staticmethod
     def add_processed_id(video_id: str) -> None:
-        # 保持插入順序以確保 trim 時保留最新的
         existing = set()
         ids = []
         if os.path.exists(Config.PROCESSED_VIDEOS_FILE):
@@ -52,8 +51,7 @@ class StateManager:
                         if vid and vid not in existing:
                             ids.append(vid)
                             existing.add(vid)
-            except Exception:
-                pass
+            except Exception: pass
         if video_id not in existing:
             ids.append(video_id)
         trimmed = ids[-Config.PROCESSED_IDS_LIMIT:]
@@ -63,7 +61,6 @@ class StateManager:
 
     @staticmethod
     def clear_local(filename: str):
-        """強制移除本地暫存檔，確保下次從雲端重新下載"""
         local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
         if os.path.exists(local_path):
             try: os.remove(local_path)
@@ -71,69 +68,84 @@ class StateManager:
 
     @staticmethod
     async def sync_from_blob(filename: str) -> bool:
-        """從 Vercel Blob 下載最新狀態 (防快取模式)"""
-        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-        if not token: return False
+        """從 GitHub state 分支下載最新狀態"""
+        gh_owner = os.environ.get("GH_REPO_OWNER")
+        gh_repo = os.environ.get("GH_REPO_NAME")
+        gh_pat = os.environ.get("GH_PAT_WORKFLOW")
+        
+        if not gh_owner or not gh_repo: return False
         
         local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
-        # 強制清理舊的本地檔案
         StateManager.clear_local(filename)
 
         try:
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Cache-Control": "no-cache" # 告知 Vercel 不要給快取
-            }
-            # URL 加入隨機數確保穿透快取
+            # 使用 GitHub Raw URL (具備快取穿透)
             t = int(datetime.now().timestamp())
-            list_url = f"https://blob.vercel-storage.com?prefix=state/{filename}&t={t}"
+            url = f"https://raw.githubusercontent.com/{gh_owner}/{gh_repo}/state/{filename}?t={t}"
             
+            headers = {}
+            if gh_pat:
+                headers["Authorization"] = f"token {gh_pat}"
+
             async with httpx.AsyncClient() as client:
-                resp = await client.get(list_url, headers=headers, timeout=10.0)
-                if resp.status_code != 200: return False
-                
-                blobs = resp.json().get("blobs", [])
-                if not blobs: return False
-                
-                # 取得最新的 blob URL 並下載
-                file_resp = await client.get(f"{blobs[0]['url']}?t={t}", timeout=15.0)
-                if file_resp.status_code == 200:
+                resp = await client.get(url, headers=headers, timeout=15.0)
+                if resp.status_code == 200:
                     os.makedirs(os.path.dirname(local_path), exist_ok=True) if os.path.dirname(local_path) else None
                     with open(local_path, "wb") as f:
-                        f.write(file_resp.content)
+                        f.write(resp.content)
                     return True
-        except Exception: pass
+                else:
+                    print(f"⚠️ GitHub 下載失敗 ({filename}): {resp.status_code}")
+        except Exception as e:
+            print(f"❌ GitHub 同步異常: {e}")
         return False
 
     @staticmethod
     async def sync_to_blob(filename: str) -> bool:
-        """上傳狀態至 Vercel Blob 並確保覆蓋"""
-        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-        if not token: return False
+        """透過 GitHub API 更新 state 分支檔案 (用於 /sub 訂閱)"""
+        gh_owner = os.environ.get("GH_REPO_OWNER")
+        gh_repo = os.environ.get("GH_REPO_NAME")
+        gh_pat = os.environ.get("GH_PAT_WORKFLOW")
+        
+        if not all([gh_owner, gh_repo, gh_pat]): return False
         
         local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
         if not os.path.exists(local_path): return False
 
         try:
             with open(local_path, "rb") as f:
-                data = f.read()
-            if len(data) == 0: data = b"\n"
+                content = base64.b64encode(f.read()).decode("utf-8")
 
-            url = f"https://blob.vercel-storage.com/state/{filename}"
+            # 1. 取得目標檔案的 current SHA (如果存在)
+            api_url = f"https://api.github.com/repos/{gh_owner}/{gh_repo}/contents/{filename}?ref=state"
             headers = {
-                "Authorization": f"Bearer {token}",
-                "x-api-version": "1",
-                "x-add-random-suffix": "0",
-                "content-type": "application/octet-stream"
+                "Authorization": f"token {gh_pat}",
+                "Accept": "application/vnd.github+json"
             }
+            
+            sha = None
             async with httpx.AsyncClient() as client:
-                resp = await client.put(url, content=data, headers=headers, timeout=30.0)
+                resp = await client.get(api_url, headers=headers)
                 if resp.status_code == 200:
-                    print(f"✅ Blob '{filename}' updated successfully.")
+                    sha = resp.json().get("sha")
+
+            # 2. 更新或建立檔案
+            payload = {
+                "message": f"chore: update {filename} from telegram webhook",
+                "content": content,
+                "branch": "state"
+            }
+            if sha:
+                payload["sha"] = sha
+
+            async with httpx.AsyncClient() as client:
+                put_resp = await client.put(api_url, json=payload, headers=headers)
+                if put_resp.status_code in [200, 201]:
+                    print(f"✅ GitHub '{filename}' 更新成功。")
                     return True
                 else:
-                    print(f"❌ Blob update failed: {resp.status_code} {resp.text}")
+                    print(f"❌ GitHub API 失敗: {put_resp.status_code} {put_resp.text}")
                     return False
         except Exception as e:
-            print(f"❌ Blob sync exception: {e}")
+            print(f"❌ GitHub Sync-To 異常: {e}")
         return False

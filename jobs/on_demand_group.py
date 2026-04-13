@@ -75,12 +75,17 @@ def main():
             should_run = True
             print(f"  → 觸發原因：首次執行")
         elif pref_time:
-            if last_check_day != today_str and current_time_str >= pref_time:
-                should_run = True
-                print(f"  → 觸發原因：定時觸發 ({pref_time})")
+            # 只要今天還沒跑過，且現在時間已經過了設定的時間，就應該跑
+            if last_check_day != today_str:
+                if current_time_str >= pref_time:
+                    should_run = True
+                    print(f"  → 觸發原因：定時觸發 (設定: {pref_time}, 現在: {current_time_str})")
+                else:
+                    print(f"  → 尚未到達執行時間 (預計: {pref_time})")
             else:
-                print(f"  → 跳過原因：未到時間或今日已執行 (上次：{last_check_day})")
+                print(f"  → 跳過原因：今日已執行完成 (日期: {last_check_day})")
         else:
+
             if not last_check_str or (datetime.now(timezone.utc) - datetime.fromisoformat(last_check_str)).total_seconds() > 12 * 3600:
                 should_run = True
                 print(f"  → 觸發原因：逾時觸發")

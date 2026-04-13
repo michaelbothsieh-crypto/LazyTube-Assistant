@@ -59,11 +59,13 @@ async def main():
                 last_check_day = datetime.fromisoformat(last_check_str).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
 
             if pref_time:
+                # 只要今日尚未跑過且現在時間已過設定時間，就觸發
                 if last_check_day != today_str and current_time_str >= pref_time:
                     should_run_group = True
-                    trigger_reason = f"定時觸發 {pref_time} ({channel_title})"
+                    trigger_reason = f"定時觸發 (設定: {pref_time}, 現在: {current_time_str})"
                     break
             else:
+                # 無設定時間者，維持 12 小時檢查一次
                 if not last_check_str or (datetime.now(timezone.utc) - datetime.fromisoformat(last_check_str)).total_seconds() > 12 * 3600:
                     should_run_group = True
                     trigger_reason = f"逾時觸發 ({channel_title})"
