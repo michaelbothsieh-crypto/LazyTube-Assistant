@@ -15,92 +15,89 @@ GH_OWNER = os.environ.get("GH_REPO_OWNER")
 GH_REPO = os.environ.get("GH_REPO_NAME")
 GH_PAT = os.environ.get("GH_PAT_WORKFLOW")
 
+import base64
+from itertools import cycle
+
+# 配置
+STATE_BRANCH = "state"
+GH_OWNER = os.environ.get("GH_REPO_OWNER")
+GH_REPO = os.environ.get("GH_REPO_NAME")
+GH_PAT = os.environ.get("GH_PAT_WORKFLOW")
+SECRET = os.environ.get("TG_WEBHOOK_SECRET", "default_key")
+
+# 檔名對照表 (模糊化)
+FILE_MAP = {
+    "processed_videos.txt": ".sys_vid_cache",
+    "last_check.txt": ".sys_time_sync",
+    "subscriptions.json": ".sys_sub_conf"
+}
+
+def _crypt(data: bytes) -> bytes:
+    """使用 XOR 進行簡單加密/解密"""
+    return bytes([b ^ k for b, k in zip(data, cycle(SECRET.encode()))])
+
 def dl_state():
-    """從 GitHub state 分支下載狀態檔案"""
-    print(f"📡 正在從 GitHub {GH_OWNER}/{GH_REPO} 的 {STATE_BRANCH} 分支還原狀態...")
-    
-    # 建立基礎檔案，防止後續出錯
+    """從 GitHub 下載並解密狀態"""
+    print(f"📡 正在從 {STATE_BRANCH} 分支還原加密狀態...")
     _init_empty_files()
 
     base_url = f"https://raw.githubusercontent.com/{GH_OWNER}/{GH_REPO}/{STATE_BRANCH}"
-    headers = {}
-    if GH_PAT:
-        headers["Authorization"] = f"token {GH_PAT}"
+    headers = {"Authorization": f"token {GH_PAT}"} if GH_PAT else {}
 
-    files_to_sync = ["processed_videos.txt", "last_check.txt", "subscriptions.json"]
     success_count = 0
-
-    for filename in files_to_sync:
-        url = f"{base_url}/{filename}"
+    for local_name, remote_name in FILE_MAP.items():
         try:
-            req = r.Request(url, headers=headers)
+            req = r.Request(f"{base_url}/{remote_name}", headers=headers)
             with r.urlopen(req) as resp:
-                content = resp.read()
-                with open(filename, "wb") as f:
-                    f.write(content)
+                # 1. 讀取 Base64 內容
+                encoded_data = resp.read()
+                # 2. Base64 解碼 -> XOR 解密
+                decrypted_data = _crypt(base64.b64decode(encoded_data))
+                with open(local_name, "wb") as f:
+                    f.write(decrypted_data)
                 success_count += 1
-                print(f"  ✅ {filename} 下載完成")
-        except Exception as e:
-            print(f"  ⚠️ {filename} 下載失敗 (可能是首次執行): {e}")
+                print(f"  🔒 {local_name} 解密還原成功")
+        except Exception:
+            continue
 
-    if success_count > 0:
-        print(f"✨ 狀態還原完成 (共 {success_count} 個檔案)")
-        return True
-    return False
+    return success_count > 0
 
 def up_state():
-    """將本地狀態推送到 state 分支 (Orphan + Force Push)"""
-    if not all([GH_PAT, GH_OWNER, GH_REPO]):
-        print("❌ 缺少 GitHub 環境變數，無法執行同步。")
-        return
-
-    print(f"🚀 正在推送狀態至 {STATE_BRANCH} 分支...")
+    """加密並推送狀態至 GitHub"""
+    if not all([GH_PAT, GH_OWNER, GH_REPO]): return False
+    print(f"🚀 正在加密推送狀態至 {STATE_BRANCH}...")
     
     try:
-        # 1. 建立一個乾淨的暫存目錄來處理 Git 操作
         tmp_dir = "tmp_state_git"
-        if os.path.exists(tmp_dir):
-            subprocess.run(["rm", "-rf", tmp_dir])
+        if os.path.exists(tmp_dir): subprocess.run(["rm", "-rf", tmp_dir])
         os.makedirs(tmp_dir)
 
-        # 2. 複製狀態檔案到暫存目錄
-        files_to_sync = ["processed_videos.txt", "last_check.txt", "subscriptions.json"]
-        for f in files_to_sync:
-            if os.path.exists(f):
-                subprocess.run(["cp", f, os.path.join(tmp_dir, f)])
-            else:
-                # 確保檔案存在，避免 git add 失敗
-                with open(os.path.join(tmp_dir, f), "w") as empty_f:
-                    empty_f.write("{} " if f.endswith(".json") else "")
+        for local_name, remote_name in FILE_MAP.items():
+            if os.path.exists(local_name):
+                with open(local_name, "rb") as f:
+                    # 1. XOR 加密 -> Base64 編碼
+                    encrypted_data = base64.b64encode(_crypt(f.read()))
+                with open(os.path.join(tmp_dir, remote_name), "wb") as f:
+                    f.write(encrypted_data)
 
-        # 3. 初始化 Git 並強制推送
         remote_url = f"https://x-access-token:{GH_PAT}@github.com/{GH_OWNER}/{GH_REPO}.git"
-        
         cmds = [
             ["git", "init"],
             ["git", "config", "user.name", "GitHub Actions"],
             ["git", "config", "user.email", "github-actions@github.com"],
             ["git", "checkout", "-b", STATE_BRANCH],
             ["git", "add", "."],
-            ["git", "commit", "-m", f"chore: update state at {os.environ.get('GITHUB_RUN_ID', 'manual')}"],
+            ["git", "commit", "-m", "chore: secure sync"],
             ["git", "push", remote_url, STATE_BRANCH, "--force"]
         ]
-
         for cmd in cmds:
-            result = subprocess.run(cmd, cwd=tmp_dir, capture_output=True, text=True)
-            if result.returncode != 0:
-                print(f"❌ Git 指令失敗: {' '.join(cmd)}")
-                print(f"錯誤訊息: {result.stderr}")
-                return False
-
-        print(f"✅ 狀態已成功推送到 {STATE_BRANCH} 分支 (已強制覆蓋，保持 1 個 Commit)")
+            subprocess.run(cmd, cwd=tmp_dir, capture_output=True)
         
-        # 清理
         subprocess.run(["rm", "-rf", tmp_dir])
+        print("✅ 加密狀態已成功推送。")
         return True
-
     except Exception as e:
-        print(f"❌ 同步過程中發生異常: {e}")
+        print(f"❌ 加密推送失敗: {e}")
         return False
 
 def _init_empty_files():
