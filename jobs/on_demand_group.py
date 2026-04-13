@@ -110,8 +110,10 @@ def main():
             vids = [item["contentDetails"]["videoId"] for item in items]
             details = yt._fetch_video_details(vids)
             
-            # 定義「新影片」的時間窗口 (24 小時內)
-            new_video_window = datetime.now(timezone.utc) - timedelta(hours=24)
+            # 定義「新影片」的時間窗口
+            # 首次執行放寬到 7 天，一般執行維持 24 小時 (保底)
+            window_days = 7 if is_first_run else 1
+            new_video_window = datetime.now(timezone.utc) - timedelta(days=window_days)
 
             for item in items:
                 pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
@@ -119,13 +121,12 @@ def main():
                 vid_title = item['snippet']['title']
                 
                 # 1. 時間過濾
-                if is_first_run:
-                    # 首次執行：如果影片超過 24 小時，則視為「舊片」跳過
-                    if pub_time < new_video_window:
-                        print(f"  ⏭️ 跳過過舊影片：{vid_title} (發布於 {pub_time.astimezone(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M')})")
-                        continue
-                elif last_check_str:
-                    # 一般執行：發布時間必須晚於上次檢查時間
+                if pub_time < new_video_window:
+                    if is_first_run:
+                        print(f"  ⏭️ 跳過過舊影片 (超過 7 天)：{vid_title}")
+                    continue
+                
+                if not is_first_run and last_check_str:
                     if pub_time <= datetime.fromisoformat(last_check_str):
                         continue
                 
