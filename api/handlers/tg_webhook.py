@@ -638,5 +638,3 @@ async def _handle_research(chat_id: str, text: str):
     
     if not success:
         await send_telegram_message(chat_id, "❌ <b>觸發研究任務失敗</b>。")
-b>。")
-</b>。")
