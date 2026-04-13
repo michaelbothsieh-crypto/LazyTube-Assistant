@@ -82,47 +82,51 @@ class YouTubeService:
         import urllib.parse
         if not channel_url: return {}
         
+        # 0. 優先嘗試正則表達式抓取標準 UCID (這是最準確的)
+        match = re.search(r"(UC[a-zA-Z0-9_-]{22})", channel_url)
+        if match:
+            handle = match.group(1)
+            try:
+                res = self.service.channels().list(part="snippet", id=handle).execute()
+                if res.get("items"):
+                    item = res["items"][0]
+                    return {"id": item["id"], "title": item["snippet"]["title"]}
+            except: pass
+
         # 1. 清理網址：移除查詢參數與結尾斜線
         raw_url = channel_url.split("?")[0].split("#")[0].rstrip("/")
         decoded_url = urllib.parse.unquote(raw_url)
         
         handle = None
-        # 2. 優先處理 Handle 格式 (@username)
+        # 2. 處理 Handle 格式 (@username)
         if "/@" in decoded_url:
             parts = decoded_url.split("/@")
             if len(parts) >= 2:
                 handle = "@" + parts[1].split("/")[0]
         
-        # 3. 處理傳統網址格式 (/channel/..., /c/..., /user/...)
+        # 3. 處理傳統網址格式 (/c/..., /user/...)
         if not handle and "youtube.com/" in decoded_url:
             url_path = decoded_url.split("youtube.com/")[1] if "youtube.com/" in decoded_url else ""
             if url_path:
                 path_parts = url_path.split("/")
-                # 格式如 youtube.com/channel/UCxxx
-                if path_parts[0] in ["channel", "c", "user"] and len(path_parts) >= 2:
+                # 排除已處理過的 channel (因為上面第 0 步處理過了)
+                if path_parts[0] in ["c", "user"] and len(path_parts) >= 2:
                     handle = path_parts[1]
-                # 格式如 youtube.com/username
-                elif path_parts[0]:
+                elif path_parts[0] and path_parts[0] != "channel":
                     handle = path_parts[0]
-
-        # 4. 如果還是沒抓到，嘗試正則表達式抓取 UCID
-        if not handle:
-            match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
-            if match: handle = match.group(1)
 
         if not handle: return {}
 
         try:
-            # 5. 根據提取到的 handle 向 API 查詢
-            if handle.startswith("UC") and len(handle) >= 20:
-                res = self.service.channels().list(part="snippet", id=handle).execute()
-            elif handle.startswith("@"):
+            # 4. 根據提取到的 handle 向 API 查詢
+            if handle.startswith("@"):
                 res = self.service.channels().list(part="snippet", forHandle=handle).execute()
             else:
-                # 嘗試作為一般 ID 或是 legacy username 搜尋
-                res = self.service.channels().list(part="snippet", id=handle).execute()
+                # 嘗試作為 Username 搜尋 (Legacy /user/ 格式)
+                res = self.service.channels().list(part="snippet", forUsername=handle).execute()
                 if not res.get("items"):
-                    res = self.service.channels().list(part="snippet", forUsername=handle).execute()
+                    # 最後手段：嘗試作為 ID 查詢
+                    res = self.service.channels().list(part="snippet", id=handle).execute()
 
             if res.get("items"):
                 item = res["items"][0]
