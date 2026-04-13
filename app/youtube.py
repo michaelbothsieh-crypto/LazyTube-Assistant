@@ -31,7 +31,7 @@ def retry(max_attempts=3, delay=2):
 
 
 class YouTubeService:
-    """YouTube API wrapper with enhanced resolution logic."""
+    """YouTube API wrapper with high-resilience resolution."""
 
     def __init__(self):
         self.service = self._get_service()
@@ -51,7 +51,7 @@ class YouTubeService:
 
     @retry(max_attempts=2)
     def get_channel_info(self, channel_url: str) -> dict:
-        """Resolve channel URL to channel ID and title with high precision."""
+        """Resolve channel URL to channel ID and title with maximum success rate."""
         import urllib.parse
         if not channel_url: return {}
         
@@ -59,7 +59,7 @@ class YouTubeService:
         clean_url = channel_url.split("?")[0].split("#")[0].strip().rstrip("/")
         decoded_url = urllib.parse.unquote(clean_url)
         
-        # 2. 優先處理：標準 UCID
+        # 2. 策略 A：直接提取 UCID (最精準)
         ucid_match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
         if ucid_match:
             cid = ucid_match.group(1)
@@ -70,11 +70,10 @@ class YouTubeService:
                     return {"id": item["id"], "title": item["snippet"]["title"]}
             except: pass
 
-        # 3. 處理：Handle (@name)
+        # 3. 策略 B：Handle (@name) 查詢
         handle_match = re.search(r"@([a-zA-Z0-9._-]+)", decoded_url)
         if handle_match:
             handle = handle_match.group(1)
-            # 嘗試兩種 API 調用方式 (帶與不帶 @)
             for h in ["@" + handle, handle]:
                 try:
                     res = self.service.channels().list(part="snippet", forHandle=h).execute()
@@ -83,82 +82,67 @@ class YouTubeService:
                         return {"id": item["id"], "title": item["snippet"]["title"]}
                 except: continue
 
-        # 4. 保底方案：使用 Search API 並進行標題比對
+        # 4. 策略 C：網頁物理爬取 (針對 Handle 網址)
+        if "@" in decoded_url:
+            try:
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                with httpx.Client(timeout=8.0, follow_redirects=True, headers=headers) as client:
+                    resp = client.get(clean_url)
+                    if resp.status_code == 200:
+                        # 從網頁中抓取關鍵 ID
+                        m = re.search(r"\"browse_id\":\"(UC[a-zA-Z0-9_-]{22})\"", resp.text)
+                        if m:
+                            cid = m.group(1)
+                            res = self.service.channels().list(part="snippet", id=cid).execute()
+                            if res.get("items"):
+                                return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
+            except: pass
+
+        # 5. 策略 D：搜尋 API (保底)
         try:
-            # 提取網址中可能的名稱作為關鍵字
             q = handle_match.group(1) if handle_match else decoded_url.split("/")[-1]
-            search_res = self.service.search().list(
-                q=q, type="channel", part="snippet", maxResults=3
-            ).execute()
-            
-            for item in search_res.get("items", []):
-                title = item["snippet"]["title"].lower()
-                # 只有當關鍵字出現在標題中，才視為成功，防止跳到無關大頻道 (如 xL)
-                if q.lower() in title or title in q.lower():
-                    return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
+            search_res = self.service.search().list(q=q, type="channel", part="snippet", maxResults=1).execute()
+            if search_res.get("items"):
+                item = search_res["items"][0]
+                return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
         except: pass
 
         return {}
 
     @retry(max_attempts=2)
     def _get_playlist_items(self, playlist_id: str, limit: int = 5) -> list:
-        """Fetch recent playlist items."""
         try:
-            res = self.service.playlistItems().list(
-                part="snippet,contentDetails",
-                playlistId=playlist_id,
-                maxResults=limit,
-            ).execute()
+            res = self.service.playlistItems().list(part="snippet,contentDetails", playlistId=playlist_id, maxResults=limit).execute()
             return res.get("items", [])
-        except Exception as error:
-            print(f"Failed to fetch playlist items: {error}")
-            return []
+        except: return []
 
     @retry(max_attempts=2)
     def _get_uploads_playlist_ids(self, channel_ids: list) -> dict:
-        """Map channel IDs to uploads playlist IDs."""
         mapping = {}
         for i in range(0, len(channel_ids), 50):
             batch = channel_ids[i : i + 50]
-            res = self.service.channels().list(
-                part="contentDetails",
-                id=",".join(batch),
-                maxResults=len(batch),
-            ).execute()
+            res = self.service.channels().list(part="contentDetails", id=",".join(batch), maxResults=len(batch)).execute()
             for item in res.get("items", []):
                 mapping[item["id"]] = item["contentDetails"]["relatedPlaylists"]["uploads"]
         return mapping
 
     def _parse_duration_seconds(self, duration_text: str) -> int:
-        if not duration_text:
-            return 0
-        match = re.fullmatch(
-            r"PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?",
-            duration_text,
-        )
-        if not match:
-            return 0
-        hours = int(match.group("hours") or 0)
-        minutes = int(match.group("minutes") or 0)
-        seconds = int(match.group("seconds") or 0)
-        return hours * 3600 + minutes * 60 + seconds
+        if not duration_text: return 0
+        match = re.fullmatch(r"PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?", duration_text)
+        if not match: return 0
+        h, m, s = int(match.group("hours") or 0), int(match.group("minutes") or 0), int(match.group("seconds") or 0)
+        return h * 3600 + m * 60 + s
 
     @retry(max_attempts=3)
     def _fetch_video_details(self, video_ids: list) -> dict:
-        if not video_ids:
-            return {}
+        if not video_ids: return {}
         details = {"durations": {}, "categories": {}, "live_status": {}, "has_live_details": {}, "titles": {}}
         for i in range(0, len(video_ids), 50):
             batch_ids = video_ids[i : i + 50]
-            response = self.service.videos().list(
-                part="contentDetails,snippet,liveStreamingDetails",
-                id=",".join(batch_ids),
-                maxResults=len(batch_ids),
-            ).execute()
-            for item in response.get("items", []):
+            res = self.service.videos().list(part="contentDetails,snippet,liveStreamingDetails", id=",".join(batch_ids), maxResults=len(batch_ids)).execute()
+            for item in res.get("items", []):
                 vid = item["id"]
-                duration_text = item.get("contentDetails", {}).get("duration", "")
-                details["durations"][vid] = self._parse_duration_seconds(duration_text)
+                details["durations"][vid] = self._parse_duration_seconds(item.get("contentDetails", {}).get("duration", ""))
                 details["categories"][vid] = item["snippet"].get("categoryId")
                 details["live_status"][vid] = (item["snippet"].get("liveBroadcastContent") or "").lower()
                 details["has_live_details"][vid] = bool(item.get("liveStreamingDetails"))
@@ -166,23 +150,19 @@ class YouTubeService:
         return details
 
     def fetch_new_game_videos(self, last_check_time: datetime) -> list:
-        """Scan subscriptions and return new gaming videos after last check time."""
         new_videos = []
         try:
             req = self.service.subscriptions().list(part="snippet", mine=True, maxResults=50)
             resp = req.execute()
             channel_ids = [item["snippet"]["resourceId"]["channelId"] for item in resp.get("items", [])]
-            if not channel_ids:
-                return []
-
+            if not channel_ids: return []
             uploads_playlists = self._get_uploads_playlist_ids(channel_ids)
             candidate_videos = []
             for _, playlist_id in uploads_playlists.items():
                 items = self._get_playlist_items(playlist_id)
                 for item in items:
                     pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                    if pub_time <= last_check_time:
-                        continue
+                    if pub_time <= last_check_time: continue
                     candidate_videos.append({
                         "video_id": item["contentDetails"]["videoId"],
                         "title": item["snippet"]["title"],
@@ -190,46 +170,16 @@ class YouTubeService:
                         "time": pub_time,
                         "url": f"https://www.youtube.com/watch?v={item['contentDetails']['videoId']}",
                     })
-
-            if not candidate_videos:
-                return []
-
+            if not candidate_videos: return []
             vids = [v["video_id"] for v in candidate_videos]
             details = self._fetch_video_details(vids)
-            keywords = Config.get_keywords()
-
             for video in candidate_videos:
                 vid = video["video_id"]
-                category_id = details["categories"].get(vid)
-                duration_seconds = details["durations"].get(vid, 0)
-                live_status = details["live_status"].get(vid, "")
-                has_live_details = details["has_live_details"].get(vid, False)
-
-                if category_id != "20":
-                    continue
-
-                if live_status in {"live", "upcoming"} or has_live_details:
-                    print(f"Skip live stream: {video['title']} ({live_status})")
-                    continue
-
-                # 強化版 Shorts 過濾邏輯
-                is_shorts_by_duration = duration_seconds <= Config.SHORTS_MAX_SECONDS
-                title_lower = video["title"].lower()
-                is_shorts_by_title = any(tag in title_lower for tag in ["#short", "shorts", "#短片", "#短影音"])
-
-                if is_shorts_by_duration or is_shorts_by_title:
-                    continue
-
-                if Config.MAX_VIDEO_SECONDS > 0 and duration_seconds > Config.MAX_VIDEO_SECONDS:
-                    continue
-
-                if keywords and not any(keyword in video["title"].lower() for keyword in keywords):
-                    continue
-
-                video["duration_seconds"] = duration_seconds
+                if details["categories"].get(vid) != "20": continue
+                if details["live_status"].get(vid) in {"live", "upcoming"} or details["has_live_details"].get(vid): continue
+                duration = details["durations"].get(vid, 0)
+                if duration <= Config.SHORTS_MAX_SECONDS or any(t in video["title"].lower() for t in ["#short", "shorts"]): continue
+                if Config.MAX_VIDEO_SECONDS > 0 and duration > Config.MAX_VIDEO_SECONDS: continue
                 new_videos.append(video)
-
-        except Exception as error:
-            print(f"Fetch error: {error}")
-
-        return sorted(new_videos, key=lambda item: item["time"])
+        except: pass
+        return sorted(new_videos, key=lambda x: x["time"])

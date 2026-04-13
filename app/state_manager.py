@@ -7,15 +7,14 @@ import base64
 
 class StateManager:
     """
-    /// 狀態管理模組 (GitHub 混淆路徑版)
-    /// 移除 XOR 加密以提高穩定性，改用隱藏路徑保護隱私。
+    /// 狀態管理模組 (GitHub 穩定混淆路徑版)
+    /// 使用固定混淆路徑保護隱私，並確保跨平台讀取的一致性。
     """
-    # 使用 SECRET 作為檔名的的一部分，確保路徑不可預測
-    _HASH = base64.b64encode(os.environ.get("TG_WEBHOOK_SECRET", "default").encode()).decode()[:12]
+    # 使用固定混淆字串作為檔名一部分
     FILE_MAP = {
-        "processed_videos.txt": f".sys_vid_cache_{_HASH}",
-        "last_check.txt": f".sys_time_sync_{_HASH}",
-        "subscriptions.json": f".sys_sub_conf_{_HASH}"
+        "processed_videos.txt": ".sys_vid_storage_v1.txt",
+        "last_check.txt": ".sys_time_marker_v1.txt",
+        "subscriptions.json": ".sys_subs_config_v1.json"
     }
 
     @staticmethod
@@ -71,11 +70,9 @@ class StateManager:
 
     @staticmethod
     async def sync_from_blob(filename: str) -> bool:
-        """從 GitHub 下載最新狀態 (混淆檔名)"""
         gh_owner = os.environ.get("GH_REPO_OWNER")
         gh_repo = os.environ.get("GH_REPO_NAME")
         gh_pat = os.environ.get("GH_PAT_WORKFLOW")
-        
         if not gh_owner or not gh_repo: return False
         
         remote_name = StateManager.FILE_MAP.get(filename, filename)
@@ -86,7 +83,6 @@ class StateManager:
             t = int(datetime.now().timestamp())
             url = f"https://raw.githubusercontent.com/{gh_owner}/{gh_repo}/state/{remote_name}?t={t}"
             headers = {"Authorization": f"token {gh_pat}"} if gh_pat else {}
-            
             async with httpx.AsyncClient() as client:
                 resp = await client.get(url, headers=headers, timeout=15.0)
                 if resp.status_code == 200:
@@ -98,7 +94,6 @@ class StateManager:
 
     @staticmethod
     async def sync_to_blob(filename: str) -> bool:
-        """透過 GitHub API 更新 state 分支檔案 (混淆檔名)"""
         gh_owner = os.environ.get("GH_REPO_OWNER")
         gh_repo = os.environ.get("GH_REPO_NAME")
         gh_pat = os.environ.get("GH_PAT_WORKFLOW")
@@ -111,18 +106,14 @@ class StateManager:
         try:
             with open(local_path, "rb") as f:
                 content = base64.b64encode(f.read()).decode("utf-8")
-
             api_url = f"https://api.github.com/repos/{gh_owner}/{gh_repo}/contents/{remote_name}?ref=state"
             headers = {"Authorization": f"token {gh_pat}", "Accept": "application/vnd.github+json"}
-            
             sha = None
             async with httpx.AsyncClient() as client:
                 resp = await client.get(api_url, headers=headers)
                 if resp.status_code == 200: sha = resp.json().get("sha")
-
             payload = {"message": "sync state", "content": content, "branch": "state"}
             if sha: payload["sha"] = sha
-
             async with httpx.AsyncClient() as client:
                 put_resp = await client.put(api_url, json=payload, headers=headers)
                 return put_resp.status_code in [200, 201]
