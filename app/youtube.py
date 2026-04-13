@@ -78,12 +78,13 @@ class YouTubeService:
 
     @retry(max_attempts=2)
     def get_channel_info(self, channel_url: str) -> dict:
-        """Resolve channel URL to channel ID and title with strict precision."""
+        """Resolve channel URL to channel ID and title with maximum resilience."""
         import urllib.parse
         if not channel_url: return {}
+        print(f"🔍 正在解析頻道網址：{channel_url}")
         
         # 1. 基礎清理
-        clean_url = channel_url.split("?")[0].split("#")[0].rstrip("/")
+        clean_url = channel_url.split("?")[0].split("#")[0].strip().rstrip("/")
         decoded_url = urllib.parse.unquote(clean_url)
         
         try:
@@ -91,37 +92,44 @@ class YouTubeService:
             ucid_match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
             if ucid_match:
                 cid = ucid_match.group(1)
+                print(f"  → 偵測到 UCID: {cid}")
                 res = self.service.channels().list(part="snippet", id=cid).execute()
                 if res.get("items"):
-                    return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
+                    item = res["items"][0]
+                    print(f"  ✅ 成功匹配: {item['snippet']['title']}")
+                    return {"id": item["id"], "title": item["snippet"]["title"]}
 
-            # 3. 優先權 2：檢查是否為 Handle (@username)
+            # 3. 優先權 2：Handle (@username) 雙重嘗試
             handle_match = re.search(r"@([a-zA-Z0-9._-]+)", decoded_url)
             if handle_match:
-                # 關鍵修正：API 的 forHandle 不應包含 @
                 handle_name = handle_match.group(1)
+                # 嘗試 1: 帶 @ (部分 API 版本要求)
+                full_handle = "@" + handle_name
+                print(f"  → 嘗試 Handle (帶@): {full_handle}")
+                res = self.service.channels().list(part="snippet", forHandle=full_handle).execute()
+                if res.get("items"):
+                    item = res["items"][0]
+                    return {"id": item["id"], "title": item["snippet"]["title"]}
+                
+                # 嘗試 2: 不帶 @
+                print(f"  → 嘗試 Handle (不帶@): {handle_name}")
                 res = self.service.channels().list(part="snippet", forHandle=handle_name).execute()
                 if res.get("items"):
-                    return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
-                
-                # 保底：如果 forHandle 失敗，嘗試直接搜尋這個名稱
-                search_res = self.service.search().list(
-                    q=handle_name, type="channel", part="snippet", maxResults=1
-                ).execute()
-                if search_res.get("items"):
-                    item = search_res["items"][0]
-                    return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
+                    item = res["items"][0]
+                    return {"id": item["id"], "title": item["snippet"]["title"]}
 
-            # 4. 優先權 3：處理 /user/ 格式 (Legacy)
-            if "/user/" in decoded_url:
-                username = decoded_url.split("/user/")[1].split("/")[0]
-                res = self.service.channels().list(part="snippet", forUsername=username).execute()
-                if res.get("items"):
-                    return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
+            # 4. 優先權 3：搜尋保底 (用整個網址搜尋)
+            print(f"  → 進入最終保底：搜尋網址關鍵字")
+            search_res = self.service.search().list(
+                q=clean_url, type="channel", part="snippet", maxResults=1
+            ).execute()
+            if search_res.get("items"):
+                item = search_res["items"][0]
+                print(f"  ✅ 搜尋保底成功: {item['snippet']['title']}")
+                return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
 
         except Exception as e:
-            # 僅印出錯誤類型，不印出可能包含密碼的參數
-            print(f"Channel resolution API error: {type(e).__name__}")
+            print(f"❌ 頻道解析發生異常: {str(e)}")
 
         return {}
 
