@@ -96,7 +96,8 @@ class SubscriptionViewModel:
         return {
             "success": True,
             "channel_id": channel_info["id"],
-            "message": f"✅ 已成功訂閱「{channel_info['title']}」！\n"
+            "message": f"✅ 已成功訂閱「<b>{channel_info['title']}</b>」！\n"
+                       f"🔗 頻道連結：<a href='https://www.youtube.com/channel/{channel_info['id']}'>點此確認</a>\n"
                        f"客製化 Prompt：{custom_prompt if custom_prompt else '（使用預設）'}"
                        f"{time_msg}\n\n"
                        f"🚀 <b>訂閱成功！</b> 稍後將自動啟動第一次掃描。"
