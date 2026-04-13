@@ -71,19 +71,39 @@ class NotebookService:
         # 3. 備援路徑：Cloudflare Worker (Puppeteer 渲染)
         try:
             print(f"📡 Jina 失敗，啟動備援爬蟲：{decoded_url[:50]}...")
-            # 增加超時時間至 40 秒，因為 Puppeteer 啟動較慢
             cf_res = requests.get(f"https://lazypipe-worker.hsieh130.workers.dev/?url={encoded_url}", timeout=40)
             if cf_res.status_code == 200:
                 resp_json = cf_res.json()
                 if resp_json.get("success"):
                     content = self._clean_content(resp_json.get("content", ""))
-                    if len(content) > 50: # 確保抓到的不是空內容
+                    if len(content) > 100:
                         tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
                         with open(tmp_txt, "w", encoding="utf-8") as f: f.write(content)
                         res = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
                         return res.returncode == 0
-        except Exception as e:
-            print(f"⚠️ 備援爬蟲發生異常: {e}")
+        except: pass
+
+        # 4. 終極保底：Firecrawl API (最強穿透)
+        firecrawl_key = os.environ.get("FIRECRAWL_API_KEY")
+        if firecrawl_key:
+            try:
+                print(f"🔥 備援爬蟲失敗，啟動 Firecrawl 終極保底...")
+                fc_res = requests.post(
+                    "https://api.firecrawl.dev/v1/scrape",
+                    headers={"Authorization": f"Bearer {firecrawl_key}", "Content-Type": "application/json"},
+                    json={"url": decoded_url, "formats": ["markdown"], "onlyMainContent": True},
+                    timeout=30
+                )
+                if fc_res.status_code == 200:
+                    data = fc_res.json()
+                    content = data.get("data", {}).get("markdown", "")
+                    if content:
+                        tmp_txt = f"/tmp/{uuid.uuid4().hex[:8]}.txt"
+                        with open(tmp_txt, "w", encoding="utf-8") as f: f.write(content)
+                        res = self.run_nlm("source", "add", nb_id, "--file", tmp_txt, *wait_flag)
+                        return res.returncode == 0
+            except: pass
+
         return False
 
     def process_video(self, url, title, custom_prompt=None):
