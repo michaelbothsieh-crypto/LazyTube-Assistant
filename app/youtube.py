@@ -78,66 +78,41 @@ class YouTubeService:
 
     @retry(max_attempts=2)
     def get_channel_info(self, channel_url: str) -> dict:
-        """Resolve channel URL to channel ID and title with maximum resilience."""
+        """Resolve channel URL to channel ID and title with strict precision."""
         import urllib.parse
         if not channel_url: return {}
         
-        # 1. 清理與解碼
+        # 1. 基礎清理
         clean_url = channel_url.split("?")[0].split("#")[0].rstrip("/")
         decoded_url = urllib.parse.unquote(clean_url)
         
-        # 2. 收集所有可能的候選字串 (用來嘗試不同的 API 參數)
-        candidates = [] # List of (method, value)
-        
-        # 提取 UCID (24位元)
-        ucid_match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
-        if ucid_match:
-            candidates.append(("id", ucid_match.group(1)))
-        
-        # 提取 Handle (@name)
-        handle_match = re.search(r"/(@[a-zA-Z0-9._-]+)", decoded_url)
-        if handle_match:
-            candidates.append(("forHandle", handle_match.group(1)))
-        
-        # 提取路徑片段
-        if "youtube.com/" in decoded_url:
-            path_part = decoded_url.split("youtube.com/")[1]
-            parts = [p for p in path_part.split("/") if p]
-            if parts:
-                # 取得關鍵識別字 (例如 /c/name 中的 name)
-                val = parts[1] if parts[0] in ["c", "user", "channel"] and len(parts) > 1 else parts[0]
-                if val.startswith("@"):
-                    candidates.append(("forHandle", val))
-                else:
-                    candidates.append(("id", val))
-                    candidates.append(("forUsername", val))
-
-        # 3. 依序嘗試 API 呼叫，直到成功為止
-        processed_values = set()
-        for method, value in candidates:
-            cache_key = f"{method}:{value}"
-            if cache_key in processed_values: continue
-            processed_values.add(cache_key)
-            
-            try:
-                kwargs = {method: value, "part": "snippet"}
-                res = self.service.channels().list(**kwargs).execute()
-                if res.get("items"):
-                    item = res["items"][0]
-                    return {"id": item["id"], "title": item["snippet"]["title"]}
-            except:
-                continue
-
-        # 4. 最終手段：使用搜尋 API (全文檢索)
         try:
-            search_res = self.service.search().list(
-                q=clean_url, type="channel", part="snippet", maxResults=1
-            ).execute()
-            if search_res.get("items"):
-                item = search_res["items"][0]
-                return {"id": item["snippet"]["channelId"], "title": item["snippet"]["title"]}
+            # 2. 優先權 1：檢查是否為標準 UCID 格式
+            ucid_match = re.search(r"(UC[a-zA-Z0-9_-]{22})", decoded_url)
+            if ucid_match:
+                cid = ucid_match.group(1)
+                res = self.service.channels().list(part="snippet", id=cid).execute()
+                if res.get("items"):
+                    return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
+
+            # 3. 優先權 2：檢查是否為 Handle (@username)
+            handle_match = re.search(r"@([a-zA-Z0-9._-]+)", decoded_url)
+            if handle_match:
+                handle = "@" + handle_match.group(1)
+                res = self.service.channels().list(part="snippet", forHandle=handle).execute()
+                if res.get("items"):
+                    return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
+
+            # 4. 優先權 3：處理 /user/ 格式 (Legacy)
+            if "/user/" in decoded_url:
+                username = decoded_url.split("/user/")[1].split("/")[0]
+                res = self.service.channels().list(part="snippet", forUsername=username).execute()
+                if res.get("items"):
+                    return {"id": res["items"][0]["id"], "title": res["items"][0]["snippet"]["title"]}
+
         except Exception as e:
-            print(f"Final search fallback failed: {e}")
+            # 僅印出錯誤類型，不印出可能包含密碼的參數
+            print(f"Channel resolution API error: {type(e).__name__}")
 
         return {}
 
