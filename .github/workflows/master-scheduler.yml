@@ -3,7 +3,7 @@ name: Master Scheduler
 on:
   schedule:
     # ⚠️ 此 cron 由 jobs/update_cron.py 自動管理，請勿手動修改
-    - cron: '5 2 * * *'
+    - cron: '5 * * * *'
   workflow_dispatch:
 
 env:
