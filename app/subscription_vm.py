@@ -24,19 +24,23 @@ class SubscriptionViewModel:
             return {}
         try:
             with open(self.subs_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if not isinstance(data, dict) or "error" in data:
-                    return {}
+                content = f.read().strip()
+                if not content: return {}
+                data = json.loads(content)
+                if not isinstance(data, dict): return {}
                 return data
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ 讀取訂閱檔案失敗: {e}")
             return {}
 
     def _save_subs(self, subs: Dict[str, List[Dict[str, Any]]]) -> None:
-        """將訂閱資料保存至檔案（寫入暫存檔後 rename，避免寫入中斷導致損壞）。"""
-        tmp_path = self.subs_file + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(subs, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, self.subs_file)
+        """將訂閱資料保存至本地檔案。"""
+        try:
+            os.makedirs(os.path.dirname(self.subs_file), exist_ok=True) if os.path.dirname(self.subs_file) else None
+            with open(self.subs_file, "w", encoding="utf-8") as f:
+                json.dump(subs, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"❌ 儲存訂閱檔案失敗: {e}")
 
     @staticmethod
     def snap_preferred_time(hour: int) -> str:
