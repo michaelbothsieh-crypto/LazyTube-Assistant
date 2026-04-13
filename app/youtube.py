@@ -80,12 +80,17 @@ class YouTubeService:
     def get_channel_info(self, channel_url: str) -> dict:
         """Resolve channel URL to channel ID and title."""
         import urllib.parse
+        # 移除所有查詢參數 (?...) 與 錨點 (#...)
+        channel_url = channel_url.split("?")[0].split("#")[0]
         channel_url = urllib.parse.unquote(channel_url)
+        
         handle = None
         if "/@" in channel_url:
             handle = "@" + channel_url.split("/@")[1].split("/")[0]
         elif "youtube.com/" in channel_url:
-            parts = channel_url.split("youtube.com/")[1].split("/")
+            # 移除結尾的斜線
+            clean_url = channel_url.rstrip("/")
+            parts = clean_url.split("youtube.com/")[1].split("/")
             if len(parts) > 0:
                 if parts[0] in ["c", "user", "channel"] and len(parts) > 1:
                     handle = parts[1]
