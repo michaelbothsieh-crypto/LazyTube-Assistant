@@ -23,9 +23,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Restore subscriptions from Vercel Blob
+      - name: Restore subscriptions from GitHub
         env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_PAT_WORKFLOW: ${{ secrets.GH_PAT_WORKFLOW }}
+          GH_REPO_OWNER: ${{ secrets.GH_REPO_OWNER }}
+          GH_REPO_NAME: ${{ secrets.GH_REPO_NAME }}
         run: python jobs/sync_helper.py restore
 
       - name: Update cron based on subscriptions
