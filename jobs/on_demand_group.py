@@ -130,11 +130,11 @@ def main():
                     if pub_time <= datetime.fromisoformat(last_check_str):
                         continue
                 
-                # 2. 快取過濾 (全域攔截)
-                if StateManager.is_processed(vid_id):
-                    print(f"  ⏭️ 影片已在快取中 (可能由其他任務處理過)：{vid_title}")
-                    continue
-
+                # 2. 時間過濾 (核心邏輯：只處理比上次檢查時間更新的影片)
+                if not is_first_run and last_check_str:
+                    if pub_time <= datetime.fromisoformat(last_check_str):
+                        continue
+                
                 # 3. 過濾 Shorts (依據影片長度或標題)
                 duration = details["durations"].get(vid_id, 0)
                 if duration <= Config.SHORTS_MAX_SECONDS or "#shorts" in vid_title.lower():
@@ -146,7 +146,7 @@ def main():
                 summary = nb.process_video(f"https://www.youtube.com/watch?v={vid_id}", vid_title, custom_prompt=sub.get("custom_prompt"))
                 if summary:
                     Notifier.send_summary(vid_title, f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=target_chat_id)
-                    # 記錄至全域清單
+                    # 記錄至全域清單 (保留作為參考，但不影響其他群組判斷)
                     StateManager.add_processed_id(vid_id)
                 
                 # 首次執行只處理一支最新的
