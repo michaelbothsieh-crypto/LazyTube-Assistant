@@ -73,23 +73,42 @@ class StateManager:
         gh_owner = os.environ.get("GH_REPO_OWNER")
         gh_repo = os.environ.get("GH_REPO_NAME")
         gh_pat = os.environ.get("GH_PAT_WORKFLOW")
-        if not gh_owner or not gh_repo: return False
+        if not gh_owner or not gh_repo:
+            print(f"⚠️ 同步失敗：缺少環境變數 (Owner: {gh_owner}, Repo: {gh_repo})")
+            return False
         
         remote_name = StateManager.FILE_MAP.get(filename, filename)
         local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
-        StateManager.clear_local(filename)
 
         try:
-            t = int(datetime.now().timestamp())
-            url = f"https://raw.githubusercontent.com/{gh_owner}/{gh_repo}/state/{remote_name}?t={t}"
-            headers = {"Authorization": f"token {gh_pat}"} if gh_pat else {}
+            # 💡 改用 GitHub API 直接獲取內容 (Immediate consistency)
+            # 避開 raw.githubusercontent.com 的數分鐘緩存延遲
+            api_url = f"https://api.github.com/repos/{gh_owner}/{gh_repo}/contents/{remote_name}?ref=state"
+            headers = {
+                "Authorization": f"token {gh_pat}",
+                "Accept": "application/vnd.github+json"
+            }
+            
             async with httpx.AsyncClient() as client:
-                resp = await client.get(url, headers=headers, timeout=15.0)
+                resp = await client.get(api_url, headers=headers, timeout=15.0)
+                
                 if resp.status_code == 200:
+                    data = resp.json()
+                    content_b64 = data.get("content", "")
+                    content = base64.b64decode(content_b64)
                     with open(local_path, "wb") as f:
-                        f.write(resp.content)
+                        f.write(content)
                     return True
-        except Exception: pass
+                elif resp.status_code == 404:
+                    # 💡 遠端沒檔案時，強制初始化本地檔案，防止讀取到舊請求的殘留資料
+                    initial_content = "{}" if filename.endswith(".json") else ""
+                    with open(local_path, "w", encoding="utf-8") as f:
+                        f.write(initial_content)
+                    return True
+                else:
+                    print(f"❌ API 同步錯誤：{filename} (Status: {resp.status_code})")
+        except Exception as e:
+            print(f"❌ API 同步異常：{e}")
         return False
 
     @staticmethod
@@ -97,7 +116,9 @@ class StateManager:
         gh_owner = os.environ.get("GH_REPO_OWNER")
         gh_repo = os.environ.get("GH_REPO_NAME")
         gh_pat = os.environ.get("GH_PAT_WORKFLOW")
-        if not all([gh_owner, gh_repo, gh_pat]): return False
+        if not all([gh_owner, gh_repo, gh_pat]):
+            print("⚠️ 上傳失敗：缺少 GitHub 認證設定")
+            return False
         
         remote_name = StateManager.FILE_MAP.get(filename, filename)
         local_path = Config.SUBSCRIPTIONS_FILE if filename == "subscriptions.json" else filename
@@ -112,9 +133,16 @@ class StateManager:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(api_url, headers=headers)
                 if resp.status_code == 200: sha = resp.json().get("sha")
-            payload = {"message": "sync state", "content": content, "branch": "state"}
+            
+            payload = {"message": f"sync {filename}", "content": content, "branch": "state"}
             if sha: payload["sha"] = sha
+            
             async with httpx.AsyncClient() as client:
                 put_resp = await client.put(api_url, json=payload, headers=headers)
-                return put_resp.status_code in [200, 201]
-        except Exception: return False
+                if put_resp.status_code in [200, 201]:
+                    return True
+                else:
+                    print(f"❌ 上傳失敗：{filename} (Status: {put_resp.status_code}, {put_resp.text})")
+        except Exception as e:
+            print(f"❌ 上傳異常：{e}")
+        return False
