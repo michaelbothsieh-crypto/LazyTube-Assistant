@@ -22,3 +22,6 @@ NLM_COOKIE_BASE64.txt
 temp_auth.json
 temp_cookies.json
 generated/
+.sys_subs_config_v1.json
+current_subs.json
+tmp_init_state/
