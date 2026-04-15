@@ -167,6 +167,56 @@ class Notifier:
         return None
 
     @classmethod
+    def cache_html_to_redis(cls, html_content: str) -> Optional[str]:
+        """
+        將 HTML 內容轉為 Base64 存入 Redis (暫存 30 分鐘)
+        """
+        if not Config.REDIS_URL or not Config.REDIS_TOKEN:
+            print("❌ 缺少 Redis 配置")
+            return None
+
+        try:
+            b64_data = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
+            
+            cache_id = uuid.uuid4().hex[:8]
+            key = f"html_report_{cache_id}"
+            
+            # 使用 Upstash REST API POST 存入 (EX 1800 代表 30 分鐘)
+            url = Config.REDIS_URL
+            headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
+            payload = ["SET", key, b64_data, "EX", "1800"]
+            
+            resp = requests.post(url, headers=headers, json=payload, timeout=20)
+            if resp.status_code == 200:
+                base_url = os.environ.get("APP_BASE_URL", "https://lazy-tube-assistant.vercel.app").rstrip("/")
+                return f"{base_url}/api/report-proxy?id={cache_id}"
+        except Exception as e:
+            print(f"❌ HTML 緩存失敗: {e}")
+        return None
+
+    @classmethod
+    def send_report_link(cls, chat_id: str, html_content: str, caption: str) -> bool:
+        """
+        直接發送 HTML 報告網址，體驗最佳
+        """
+        is_line = str(chat_id).startswith(("U", "C", "R"))
+        if not is_line:
+            # TG 依然走傳統檔案發送流程
+            return False
+
+        proxy_url = cls.cache_html_to_redis(html_content)
+        if not proxy_url: return False
+
+        messages = [
+            {"type": "text", "text": caption[:5000]},
+            {
+                "type": "text",
+                "text": f"🌐 專業報告已生成：\n👉 點選此處觀看完整報告\n{proxy_url}\n\n(連結 30 分鐘內有效)"
+            }
+        ]
+        return cls._push_line_messages(chat_id, messages)
+
+    @classmethod
     def generate_html_report(cls, title: str, markdown_content: str) -> str:
         """
         /// 將 Markdown 轉換為專業設計的 HTML 報告

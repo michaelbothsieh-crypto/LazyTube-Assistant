@@ -50,17 +50,13 @@ async def main():
         report_msg = f"🔎 <b>深度研究完成：{topic}</b>\n\n📝 <b>核心摘要預覽：</b>\n{preview_text}"
         
         if is_line:
-            # LINE 流程：生成 PDF -> 存入 Redis -> 發送代理連結
-            print("📄 正在為 LINE 用戶生成 PDF 報告...")
-            pdf_path = Notifier.generate_pdf_report(html_content)
-            if pdf_path:
-                Notifier.send_document(chat_id, pdf_path, caption=report_msg)
-                if os.path.exists(pdf_path):
-                    os.remove(pdf_path)
-            else:
-                Notifier.send_text(chat_id, report_msg + "\n\n⚠️ PDF 生成失敗，請參考上方摘要。", html=True)
+            # LINE 流程：改用 HTML 報告連結，速度極快且體驗好
+            print("🌐 正在生成 HTML 報告連結...")
+            if not Notifier.send_report_link(chat_id, html_content, report_msg):
+                print("⚠️ HTML 報告發送失敗，嘗試發送純文字摘要。")
+                Notifier.send_text(chat_id, report_msg + "\n\n⚠️ 完整報告連結生成失敗。", html=True)
         else:
-            # TG 流程：直接傳送 HTML 文件
+            # TG 流程：維持發送 HTML 文件
             import uuid
             html_path = f"/tmp/report_{uuid.uuid4().hex[:8]}.html"
             with open(html_path, "w", encoding="utf-8") as f:
