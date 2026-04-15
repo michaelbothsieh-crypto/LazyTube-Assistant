@@ -197,24 +197,25 @@ class Notifier:
     @classmethod
     def send_report_link(cls, chat_id: str, html_content: str, caption: str) -> bool:
         """
-        直接發送 HTML 報告網址，體驗最佳
+        直接發送 HTML 報告網址，體驗最佳 (支援 TG 與 LINE)
         """
-        is_line = str(chat_id).startswith(("U", "C", "R"))
-        if not is_line:
-            # TG 依然走傳統檔案發送流程
-            return False
-
         proxy_url = cls.cache_html_to_redis(html_content)
         if not proxy_url: return False
 
-        messages = [
-            {"type": "text", "text": caption[:5000]},
-            {
-                "type": "text",
-                "text": f"🌐 專業報告已生成：\n👉 點選此處觀看完整報告\n{proxy_url}\n\n(連結 30 分鐘內有效)"
-            }
-        ]
-        return cls._push_line_messages(chat_id, messages)
+        is_line = str(chat_id).startswith(("U", "C", "R"))
+        if is_line:
+            messages = [
+                {"type": "text", "text": caption[:5000]},
+                {
+                    "type": "text",
+                    "text": f"🌐 專業報告已生成：\n👉 點選此處觀看完整報告\n{proxy_url}\n\n(連結 30 分鐘內有效)"
+                }
+            ]
+            return cls._push_line_messages(chat_id, messages)
+        else:
+            # Telegram 流程
+            tg_msg = f"{caption}\n\n🌐 [點此查看完整研究報告]({proxy_url})\n(連結 30 分鐘內有效)"
+            return cls.send_text(chat_id, tg_msg)
 
     @classmethod
     def generate_html_report(cls, title: str, markdown_content: str) -> str:

@@ -45,37 +45,23 @@ async def main():
         
         is_line = str(chat_id).startswith(("U", "C", "R"))
         
-        # 提取摘要預覽並清理語法 (針對 LINE 優化)
-        if is_line:
-            import re
-            # 移除 Markdown 粗體、斜體、連結、圖片、標題符號與腳註 [n]
-            clean_text = re.sub(r'\!\[.*?\]\(.*?\)', '', result) # 移除圖片
-            clean_text = re.sub(r'\[.*?\]\(.*?\)', '', clean_text) # 移除連結
-            clean_text = re.sub(r'[\*\#\_>]', '', clean_text) # 移除 *, #, _, >
-            clean_text = re.sub(r'\[\d+\]', '', clean_text) # 移除腳註 [1]
-            
-            # 取得前 180 字作為精簡摘要
-            preview_text = clean_text.strip()[:180] + "..." if len(clean_text) > 180 else clean_text
-            report_msg = f"🔎 研究完成：{topic}\n\n📝 核心結論：\n{preview_text}"
-        else:
-            preview_text = result[:400] + "..." if len(result) > 400 else result
-            report_msg = f"🔎 <b>深度研究完成：{topic}</b>\n\n📝 <b>核心摘要預覽：</b>\n{preview_text}"
+        # 提取摘要預覽並清理語法 (統一優化)
+        import re
+        # 移除 Markdown 粗體、斜體、連結、圖片、標題符號與腳註 [n]
+        clean_text = re.sub(r'\!\[.*?\]\(.*?\)', '', result) # 移除圖片
+        clean_text = re.sub(r'\[.*?\]\(.*?\)', '', clean_text) # 移除連結
+        clean_text = re.sub(r'[\*\#\_>]', '', clean_text) # 移除 *, #, _, >
+        clean_text = re.sub(r'\[\d+\]', '', clean_text) # 移除腳註 [1]
         
-        if is_line:
-            # LINE 流程：改用 HTML 報告連結，速度極快且體驗好
-            print("🌐 正在生成 HTML 報告連結...")
-            if not Notifier.send_report_link(chat_id, html_content, report_msg):
-                print("⚠️ HTML 報告發送失敗，嘗試發送純文字摘要。")
-                Notifier.send_text(chat_id, report_msg + "\n\n⚠️ 完整報告連結生成失敗。", html=True)
-        else:
-            # TG 流程：維持發送 HTML 文件
-            import uuid
-            html_path = f"/tmp/report_{uuid.uuid4().hex[:8]}.html"
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
-            Notifier.send_document(chat_id, html_path, caption=report_msg)
-            if os.path.exists(html_path):
-                os.remove(html_path)
+        # 取得前 180 字作為精簡摘要 (不論平台一律簡潔)
+        preview_text = clean_text.strip()[:180] + "..." if len(clean_text) > 180 else clean_text
+        report_msg = f"🔎 研究完成：{topic}\n\n📝 核心結論：\n{preview_text}"
+        
+        # 統一改用 HTML 報告連結，速度極快且體驗好
+        print("🌐 正在生成 HTML 報告連結...")
+        if not Notifier.send_report_link(chat_id, html_content, report_msg):
+            print("⚠️ 報告發送失敗，嘗試發送純文字摘要。")
+            Notifier.send_text(chat_id, report_msg + "\n\n⚠️ 完整報告連結生成失敗。", html=True)
         
         print("✅ 研究完成並已回傳")
     else:
