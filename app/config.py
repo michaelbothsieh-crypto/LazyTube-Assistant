@@ -17,6 +17,10 @@ class Config:
     # LINE 配置
     LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 
+    # Redis 配置 (用於暫存 LINE PDF 報告)
+    REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
+    REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+
     NLM_COOKIE_BASE64 = os.environ.get("NLM_COOKIE_BASE64", "")
     CUSTOM_PROMPT = os.environ.get("CUSTOM_PROMPT")
 

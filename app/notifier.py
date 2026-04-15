@@ -152,11 +152,12 @@ class Notifier:
             cache_id = uuid.uuid4().hex[:8]
             key = f"pdf_report_{cache_id}"
             
-            # 使用 Upstash REST API 存入 (EX 600 代表 10 分鐘)
-            url = f"{Config.REDIS_URL}/set/{key}/{b64_data}/EX/600"
+            # 使用 Upstash REST API POST 存入 (不限制資料大小且避免 URL 編碼問題)
+            url = Config.REDIS_URL
             headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
+            payload = ["SET", key, b64_data, "EX", "600"]
             
-            resp = requests.get(url, headers=headers, timeout=20)
+            resp = requests.post(url, headers=headers, json=payload, timeout=20)
             if resp.status_code == 200:
                 # 回傳 Proxy 網址
                 base_url = os.environ.get("APP_BASE_URL", "https://lazy-tube-assistant.vercel.app").rstrip("/")
