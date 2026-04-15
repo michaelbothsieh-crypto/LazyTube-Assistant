@@ -2,6 +2,7 @@ import base64
 import mimetypes
 import os
 import time
+import uuid
 from typing import Optional
 
 import requests
@@ -76,11 +77,7 @@ class Notifier:
             return False
 
         endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendMessage"
-        
-        # 簡單處理 HTML 逸碼，避免破壞標籤
         safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        
-        # 恢復我們想要加粗的部分
         html_text = safe_text.replace("🎥", "<b>🎥").replace("\n📺", "</b>\n📺")
 
         try:
@@ -94,15 +91,8 @@ class Notifier:
                 },
                 timeout=15,
             )
-            if resp.status_code != 200:
-                print(f"❌ Telegram 推播失敗: {resp.status_code} {resp.text}")
-                # 如果是 HTML 解析錯誤，嘗試以純文字重發
-                if "can't parse entities" in resp.text:
-                    requests.post(endpoint, json={"chat_id": chat_id, "text": text}, timeout=15)
-                return False
-            return True
-        except Exception as e:
-            print(f"❌ Telegram 推播異常: {e}")
+            return resp.status_code == 200
+        except Exception:
             return False
 
     @staticmethod
@@ -123,19 +113,14 @@ class Notifier:
 
         try:
             resp = requests.post(endpoint, json=payload, headers=headers, timeout=15)
-            if resp.status_code == 200:
-                return True
-            print(f"❌ LINE 推播失敗: {resp.status_code} {resp.text}")
-            return False
-        except Exception as e:
-            print(f"❌ LINE API 連線異常: {e}")
+            return resp.status_code == 200
+        except Exception:
             return False
 
     @staticmethod
     def _push_line_messages(chat_id, messages):
         """Push one or more LINE messages."""
         if not Config.LINE_CHANNEL_ACCESS_TOKEN:
-            print("❌ 缺少 LINE Channel Access Token")
             return False
 
         endpoint = "https://api.line.me/v2/bot/message/push"
@@ -147,171 +132,38 @@ class Notifier:
 
         try:
             resp = requests.post(endpoint, json=payload, headers=headers, timeout=30)
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    @classmethod
+    def cache_report_to_redis(cls, file_path: str) -> Optional[str]:
+        """
+        將檔案轉為 Base64 存入 Redis (暫存 10 分鐘)，不佔用 Blob 空間
+        """
+        if not Config.REDIS_URL or not Config.REDIS_TOKEN:
+            print("❌ 缺少 Redis 配置")
+            return None
+
+        try:
+            with open(file_path, "rb") as f:
+                b64_data = base64.b64encode(f.read()).decode("utf-8")
+            
+            cache_id = uuid.uuid4().hex[:8]
+            key = f"pdf_report_{cache_id}"
+            
+            # 使用 Upstash REST API 存入 (EX 600 代表 10 分鐘)
+            url = f"{Config.REDIS_URL}/set/{key}/{b64_data}/EX/600"
+            headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
+            
+            resp = requests.get(url, headers=headers, timeout=20)
             if resp.status_code == 200:
-                return True
-            print(f"❌ LINE 推播失敗: {resp.status_code} {resp.text}")
-            return False
+                # 回傳 Proxy 網址
+                base_url = os.environ.get("APP_BASE_URL", "https://lazy-tube-assistant.vercel.app").rstrip("/")
+                return f"{base_url}/api/pdf-proxy?id={cache_id}"
         except Exception as e:
-            print(f"❌ LINE API 連線異常: {e}")
-            return False
-
-    @staticmethod
-    def _upload_to_vercel_blob(file_path: str, target_chat_id: str) -> Optional[str]:
-        """
-        將檔案上傳至 Vercel Blob 並取得公開網址。
-        """
-        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-        if not token:
-            print("❌ 缺少 BLOB_READ_WRITE_TOKEN")
-            return None
-
-        filename = os.path.basename(file_path)
-        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-").strip()
-        safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(target_chat_id))[:50]
-        blob_path = f"artifacts/{safe_chat_id}/{int(time.time())}_{safe_filename}"
-        
-        api_url = f"https://blob.vercel-storage.com/{blob_path}"
-        
-        content_type = "application/pdf" if filename.endswith(".pdf") else "text/html"
-        
-        try:
-            with open(file_path, "rb") as f:
-                headers = {
-                    "Authorization": f"Bearer {token}",
-                    "x-api-version": "1",
-                    "content-type": content_type
-                }
-                resp = requests.put(api_url, data=f, headers=headers, timeout=120)
-                if resp.status_code == 200:
-                    return resp.json().get("url")
-                return None
-        except Exception:
-            return None
-
-    @staticmethod
-    def delete_pending_message(chat_id: str, message_id: str) -> None:
-        """
-        /// 刪除 Telegram「處理中」的等待提示訊息
-        """
-        if not message_id or str(chat_id).startswith(("U", "C", "R")):
-            return
-        if not Config.TG_BOT_TOKEN:
-            return
-
-        import requests as _requests
-        del_url = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/deleteMessage"
-        try:
-            _requests.post(del_url, json={
-                "chat_id": chat_id,
-                "message_id": int(message_id)
-            }, timeout=10)
-        except Exception:
-            pass
-
-    @classmethod
-    def send_error(cls, target_chat_id, error_msg, url=None):
-        """
-        /// 發送錯誤通知
-        """
-        chat_id = target_chat_id or Config.TG_CHAT_ID
-        msg = "❌ <b>系統執行失敗</b>\n\n"
-        if url:
-            msg += f"🔗 連結：<code>{url}</code>\n"
-        msg += f"📝 錯誤內容：\n<pre>{error_msg}</pre>"
-
-        if str(chat_id).startswith(("U", "C", "R")):
-            return cls._send_to_line(chat_id, f"❌ 系統執行失敗\n\n{error_msg}")
-        return cls._send_to_telegram(chat_id, msg)
-
-    @classmethod
-    def send_photo(cls, target_chat_id, file_path, caption=None):
-        """
-        /// 發送圖片至指定平台
-        """
-        chat_id = target_chat_id or Config.TG_CHAT_ID
-        if not chat_id:
-            return False
-        if str(chat_id).startswith(("U", "C", "R")):
-            return cls._send_photo_to_line(chat_id, file_path, caption)
-        return cls._send_photo_to_telegram(chat_id, file_path, caption)
-
-    @staticmethod
-    def _send_photo_to_telegram(chat_id, file_path, caption=None):
-        if not Config.TG_BOT_TOKEN:
-            return False
-
-        endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendPhoto"
-        data = {"chat_id": chat_id}
-        if caption:
-            data["caption"] = caption
-
-        try:
-            with open(file_path, "rb") as f:
-                files = {"photo": (os.path.basename(file_path), f)}
-                resp = requests.post(endpoint, data=data, files=files, timeout=60)
-                return resp.status_code == 200
-        except Exception:
-            return False
-
-    @classmethod
-    def _send_photo_to_line(cls, chat_id, file_path, caption=None):
-        image_url = cls._upload_to_vercel_blob(file_path, chat_id)
-        if not image_url:
-            return False
-        messages = []
-        if caption:
-            messages.append({"type": "text", "text": caption[:5000]})
-        messages.append({"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url})
-        return cls._push_line_messages(chat_id, messages)
-
-    @classmethod
-    def send_document(cls, target_chat_id, file_path, caption=None):
-        """
-        /// 發送文件至指定平台
-        """
-        chat_id = target_chat_id or Config.TG_CHAT_ID
-        if not chat_id:
-            return False
-
-        if str(chat_id).startswith(("U", "C", "R")):
-            return cls._send_document_to_line(chat_id, file_path, caption)
-        return cls._send_document_to_telegram(chat_id, file_path, caption)
-
-    @staticmethod
-    def _send_document_to_telegram(chat_id, file_path, caption=None):
-        if not Config.TG_BOT_TOKEN:
-            return False
-
-        endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendDocument"
-        data = {"chat_id": chat_id}
-        if caption:
-            data["caption"] = caption
-
-        try:
-            with open(file_path, "rb") as f:
-                files = {"document": (os.path.basename(file_path), f)}
-                resp = requests.post(endpoint, data=data, files=files, timeout=60)
-                return resp.status_code == 200
-        except Exception:
-            return False
-
-    @classmethod
-    def _send_document_to_line(cls, chat_id, file_path, caption=None):
-        public_url = cls._upload_to_vercel_blob(file_path, chat_id)
-        if not public_url:
-            return False
-
-        filename = os.path.basename(file_path)
-        messages = []
-        if caption:
-            messages.append({"type": "text", "text": caption[:5000]})
-        messages.append({
-            "type": "text",
-            "text": f"📥 檔案已上傳：{filename}\n🔗 下載連結：{public_url}"
-        })
-        return cls._push_line_messages(chat_id, messages)
-
-    # --- HTML 專業報告相關 ---
+            print(f"❌ Redis 緩存失敗: {e}")
+        return None
 
     @classmethod
     def generate_html_report(cls, title: str, markdown_content: str) -> str:
@@ -369,22 +221,13 @@ class Notifier:
         """
         try:
             import pdfkit
-            import uuid
-            
             pdf_name = f"report_{uuid.uuid4().hex[:8]}.pdf"
             pdf_path = f"/tmp/{pdf_name}"
-            
             options = {
-                'page-size': 'A4',
-                'margin-top': '0.75in',
-                'margin-right': '0.75in',
-                'margin-bottom': '0.75in',
-                'margin-left': '0.75in',
-                'encoding': "UTF-8",
-                'no-outline': None,
-                'quiet': ''
+                'page-size': 'A4', 'margin-top': '0.75in', 'margin-right': '0.75in',
+                'margin-bottom': '0.75in', 'margin-left': '0.75in', 'encoding': "UTF-8",
+                'no-outline': None, 'quiet': ''
             }
-            
             pdfkit.from_string(html_content, pdf_path, options=options)
             return pdf_path
         except Exception as e:
@@ -392,67 +235,51 @@ class Notifier:
             return None
 
     @classmethod
-    def upload_report(cls, title: str, html_content: str, chat_id: str, file_path: Optional[str] = None) -> Optional[str]:
+    def send_document(cls, target_chat_id, file_path, caption=None):
         """
-        /// 上傳報告檔案 (HTML 或 PDF)
+        /// 發送文件至指定平台
         """
-        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-        if not token: return None
+        chat_id = target_chat_id or Config.TG_CHAT_ID
+        if not chat_id: return False
 
-        import uuid
-        
-        # 如果有傳入 file_path (例如 PDF)，直接使用
-        if file_path and os.path.exists(file_path):
-            tmp_path = file_path
-            file_name = os.path.basename(file_path)
-            content_type = "application/pdf"
-        else:
-            file_name = f"report_{uuid.uuid4().hex[:8]}.html"
-            tmp_path = f"/tmp/{file_name}"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
-            content_type = "text/html"
+        if str(chat_id).startswith(("U", "C", "R")):
+            return cls._send_document_to_line(chat_id, file_path, caption)
+        return cls._send_document_to_telegram(chat_id, file_path, caption)
 
-        safe_chat_id = "".join(ch if ch.isalnum() else "_" for ch in str(chat_id))[:30]
-        blob_path = f"reports/{safe_chat_id}/{int(time.time())}_{file_name}"
-        api_url = f"https://blob.vercel-storage.com/{blob_path}"
-        
+    @staticmethod
+    def _send_document_to_telegram(chat_id, file_path, caption=None):
+        if not Config.TG_BOT_TOKEN: return False
+        endpoint = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/sendDocument"
+        data = {"chat_id": chat_id}
+        if caption: data["caption"] = caption
         try:
-            with open(tmp_path, "rb") as f:
-                resp = requests.put(api_url, data=f, headers={
-                    "Authorization": f"Bearer {token}",
-                    "x-api-version": "1",
-                    "content-type": content_type
-                }, timeout=60)
-                if resp.status_code == 200:
-                    return resp.json().get("url")
-                else:
-                    print(f"❌ Vercel 上傳失敗 (Status {resp.status_code}): {resp.text}")
-        except Exception as e:
-            print(f"❌ 報告上傳異常: {e}")
-        return None
+            with open(file_path, "rb") as f:
+                files = {"document": (os.path.basename(file_path), f)}
+                resp = requests.post(endpoint, data=data, files=files, timeout=60)
+                return resp.status_code == 200
+        except Exception: return False
 
     @classmethod
-    def cleanup_old_reports(cls):
-        """
-        /// 自動清理 30 天前的舊報告
-        """
-        token = os.environ.get("BLOB_READ_WRITE_TOKEN")
-        if not token: return
-        list_url = "https://blob.vercel-storage.com?prefix=reports/"
+    def _send_document_to_line(cls, chat_id, file_path, caption=None):
+        # 優先使用 Redis 緩存，避免 Blob 空間不足
+        proxy_url = cls.cache_report_to_redis(file_path)
+        if not proxy_url: return False
+
+        filename = os.path.basename(file_path)
+        messages = []
+        if caption: messages.append({"type": "text", "text": caption[:5000]})
+        messages.append({
+            "type": "text",
+            "text": f"📥 檔案已生成：{filename}\n🔗 下載連結 (10分有效)：\n{proxy_url}"
+        })
+        return cls._push_line_messages(chat_id, messages)
+
+    @staticmethod
+    def delete_pending_message(chat_id: str, message_id: str) -> None:
+        if not message_id or str(chat_id).startswith(("U", "C", "R")): return
+        if not Config.TG_BOT_TOKEN: return
+        import requests as _requests
+        del_url = f"https://api.telegram.org/bot{Config.TG_BOT_TOKEN}/deleteMessage"
         try:
-            resp = requests.get(list_url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
-            if resp.status_code == 200:
-                data = resp.json()
-                now = time.time()
-                to_delete = []
-                for blob in data.get("blobs", []):
-                    try:
-                        ts = int(blob["pathname"].split("/")[2].split("_")[0])
-                        if now - ts > 30 * 86400: to_delete.append(blob["url"])
-                    except: continue
-                if to_delete:
-                    requests.post("https://blob.vercel-storage.com/v1/delete", 
-                                  json={"urls": to_delete}, 
-                                  headers={"Authorization": f"Bearer {token}"}, timeout=30)
-        except: pass
+            _requests.post(del_url, json={"chat_id": chat_id, "message_id": int(message_id)}, timeout=10)
+        except Exception: pass

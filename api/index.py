@@ -4,8 +4,9 @@ LazyTube-Assistant FastAPI entrypoints for Telegram and external webhooks.
 import logging
 import os
 import sys
+import base64
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 
@@ -30,6 +31,34 @@ DEFAULT_EXTERNAL_PROMPT = "請幫我整理這支影片的重點，條列 5 點�
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
+
+@app.get("/api/pdf-proxy")
+async def pdf_proxy(id: str):
+    """
+    從 Redis 讀取 PDF Base64 並以文件流回傳，不佔用 Blob 空間
+    """
+    from app.config import Config
+    import requests
+    
+    url = f"{Config.REDIS_URL}/get/pdf_report_{id}"
+    headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
+    
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            b64_str = data.get("result")
+            if b64_str:
+                pdf_bytes = base64.b64decode(b64_str)
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename=Research_Report_{id}.pdf"}
+                )
+    except Exception as e:
+        logger.error(f"PDF Proxy error: {e}")
+    
+    raise HTTPException(status_code=404, detail="File not found or expired")
 
 
 @app.post("/api/tg-webhook")
@@ -102,7 +131,6 @@ async def external_dispatch(
 
         if command == "research":
             from api.utils.github_dispatch import dispatch_research_workflow
-            # 對於 research，url 欄位存的是主題 (Topic)
             topic = url or prompt_raw
             mode = "deep" if "deep" in prompt_raw.lower() else "fast"
             await dispatch_research_workflow(

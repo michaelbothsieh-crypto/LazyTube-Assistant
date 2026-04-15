@@ -32,7 +32,6 @@ async def main():
 
     # 2. 執行研究 (使用 NotebookManager)
     nm = NotebookManager()
-    
     success, result = await nm.research_topic(topic, mode=mode)
     
     # 3. 清理之前的提示訊息
@@ -41,48 +40,36 @@ async def main():
 
     if success:
         # 4. 生成 HTML 內容
-        print("🎨 正在生成專業 HTML 報告...")
+        print("🎨 正在生成專業報告...")
         html_content = Notifier.generate_html_report(topic, result)
         
         is_line = str(chat_id).startswith(("U", "C", "R"))
-        report_url = None
-        
-        if is_line:
-            print("📄 正在為 LINE 用戶生成 PDF 報告...")
-            pdf_path = Notifier.generate_pdf_report(html_content)
-            if pdf_path:
-                report_url = Notifier.upload_report(topic, html_content, chat_id, file_path=pdf_path)
-                # 清理 PDF 暫存
-                if os.path.exists(pdf_path):
-                    os.remove(pdf_path)
-        
-        # 如果不是 Line 或者 PDF 生成失敗，則使用 HTML 流程
-        if not report_url:
-            report_url = Notifier.upload_report(topic, html_content, chat_id)
-        
-        # 5. 回傳結果
-        print("✅ 研究完成")
         
         # 提取摘要預覽
         preview_text = result[:400] + "..." if len(result) > 400 else result
+        report_msg = f"🔎 <b>深度研究完成：{topic}</b>\n\n📝 <b>核心摘要預覽：</b>\n{preview_text}"
         
-        file_ext = "PDF" if is_line and report_url and ".pdf" in report_url else "Web"
-        
-        if report_url:
-            report_msg = (
-                f"🔎 <b>深度研究完成：{topic}</b>\n\n"
-                f"📝 <b>核心摘要預覽：</b>\n{preview_text}\n\n"
-                f"🌐 <b>完整專業報告 ({file_ext})：</b>\n<a href='{report_url}'>👉 點此線上瀏覽完整研究成果</a>\n"
-            )
-            Notifier.send_text(chat_id, report_msg, html=True)
+        if is_line:
+            # LINE 流程：生成 PDF -> 存入 Redis -> 發送代理連結
+            print("📄 正在為 LINE 用戶生成 PDF 報告...")
+            pdf_path = Notifier.generate_pdf_report(html_content)
+            if pdf_path:
+                Notifier.send_document(chat_id, pdf_path, caption=report_msg)
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
+            else:
+                Notifier.send_text(chat_id, report_msg + "\n\n⚠️ PDF 生成失敗，請參考上方摘要。", html=True)
         else:
-            # 備援方案
-            report_msg = (
-                f"🔎 <b>深度研究完成：{topic}</b>\n\n"
-                f"📝 <b>核心摘要預覽：</b>\n{preview_text}\n\n"
-                f"⚠️ <b>提示</b>：雲端儲存額度已滿，改以「文字摘要」回傳。"
-            )
-            Notifier.send_text(chat_id, report_msg, html=True)
+            # TG 流程：直接傳送 HTML 文件
+            import uuid
+            html_path = f"/tmp/report_{uuid.uuid4().hex[:8]}.html"
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+            Notifier.send_document(chat_id, html_path, caption=report_msg)
+            if os.path.exists(html_path):
+                os.remove(html_path)
+        
+        print("✅ 研究完成並已回傳")
     else:
         print(f"❌ 研究失敗: {result}")
         Notifier.send_text(chat_id, f"❌ 深度研究失敗: {result}", html=True)
