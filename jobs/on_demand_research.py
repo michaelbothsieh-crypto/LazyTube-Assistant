@@ -45,9 +45,21 @@ async def main():
         
         is_line = str(chat_id).startswith(("U", "C", "R"))
         
-        # 提取摘要預覽
-        preview_text = result[:400] + "..." if len(result) > 400 else result
-        report_msg = f"🔎 <b>深度研究完成：{topic}</b>\n\n📝 <b>核心摘要預覽：</b>\n{preview_text}"
+        # 提取摘要預覽並清理語法 (針對 LINE 優化)
+        if is_line:
+            import re
+            # 移除 Markdown 粗體、斜體、連結、圖片、標題符號與腳註 [n]
+            clean_text = re.sub(r'\!\[.*?\]\(.*?\)', '', result) # 移除圖片
+            clean_text = re.sub(r'\[.*?\]\(.*?\)', '', clean_text) # 移除連結
+            clean_text = re.sub(r'[\*\#\_>]', '', clean_text) # 移除 *, #, _, >
+            clean_text = re.sub(r'\[\d+\]', '', clean_text) # 移除腳註 [1]
+            
+            # 取得前 180 字作為精簡摘要
+            preview_text = clean_text.strip()[:180] + "..." if len(clean_text) > 180 else clean_text
+            report_msg = f"🔎 研究完成：{topic}\n\n📝 核心結論：\n{preview_text}"
+        else:
+            preview_text = result[:400] + "..." if len(result) > 400 else result
+            report_msg = f"🔎 <b>深度研究完成：{topic}</b>\n\n📝 <b>核心摘要預覽：</b>\n{preview_text}"
         
         if is_line:
             # LINE 流程：改用 HTML 報告連結，速度極快且體驗好
