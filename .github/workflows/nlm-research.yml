@@ -39,11 +39,6 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install PDF dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y wkhtmltopdf
-
     - name: Cache pip
       uses: actions/cache@v4
       with:
@@ -54,7 +49,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt pdfkit
+        pip install -r requirements.txt
 
     - name: Run NLM Deep Research
       env:
@@ -63,6 +58,8 @@ jobs:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+        UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
         YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
         YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
         YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
