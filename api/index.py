@@ -100,6 +100,19 @@ async def external_dispatch(
                 )
             return JSONResponse(content={"ok": True})
 
+        if command == "research":
+            from api.utils.github_dispatch import dispatch_research_workflow
+            # 對於 research，url 欄位存的是主題 (Topic)
+            topic = url or prompt_raw
+            mode = "deep" if "deep" in prompt_raw.lower() else "fast"
+            await dispatch_research_workflow(
+                topic=topic,
+                mode=mode,
+                chat_id=chat_id,
+                message_id=data.get("message_id", "")
+            )
+            return JSONResponse(content={"ok": True})
+
         if not url:
             return JSONResponse(
                 content={"ok": False, "error": "Missing params"},
