@@ -10,13 +10,10 @@ from app.notifier import Notifier
 
 
 class SummarizerViewModel:
-    """
-    /// YouTube 摘要器 ViewModel
-    /// 負責處理影片掃描、摘要生成與狀態同步的核心業務邏輯
-    """
+    """YouTube 摘要器 ViewModel，負責處理影片掃描、摘要生成與狀態同步的核心業務邏輯。"""
 
     def __init__(self):
-        self.yt_service = YouTubeService()
+        self.yt_service = YouTubeService.from_config()
         self.notebook_service = NotebookService()
         self.last_check = StateManager.get_last_check_time()
         self.current_time = datetime.now(timezone.utc)
@@ -31,13 +28,7 @@ class SummarizerViewModel:
         return f"{format_time(self.last_check)} 到 {format_time(self.current_time)}"
 
     def run_sync(self, target_chat_id: Optional[str] = None) -> Dict[str, int]:
-        """
-        /// 執行完整的掃描與摘要流程
-        /// - 獲取新影片
-        /// - 進行去重與篩選
-        /// - 批次處理摘要生成
-        /// - 更新檢查點狀態
-        """
+        """執行完整的掃描與摘要流程：獲取新影片、去重篩選、批次摘要、更新檢查點。"""
         results = {"success": 0, "skipped": 0, "failed": 0}
 
         # 1. 獲取新影片

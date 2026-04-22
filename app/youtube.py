@@ -9,9 +9,6 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from app.config import Config
-
-
 def retry(max_attempts=3, delay=2):
     """Retry a function on transient errors."""
     def decorator(func):
@@ -33,16 +30,36 @@ def retry(max_attempts=3, delay=2):
 class YouTubeService:
     """YouTube API wrapper with high-resilience resolution."""
 
-    def __init__(self):
-        self.service = self._get_service()
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        refresh_token: str,
+        shorts_max_seconds: int = 60,
+        max_video_seconds: int = 3600,
+    ):
+        self.shorts_max_seconds = shorts_max_seconds
+        self.max_video_seconds = max_video_seconds
+        self.service = self._build_service(client_id, client_secret, refresh_token)
 
-    def _get_service(self):
-        creds = Credentials(
-            None,
-            refresh_token=Config.YT_REFRESH_TOKEN,
-            token_uri="https://oauth2.googleapis.com/token",
+    @classmethod
+    def from_config(cls) -> "YouTubeService":
+        from app.config import Config
+        return cls(
             client_id=Config.YT_CLIENT_ID,
             client_secret=Config.YT_CLIENT_SECRET,
+            refresh_token=Config.YT_REFRESH_TOKEN,
+            shorts_max_seconds=Config.SHORTS_MAX_SECONDS,
+            max_video_seconds=Config.MAX_VIDEO_SECONDS,
+        )
+
+    def _build_service(self, client_id: str, client_secret: str, refresh_token: str):
+        creds = Credentials(
+            None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
         )
         if not creds.valid:
             if creds.expired and creds.refresh_token:
@@ -178,8 +195,8 @@ class YouTubeService:
                 if details["categories"].get(vid) != "20": continue
                 if details["live_status"].get(vid) in {"live", "upcoming"} or details["has_live_details"].get(vid): continue
                 duration = details["durations"].get(vid, 0)
-                if duration <= Config.SHORTS_MAX_SECONDS or any(t in video["title"].lower() for t in ["#short", "shorts"]): continue
-                if Config.MAX_VIDEO_SECONDS > 0 and duration > Config.MAX_VIDEO_SECONDS: continue
+                if duration <= self.shorts_max_seconds or any(t in video["title"].lower() for t in ["#short", "shorts"]): continue
+                if self.max_video_seconds > 0 and duration > self.max_video_seconds: continue
                 new_videos.append(video)
         except: pass
         return sorted(new_videos, key=lambda x: x["time"])

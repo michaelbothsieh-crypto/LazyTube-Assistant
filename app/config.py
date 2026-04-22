@@ -2,10 +2,7 @@ import os
 
 
 class Config:
-    """
-    /// 專案全域配置管理
-    /// 負責讀取並驗證環境變數
-    """
+    """專案全域配置管理，負責讀取並驗證環境變數。"""
 
     YT_CLIENT_ID = os.environ.get("YT_CLIENT_ID")
     YT_CLIENT_SECRET = os.environ.get("YT_CLIENT_SECRET")
@@ -43,6 +40,17 @@ class Config:
     # 白名單使用者 ID（逗號分隔）
     ALLOWED_USERS = os.environ.get("ALLOWED_USERS", "")
 
+    TG_WEBHOOK_SECRET = os.environ.get("TG_WEBHOOK_SECRET", "")
+
+    # GitHub Actions dispatch
+    GH_PAT_WORKFLOW = os.environ.get("GH_PAT_WORKFLOW")
+    GH_REPO_OWNER = os.environ.get("GH_REPO_OWNER")
+    GH_REPO_NAME = os.environ.get("GH_REPO_NAME")
+    GH_REPO_BRANCH = os.environ.get("GH_REPO_BRANCH", "main")
+
+    # 報告代理伺服器基礎 URL
+    APP_BASE_URL = os.environ.get("APP_BASE_URL", "https://lazy-tube-assistant.vercel.app")
+
     # 排程系統：有效的 preferred_time 時段（台北時間，偶數小時）
     # master-scheduler 在這些時段的 :30 分執行，與 yt-summary 的 :00 分完全錯開
     VALID_PREFERRED_HOURS = [6, 8, 10, 12, 14, 16, 18, 20, 22]
@@ -61,10 +69,7 @@ class Config:
 
     @classmethod
     def validate(cls) -> bool:
-        """
-        /// 驗證必填設定是否完整
-        /// 在啟動時呼叫，提早偵測缺少的憑證
-        """
+        """驗證必填設定是否完整，在啟動時呼叫以提早偵測缺少的憑證。"""
         missing = []
         for field in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN"):
             if not getattr(cls, field):

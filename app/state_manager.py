@@ -6,10 +6,7 @@ import json
 import base64
 
 class StateManager:
-    """
-    /// 狀態管理模組 (GitHub 穩定混淆路徑版)
-    /// 使用固定混淆路徑保護隱私，並確保跨平台讀取的一致性。
-    """
+    """狀態管理模組，使用固定混淆路徑保護隱私並確保跨平台讀取一致性。"""
     # 使用固定混淆字串作為檔名一部分
     FILE_MAP = {
         "processed_videos.txt": ".sys_vid_storage_v1.txt",
@@ -70,9 +67,9 @@ class StateManager:
 
     @staticmethod
     async def sync_from_blob(filename: str) -> bool:
-        gh_owner = os.environ.get("GH_REPO_OWNER")
-        gh_repo = os.environ.get("GH_REPO_NAME")
-        gh_pat = os.environ.get("GH_PAT_WORKFLOW")
+        gh_owner = Config.GH_REPO_OWNER
+        gh_repo = Config.GH_REPO_NAME
+        gh_pat = Config.GH_PAT_WORKFLOW
         if not gh_owner or not gh_repo:
             print(f"⚠️ 同步失敗：缺少環境變數 (Owner: {gh_owner}, Repo: {gh_repo})")
             return False
@@ -113,9 +110,9 @@ class StateManager:
 
     @staticmethod
     async def sync_to_blob(filename: str) -> bool:
-        gh_owner = os.environ.get("GH_REPO_OWNER")
-        gh_repo = os.environ.get("GH_REPO_NAME")
-        gh_pat = os.environ.get("GH_PAT_WORKFLOW")
+        gh_owner = Config.GH_REPO_OWNER
+        gh_repo = Config.GH_REPO_NAME
+        gh_pat = Config.GH_PAT_WORKFLOW
         if not all([gh_owner, gh_repo, gh_pat]):
             print("⚠️ 上傳失敗：缺少 GitHub 認證設定")
             return False

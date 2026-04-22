@@ -31,7 +31,7 @@ def main():
     
     # 1. 預過濾 Shorts (如果網址中有 YouTube)
     from app.youtube import YouTubeService
-    yt = YouTubeService()
+    yt = YouTubeService.from_config()
     
     filtered_urls = []
     yt_video_ids = []

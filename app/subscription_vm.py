@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from app.config import Config
 from app.youtube import YouTubeService
@@ -9,14 +9,17 @@ from api.utils.github_dispatch import dispatch_update_cron_workflow
 
 
 class SubscriptionViewModel:
-    """
-    /// 頻道訂閱管理 ViewModel (群組模式)
-    /// 負責處理群組對頻道的追蹤，並同步建立對應的 GitHub Group Workflow
-    """
+    """頻道訂閱管理 ViewModel（群組模式），負責處理群組對頻道的追蹤並同步 GitHub Group Workflow。"""
 
-    def __init__(self):
-        self.yt_service = YouTubeService()
+    def __init__(self, yt_service: Optional[YouTubeService] = None):
+        self._yt_service = yt_service
         self.subs_file = Config.SUBSCRIPTIONS_FILE
+
+    @property
+    def yt_service(self) -> YouTubeService:
+        if self._yt_service is None:
+            self._yt_service = YouTubeService.from_config()
+        return self._yt_service
 
     def _load_subs(self) -> Dict[str, List[Dict[str, Any]]]:
         """從檔案讀取所有訂閱資料。"""
@@ -59,9 +62,7 @@ class SubscriptionViewModel:
         return f"{best:02d}:00"
 
     async def subscribe(self, chat_id: str, channel_url: str, custom_prompt: str = "", preferred_time: str = "") -> Dict[str, Any]:
-        """
-        /// 新增頻道訂閱並同步更新 GitHub 群組 Workflow 檔案
-        """
+        """新增頻道訂閱並同步更新 GitHub 群組 Workflow 檔案。"""
         channel_info = self.yt_service.get_channel_info(channel_url)
         if not channel_info:
             return {"success": False, "message": "找不到該頻道，請確認網址是否正確。"}
@@ -114,9 +115,7 @@ class SubscriptionViewModel:
             self._save_subs(subs)
 
     async def unsubscribe(self, chat_id: str, channel_id_or_index: str) -> Dict[str, Any]:
-        """
-        /// 取消訂閱頻道並更新 Workflow 檔案
-        """
+        """取消訂閱頻道並更新 Workflow 檔案。"""
         subs = self._load_subs()
         if chat_id not in subs or not subs[chat_id]:
             return {"success": False, "message": "目前沒有任何訂閱。"}
@@ -162,6 +161,12 @@ class SubscriptionViewModel:
 
     def get_all_active_subscriptions(self) -> Dict[str, List[Dict[str, Any]]]:
         return self._load_subs()
+
+    def clear_chat(self, chat_id: str) -> None:
+        """移除指定群組的所有訂閱。"""
+        subs = self._load_subs()
+        subs.pop(chat_id, None)
+        self._save_subs(subs)
 
     def update_last_check(self, chat_id: str, channel_id: str, check_time: datetime) -> None:
         subs = self._load_subs()

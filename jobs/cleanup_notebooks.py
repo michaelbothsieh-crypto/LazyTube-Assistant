@@ -12,10 +12,7 @@ from app.notebook import NotebookService
 
 
 def main():
-    """
-    /// 自動清理 NotebookLM 中遺留的暫存筆記本
-    /// 清理對象：名稱開頭為 YT_ / SLIDE_DECK_ / INFOGRAPHIC_ / REPORT_ 的暫存筆記本
-    """
+    """自動清理 NotebookLM 中遺留的暫存筆記本（YT_ / SLIDE_DECK_ / INFOGRAPHIC_ / REPORT_ 開頭）。"""
     print("🧹 開始執行 NotebookLM 自動清理任務...")
 
     if not AuthManager.deploy_credentials():

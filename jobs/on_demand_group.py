@@ -1,173 +1,23 @@
-"""
-專用的群組任務執行程式 (Group Executor)
-由 execute-group.yml 呼叫，處理該群組內的所有訂閱。
-"""
-import sys
 import os
+import sys
+
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import hashlib
-from datetime import datetime, timezone, timedelta
 from app.auth import AuthManager
-from app.config import Config
-from app.youtube import YouTubeService
-from app.notebook import NotebookService
-from app.notifier import Notifier
-from app.state_manager import StateManager
-from app.subscription_vm import SubscriptionViewModel
+from jobs.group_executor import execute_group
 
-def get_h(cid):
-    """產出與 github_dispatch 一致的雜湊 ID"""
-    return hashlib.sha256(str(cid).encode()).hexdigest()[:12]
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
-        print("使用方法: python on_demand_group.py <chat_id>")
+        print("Usage: python on_demand_group.py <chat_id>")
         sys.exit(1)
 
     target_chat_id = str(sys.argv[1])
-
     AuthManager.deploy_credentials()
+    execute_group(target_chat_id)
 
-    yt = YouTubeService()
-    nb = NotebookService()
-    sub_vm = SubscriptionViewModel()
-
-    # 從雲端同步最新的訂閱狀態
-    all_subs = sub_vm.get_all_active_subscriptions()
-
-    if target_chat_id not in all_subs:
-        print(f"❌ 找不到群組 {target_chat_id} 的訂閱設定")
-        # 列出前 8 碼以供除錯
-        print(f"📊 目前資料庫中包含：{[k[:8] for k in all_subs.keys()]}")
-        return
-
-    print(f"🎯 群組匹配成功！執行任務中... (ID: {target_chat_id[:8]}...)")
-    group_subs = all_subs.get(target_chat_id, [])
-
-    now_tw = datetime.now(timezone(timedelta(hours=8)))
-    today_str = now_tw.strftime("%Y-%m-%d")
-    current_time_str = now_tw.strftime("%H:%M")
-    
-    print(f"🕒 目前台灣時間：{now_tw.strftime('%Y-%m-%d %H:%M:%S')} (排程對比時間：{current_time_str})")
-
-    # 注意：不再使用全域 processed_ids 攔截，改由各訂閱的 last_check 控管
-    # 這樣不同群組訂閱相同頻道時，才能各自收到摘要。
-
-    for sub in group_subs:
-        channel_id = sub["channel_id"]
-        channel_title = sub["channel_title"]
-        pref_time = sub.get("preferred_time")
-        last_check_str = sub.get("last_check")
-        is_first_run = sub.get("is_first_run", False)
-
-        print(f"--- 頻道：{channel_title} ---")
-        print(f"  → 設定時間：{pref_time if pref_time else '預設'}")
-        
-        last_check_day = ""
-        if last_check_str:
-            last_check_day = datetime.fromisoformat(last_check_str).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
-
-        should_run = False
-        if is_first_run:
-            should_run = True
-            print(f"  → 觸發原因：首次執行")
-        elif pref_time:
-            # 只要今天還沒跑過，且現在時間已經過了設定的時間，就應該跑
-            if last_check_day != today_str:
-                if current_time_str >= pref_time:
-                    should_run = True
-                    print(f"  → 觸發原因：定時觸發 (設定: {pref_time}, 現在: {current_time_str})")
-                else:
-                    print(f"  → 尚未到達執行時間 (預計: {pref_time})")
-            else:
-                print(f"  → 跳過原因：今日已執行完成 (日期: {last_check_day})")
-        else:
-
-            if not last_check_str or (datetime.now(timezone.utc) - datetime.fromisoformat(last_check_str)).total_seconds() > 12 * 3600:
-                should_run = True
-                print(f"  → 觸發原因：逾時觸發")
-            else:
-                print(f"  → 跳過原因：間隔未達 12 小時")
-
-        if not should_run:
-            continue
-
-        try:
-            pid_map = yt._get_uploads_playlist_ids([channel_id])
-            pid = pid_map.get(channel_id)
-            if not pid:
-                continue
-
-            # 首次執行只取 1 支影片，一般執行最多取 10 支
-            items = yt._get_playlist_items(pid, limit=1 if is_first_run else 10)
-            if not items:
-                continue
-
-            # 批次取得影片詳情以過濾 Shorts
-            vids = [item["contentDetails"]["videoId"] for item in items]
-            details = yt._fetch_video_details(vids)
-            
-            # 定義「新影片」的時間窗口
-            # 首次執行放寬到 7 天，一般執行維持 24 小時 (保底)
-            window_days = 7 if is_first_run else 1
-            new_video_window = datetime.now(timezone.utc) - timedelta(days=window_days)
-
-            for item in items:
-                pub_time = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00"))
-                vid_id = item["contentDetails"]["videoId"]
-                vid_title = item['snippet']['title']
-                
-                # 1. 時間過濾
-                if pub_time < new_video_window:
-                    if is_first_run:
-                        print(f"  ⏭️ 跳過過舊影片 (超過 7 天)：{vid_title}")
-                    continue
-                
-                if not is_first_run and last_check_str:
-                    if pub_time <= datetime.fromisoformat(last_check_str):
-                        continue
-                
-                # 2. 時間過濾 (核心邏輯：只處理比上次檢查時間更新的影片)
-                if not is_first_run and last_check_str:
-                    if pub_time <= datetime.fromisoformat(last_check_str):
-                        continue
-                
-                # 3. 過濾 Shorts (依據影片長度或標題)
-                duration = details["durations"].get(vid_id, 0)
-                if duration <= Config.SHORTS_MAX_SECONDS or "#shorts" in vid_title.lower():
-                    print(f"  ⏭️ 跳過 Shorts：{vid_title} ({duration}s)")
-                    continue
-
-                print(f"  🎬 處理新影片：{vid_title} (ID: {vid_id})")
-                
-                summary = nb.process_video(f"https://www.youtube.com/watch?v={vid_id}", vid_title, custom_prompt=sub.get("custom_prompt"))
-                if summary:
-                    Notifier.send_summary(vid_title, f"https://www.youtube.com/watch?v={vid_id}", channel_title, summary, target_chat_id=target_chat_id)
-                    # 記錄至全域清單 (保留作為參考，但不影響其他群組判斷)
-                    StateManager.add_processed_id(vid_id)
-                
-                # 首次執行只處理一支最新的
-                if is_first_run:
-                    break
-
-
-            # 成功處理後，將 is_first_run 設為 False 並更新 last_check
-            sub_vm.update_last_check(target_chat_id, channel_id, datetime.now(timezone.utc))
-
-
-            # 清理訂閱成功訊息 (保持群組乾淨)
-            signup_msg_id = sub.get("signup_msg_id")
-            if signup_msg_id:
-                print(f"🧹 正在清理訂閱通知訊息：{signup_msg_id}")
-                Notifier.delete_pending_message(target_chat_id, signup_msg_id)
-
-        except Exception as e:
-            print(f"❌ 處理頻道 {channel_title} 時發生錯誤: {e}")
-
-    print("✅ 任務執行完畢。")
 
 if __name__ == "__main__":
     main()

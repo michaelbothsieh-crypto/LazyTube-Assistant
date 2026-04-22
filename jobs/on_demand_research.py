@@ -8,6 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.notebook import NotebookManager
 from app.notifier import Notifier
+from app.notifier.reporting import generate_html_report
 from app.auth import setup_nlm_auth
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -41,7 +42,7 @@ async def main():
     if success:
         # 4. 生成 HTML 內容
         print("🎨 正在生成專業報告...")
-        html_content = Notifier.generate_html_report(topic, result)
+        html_content = generate_html_report(topic, result)
         
         is_line = str(chat_id).startswith(("U", "C", "R"))
         

@@ -1,11 +1,12 @@
 """
 LazyTube-Assistant FastAPI entrypoints for Telegram and external webhooks.
 """
+import base64
 import logging
 import os
 import sys
-import base64
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
@@ -17,6 +18,7 @@ if project_root not in sys.path:
 from api.handlers.tg_webhook import handle_telegram_update
 from api.utils.help_text import build_help_text
 from api.utils.prompt_manager import get_nlm_prompt
+from app.config import Config
 from app.notifier import Notifier
 
 
@@ -27,66 +29,42 @@ app = FastAPI(title="LazyTube-Assistant API", version="1.0.0")
 
 DEFAULT_EXTERNAL_PROMPT = "請幫我整理這支影片的重點，條列 5 點摘要。"
 
+_REDIS_HEADERS = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
+
+
+async def _fetch_redis_bytes(key: str, error_label: str) -> bytes:
+    url = f"{Config.REDIS_URL}/get/{key}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers=_REDIS_HEADERS)
+            if resp.status_code == 200:
+                b64_str = resp.json().get("result")
+                if b64_str:
+                    return base64.b64decode(b64_str)
+    except Exception as e:
+        logger.error("%s error: %s", error_label, e)
+    raise HTTPException(status_code=404, detail="Not found or expired")
+
 
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
+
 @app.get("/api/report-proxy")
 async def report_proxy(id: str):
-    """
-    從 Redis 讀取 HTML 並直接回傳網頁，優於 PDF 下載體驗
-    """
-    from app.config import Config
-    import requests
-    
-    url = f"{Config.REDIS_URL}/get/html_report_{id}"
-    headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
-    
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            b64_str = data.get("result")
-            if b64_str:
-                html_bytes = base64.b64decode(b64_str)
-                return Response(
-                    content=html_bytes,
-                    media_type="text/html"
-                )
-    except Exception as e:
-        logger.error(f"Report Proxy error: {e}")
-    
-    raise HTTPException(status_code=404, detail="Report not found or expired")
+    content = await _fetch_redis_bytes(f"html_report_{id}", "report_proxy")
+    return Response(content=content, media_type="text/html")
 
 
 @app.get("/api/pdf-proxy")
 async def pdf_proxy(id: str):
-    """
-    從 Redis 讀取 PDF Base64 並以文件流回傳，不佔用 Blob 空間
-    """
-    from app.config import Config
-    import requests
-    
-    url = f"{Config.REDIS_URL}/get/pdf_report_{id}"
-    headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
-    
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            b64_str = data.get("result")
-            if b64_str:
-                pdf_bytes = base64.b64decode(b64_str)
-                return Response(
-                    content=pdf_bytes,
-                    media_type="application/pdf",
-                    headers={"Content-Disposition": f"attachment; filename=Research_Report_{id}.pdf"}
-                )
-    except Exception as e:
-        logger.error(f"PDF Proxy error: {e}")
-    
-    raise HTTPException(status_code=404, detail="File not found or expired")
+    content = await _fetch_redis_bytes(f"pdf_report_{id}", "pdf_proxy")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Research_Report_{id}.pdf"},
+    )
 
 
 @app.post("/api/tg-webhook")
@@ -95,7 +73,7 @@ async def telegram_webhook(
     x_telegram_bot_api_secret_token: str = Header(default=None),
 ):
     """Handle Telegram webhook updates."""
-    expected_secret = os.environ.get("TG_WEBHOOK_SECRET", "")
+    expected_secret = Config.TG_WEBHOOK_SECRET
     if expected_secret and x_telegram_bot_api_secret_token != expected_secret:
         logger.warning("Invalid Telegram webhook secret token")
         raise HTTPException(status_code=403, detail="Invalid secret token")
@@ -121,7 +99,7 @@ async def external_dispatch(
     """
     Handle external webhook dispatches, including the LINE bot relay.
     """
-    expected_secret = os.environ.get("TG_WEBHOOK_SECRET", "")
+    expected_secret = Config.TG_WEBHOOK_SECRET
     if expected_secret and authorization != expected_secret:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
@@ -139,10 +117,8 @@ async def external_dispatch(
                 status_code=400,
             )
 
-        allowed_users_raw = os.environ.get("ALLOWED_USERS", "")
-        if allowed_users_raw:
-            allowed_list = [u.strip() for u in allowed_users_raw.split(",") if u.strip()]
-            if chat_id not in allowed_list:
+        allowed_list = Config.get_allowed_users()
+        if allowed_list and chat_id not in allowed_list:
                 logger.warning("External dispatch permission denied: %s", chat_id)
                 return JSONResponse(
                     content={"ok": False, "error": "Permission denied"},

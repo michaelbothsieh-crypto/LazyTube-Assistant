@@ -49,7 +49,7 @@ def main():
 
     # 1. 檢查是否為 Shorts
     from app.youtube import YouTubeService
-    yt = YouTubeService()
+    yt = YouTubeService.from_config()
     
     # 提取 Video ID
     video_id = None

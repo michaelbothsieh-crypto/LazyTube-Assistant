@@ -4,17 +4,11 @@ import base64
 from app.config import Config
 
 class AuthManager:
-    """
-    /// NotebookLM 憑證管理模組
-    /// 負責還原 GitHub Actions 環境下的認證環境
-    """
+    """NotebookLM 憑證管理模組，負責還原 GitHub Actions 環境下的認證環境。"""
 
     @staticmethod
     def deploy_credentials():
-        """
-        /// 將 NLM_COOKIE_BASE64 解碼並佈署到 CLI 預期路徑
-        /// 加入 GitHub Actions ::add-mask:: 指令以保護隱私
-        """
+        """將 NLM_COOKIE_BASE64 解碼並佈署到 CLI 預期路徑，並遮罩 GitHub Actions 日誌。"""
         if not Config.NLM_COOKIE_BASE64:
             return False
 

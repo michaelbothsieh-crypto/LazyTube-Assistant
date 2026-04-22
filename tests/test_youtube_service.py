@@ -18,7 +18,7 @@ if not CLIENT_ID:
     from app.youtube import YouTubeService
     try:
         AuthManager.deploy_credentials()
-        yt = YouTubeService()
+        yt = YouTubeService.from_config()
         print("YT Service initialized. Testing fetch:")
         res = yt.get_channel_info("https://www.youtube.com/@%E4%BD%8E%E6%AC%B8%E6%AD%BB")
         print(f"RESULT: {res}")
