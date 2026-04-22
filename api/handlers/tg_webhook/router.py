@@ -8,6 +8,7 @@ from .commands_basic import handle_help, handle_my_id, handle_start, handle_stat
 from .commands_dispatch import handle_batch, handle_nlm, handle_note, handle_pic, handle_research, handle_slide
 from .commands_subscriptions import handle_clear, handle_list, handle_sub, handle_unsub
 from .context import UpdateContext
+from .types import TgUpdate
 from .validation import is_allowed_user, normalize_command_text
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ COMMAND_HANDLERS = {
 }
 
 
-async def handle_telegram_update(update: dict) -> None:
+async def handle_telegram_update(update: TgUpdate) -> None:
     message = update.get("message")
     if message and "new_chat_members" in message:
         for member in message["new_chat_members"]:

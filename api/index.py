@@ -15,7 +15,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from api.handlers.tg_webhook import handle_telegram_update
+from api.handlers.tg_webhook import TgUpdate, handle_telegram_update
 from api.utils.help_text import build_help_text
 from api.utils.prompt_manager import get_nlm_prompt
 from app.config import Config
@@ -79,7 +79,7 @@ async def telegram_webhook(
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
     try:
-        update = await request.json()
+        update: TgUpdate = await request.json()
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
 

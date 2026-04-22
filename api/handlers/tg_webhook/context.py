@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .types import TgMessage
+
 
 @dataclass(slots=True)
 class UpdateContext:
@@ -10,7 +12,7 @@ class UpdateContext:
     text: str
 
     @classmethod
-    def from_message(cls, message: dict, normalized_text: str) -> UpdateContext:
+    def from_message(cls, message: TgMessage, normalized_text: str) -> UpdateContext:
         return cls(
             chat_id=str(message.get("chat", {}).get("id", "")),
             user_id=str(message.get("from", {}).get("id", "")),

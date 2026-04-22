@@ -8,16 +8,31 @@ logger = logging.getLogger(__name__)
 
 from app.config import Config
 
-from .cache_store import cache_file, cache_text
+from .cache_store import CacheStore
 from .channels import is_line_chat
-from .line_client import push_messages as push_line_messages
-from .line_client import send_text as send_line_text
-from .telegram_client import delete_message, send_document as send_telegram_document
-from .telegram_client import send_photo as send_telegram_photo
-from .telegram_client import send_text as send_telegram_text
+from .line_client import LineClient
+from .telegram_client import TelegramClient
+
+
+def _make_tg() -> TelegramClient | None:
+    return TelegramClient(Config.TG_BOT_TOKEN) if Config.TG_BOT_TOKEN else None
+
+
+def _make_line() -> LineClient | None:
+    return LineClient(Config.LINE_CHANNEL_ACCESS_TOKEN) if Config.LINE_CHANNEL_ACCESS_TOKEN else None
+
+
+def _make_cache() -> CacheStore | None:
+    if Config.REDIS_URL and Config.REDIS_TOKEN:
+        return CacheStore(Config.REDIS_URL, Config.REDIS_TOKEN, Config.APP_BASE_URL)
+    return None
 
 
 class Notifier:
+    _tg: TelegramClient | None = _make_tg()
+    _line: LineClient | None = _make_line()
+    _cache: CacheStore | None = _make_cache()
+
     @classmethod
     def send_summary(
         cls,
@@ -30,7 +45,6 @@ class Notifier:
         chat_id = target_chat_id or Config.TG_CHAT_ID
         if not chat_id:
             return False
-
         message = f"📔 {title}\n📺 頻道：{channel}\n🔗 連結：{url}\n\n🤖 AI 摘要\n{summary}"
         return cls.send_text(chat_id, message)
 
@@ -46,17 +60,15 @@ class Notifier:
         chat_id = target_chat_id or Config.TG_CHAT_ID
         if not chat_id:
             return False
-
         if is_line_chat(chat_id):
-            return send_line_text(chat_id, text)
-        return send_telegram_text(chat_id, text, html=html)
+            return cls._line.send_text(chat_id, text) if cls._line else False
+        return cls._tg.send_text(chat_id, text, html=html) if cls._tg else False
 
     @classmethod
     def send_document(cls, target_chat_id: str, file_path: str, caption: str | None = None) -> bool:
         chat_id = target_chat_id or Config.TG_CHAT_ID
         if not chat_id:
             return False
-
         if is_line_chat(chat_id):
             proxy_url = cls.cache_report_to_redis(file_path)
             if not proxy_url:
@@ -64,65 +76,50 @@ class Notifier:
             messages = []
             if caption:
                 messages.append({"type": "text", "text": caption[:5000]})
-            messages.append(
-                {
-                    "type": "text",
-                    "text": f"檔案下載連結：{os.path.basename(file_path)}\n{proxy_url}",
-                }
-            )
-            return push_line_messages(chat_id, messages)
-        return send_telegram_document(chat_id, file_path, caption=caption)
+            messages.append({"type": "text", "text": f"檔案下載連結：{os.path.basename(file_path)}\n{proxy_url}"})
+            return cls._line.push_messages(chat_id, messages) if cls._line else False
+        return cls._tg.send_document(chat_id, file_path, caption=caption) if cls._tg else False
 
     @classmethod
     def send_photo(cls, target_chat_id: str, file_path: str, caption: str | None = None) -> bool:
         chat_id = target_chat_id or Config.TG_CHAT_ID
         if not chat_id:
             return False
-
         if is_line_chat(chat_id):
             return cls.send_document(chat_id, file_path, caption=caption)
-        return send_telegram_photo(chat_id, file_path, caption=caption)
+        return cls._tg.send_photo(chat_id, file_path, caption=caption) if cls._tg else False
 
-    @staticmethod
-    def delete_pending_message(chat_id: str, message_id: str | None) -> None:
-        if not message_id or is_line_chat(chat_id):
+    @classmethod
+    def delete_pending_message(cls, chat_id: str, message_id: str | None) -> None:
+        if not message_id or is_line_chat(chat_id) or not cls._tg:
             return
         try:
-            delete_message(chat_id, str(message_id))
+            cls._tg.delete_message(chat_id, str(message_id))
         except Exception as e:
             logger.warning("delete_pending_message failed chat=%s msg=%s: %s", chat_id, message_id, e)
 
     @staticmethod
     def cache_report_to_redis(file_path: str) -> Optional[str]:
-        return cache_file(
-            file_path,
-            prefix="pdf_report",
-            ttl_seconds=600,
-            route="/api/pdf-proxy",
-        )
+        cache = _make_cache()
+        if not cache:
+            return None
+        return cache.cache_file(file_path, prefix="pdf_report", ttl_seconds=600, route="/api/pdf-proxy")
 
     @staticmethod
     def cache_html_to_redis(html_content: str) -> Optional[str]:
-        return cache_text(
-            html_content,
-            prefix="html_report",
-            ttl_seconds=1800,
-            route="/api/report-proxy",
-        )
+        cache = _make_cache()
+        if not cache:
+            return None
+        return cache.cache_text(html_content, prefix="html_report", ttl_seconds=1800, route="/api/report-proxy")
 
     @classmethod
     def send_report_link(cls, chat_id: str, html_content: str, caption: str) -> bool:
         proxy_url = cls.cache_html_to_redis(html_content)
         if not proxy_url:
             return False
-
         if is_line_chat(chat_id):
-            return push_line_messages(
-                chat_id,
-                [
-                    {"type": "text", "text": caption[:5000]},
-                    {"type": "text", "text": f"完整報告連結：\n{proxy_url}\n\n(30 分鐘後過期)"},
-                ],
-            )
+            return cls._line.push_messages(chat_id, [
+                {"type": "text", "text": caption[:5000]},
+                {"type": "text", "text": f"完整報告連結：\n{proxy_url}\n\n(30 分鐘後過期)"},
+            ]) if cls._line else False
         return cls.send_text(chat_id, f"{caption}\n\n完整報告：{proxy_url}", html=False)
-
