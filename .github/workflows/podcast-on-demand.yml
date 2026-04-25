@@ -58,7 +58,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
-          CUSTOM_PROMPT: "finance"
+          CUSTOM_PROMPT: "podcast"
           PODCAST_RSS_URLS: ${{ inputs.rss_url }}
           PODCAST_MODE: ${{ inputs.mode }}
           PODCAST_EPISODE_NUMBER: ${{ inputs.episode_number }}

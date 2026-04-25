@@ -224,7 +224,7 @@ def main() -> None:
     on_demand_chat = os.environ.get("PODCAST_CHAT_ID", "")
     on_demand_msg = os.environ.get("PODCAST_MESSAGE_ID", "")
     episode_number = os.environ.get("PODCAST_EPISODE_NUMBER", "").strip()  # e.g. "655"
-    prompt_key = os.environ.get("CUSTOM_PROMPT", "finance")
+    prompt_key = os.environ.get("CUSTOM_PROMPT", "podcast")  # 預設使用 podcast 專屬 prompt
     prompt = get_nlm_prompt(prompt_key)
     print(f"📝 模式：{mode}  Prompt：{prompt_key}  集數：{episode_number or '最新'}")
 
