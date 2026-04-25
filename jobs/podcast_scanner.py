@@ -112,27 +112,36 @@ def _extract_audio_url(entry) -> str | None:
 
 # ── 音檔下載 ──────────────────────────────────────────────────────────────
 
-def download_audio(audio_url: str, title: str) -> str | None:
-    print(f"  ⬇️  下載音檔：{title}")
-    try:
-        resp = requests.get(audio_url, timeout=DOWNLOAD_TIMEOUT_SEC, stream=True)
-        resp.raise_for_status()
-        suffix = ".m4a" if "m4a" in audio_url.lower() else ".mp3"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp_path = tmp.name
-            size_mb = 0
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                tmp.write(chunk)
-                size_mb += len(chunk) / (1024 * 1024)
-                if size_mb > MP3_SIZE_LIMIT_MB:
-                    os.remove(tmp_path)
-                    print(f"  ⚠️  超過 {MP3_SIZE_LIMIT_MB}MB，跳過")
-                    return None
-        print(f"  ✅ 下載完成：{size_mb:.1f}MB")
-        return tmp_path
-    except Exception as e:
-        print(f"  ❌ 下載失敗：{e}")
-        return None
+def download_audio(audio_url: str, title: str, max_retries: int = 2) -> str | None:
+    """
+    下載音檔到暫存檔。失敗最多重試 max_retries 次，間隔 10 秒。
+    """
+    suffix = ".m4a" if "m4a" in audio_url.lower() else ".mp3"
+    for attempt in range(1, max_retries + 2):  # 1 .. max_retries+1
+        label = f" (第 {attempt} 次嘗試)" if attempt > 1 else ""
+        print(f"  ⬇️  下載音檔：{title}{label}")
+        try:
+            resp = requests.get(audio_url, timeout=DOWNLOAD_TIMEOUT_SEC, stream=True)
+            resp.raise_for_status()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp_path = tmp.name
+                size_mb = 0
+                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                    tmp.write(chunk)
+                    size_mb += len(chunk) / (1024 * 1024)
+                    if size_mb > MP3_SIZE_LIMIT_MB:
+                        os.remove(tmp_path)
+                        print(f"  ⚠️  超過 {MP3_SIZE_LIMIT_MB}MB，跳過")
+                        return None
+            print(f"  ✅ 下載完成：{size_mb:.1f}MB")
+            return tmp_path
+        except Exception as e:
+            print(f"  ❌ 下載失敗：{e}")
+            if attempt <= max_retries:
+                print("     10 秒後重試...")
+                time.sleep(10)
+    return None
+
 
 
 # ── NLM 分析 ──────────────────────────────────────────────────────────────
@@ -297,6 +306,20 @@ def main() -> None:
     print(f"\n{'=' * 55}")
     print(f"✨ 完成：成功 {total_success} 集")
     print("=" * 55)
+
+    # 安全網：無論成功或失敗，確保 pending 訊息一定被刪除
+    # （正常推送後 send_to_telegram 內部已刪，這裡是決關保障）
+    if on_demand_chat and on_demand_msg:
+        bot_token = Config.TG_BOT_TOKEN
+        if bot_token:
+            try:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/deleteMessage",
+                    json={"chat_id": on_demand_chat, "message_id": int(on_demand_msg)},
+                    timeout=10,
+                )
+            except Exception:
+                pass  # 已刪或不存在，忽略
 
 
 if __name__ == "__main__":

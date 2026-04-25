@@ -153,18 +153,59 @@ async def handle_listpodcast(chat_id: str) -> None:
 async def handle_podcast(chat_id: str, text: str) -> None:
     """
     /podcast [url] [集數]  — 單次查詢指定集數並立即分析回傳。
+    /podcast list          — 列出各訂閱頻道的最新集數資訊。
 
     用法：
       /podcast                   → 最新一集（第1集）
-      /podcast 3                 → 第 3 新的集數
+      /podcast list              → 顯示各頻道最新 EP 資訊
+      /podcast 655               → 搜尋 EP655
       /podcast <url>             → 指定頻道最新一集
-      /podcast <url> 3           → 指定頻道第 3 新的集數
+      /podcast <url> 655         → 指定頻道 EP655
 
     不帶 url → 使用第一個訂閱頻道（或預設股癌）
     帶 url  → 臨時查詢，不寫入訂閱清單
     """
     parts = text.strip().split()
     args = parts[1:] if len(parts) > 1 else []
+
+    # ── /podcast list ──────────────────────────────────────────────────
+    if args and args[0].lower() == "list":
+        subs = get_subscriptions()
+        if not subs:
+            await send_telegram_message(
+                chat_id,
+                "目前沒有訂閱任何 Podcast。\n用 <code>/subpodcast &lt;url&gt;</code> 新增訂閱。",
+            )
+            return
+
+        import feedparser  # 延遲 import，避免影響非 list 路徑
+        lines = []
+        for rss_url, info in subs.items():
+            label = info.get("label", "未知頻道")
+            try:
+                feed = feedparser.parse(rss_url)
+                latest = feed.entries[0] if feed.entries else None
+                if latest:
+                    ep_title = latest.get("title", "無標題")[:60]
+                    ep_date = latest.get("published", "")[:10]
+                    lines.append(
+                        f"📻 <b>{label}</b>\n"
+                        f"   最新：{ep_title}\n"
+                        f"   日期：{ep_date}"
+                    )
+                else:
+                    lines.append(f"📻 <b>{label}</b>\n   ⚠️ RSS 無集數資料")
+            except Exception:
+                lines.append(f"📻 <b>{label}</b>\n   ❌ RSS 讀取失敗")
+
+        await send_telegram_message(
+            chat_id,
+            f"🎙️ <b>Podcast 訂閱頻道最新集數（共 {len(subs)} 個）</b>\n\n"
+            + "\n\n".join(lines)
+            + "\n\n用 <code>/podcast &lt;集數&gt;</code> 查詢指定集數",
+        )
+        return
+    # ──────────────────────────────────────────────────────────────────
 
     rss_url = ""
     episode_number = ""  # e.g. "655", 空字串 = 最新一集

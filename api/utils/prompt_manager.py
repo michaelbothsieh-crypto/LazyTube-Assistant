@@ -1,4 +1,17 @@
+from __future__ import annotations
 import re
+from pathlib import Path
+
+# data/prompts/ 目錄：優先從此載入，讓 git 自動追蹤 prompt 變更紀錄
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "prompts"
+
+
+def _load_prompt_file(key: str) -> str | None:
+    """嘗試從 data/prompts/<key>.txt 載入，找不到回傳 None。"""
+    path = _PROMPTS_DIR / f"{key}.txt"
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return None
 
 # NLM 預設 Prompt 關鍵字對照表
 NLM_PROMPT_MAP = {
@@ -27,19 +40,24 @@ NLM_PROMPT_MAP = {
 def get_nlm_prompt(user_input: str) -> str:
     """
     根據用戶輸入的關鍵字或自訂 Prompt，回傳最終要使用的 Prompt。
-    並強制要求使用繁體中文且嚴禁加粗。
+    優先順序：data/prompts/<key>.txt > NLM_PROMPT_MAP > user_input 原文。
     """
-    # 最強力的後綴規範
     force_suffix = (
         "\n\n【重要規範：請完全以「繁體中文」回答。直接輸出內容，嚴禁包含任何思考過程。嚴禁使用任何 Markdown 加粗語法（如 ** 或 __），請用純文字或標號呈現。】"
     )
-    
+
     if not user_input or user_input.strip() == "":
         return NLM_PROMPT_MAP["default"] + force_suffix
-    
+
     keyword = user_input.strip().lower()
+
+    # 1. 優先從檔案載入（支援 git 版本追蹤）
+    from_file = _load_prompt_file(keyword)
+    if from_file:
+        return f"{from_file}{force_suffix}"
+
+    # 2. Fallback 到內建 map
     base_prompt = NLM_PROMPT_MAP.get(keyword, user_input)
-    
     return f"{base_prompt}{force_suffix}"
 
 def get_optimized_prompt(url: str) -> str:
