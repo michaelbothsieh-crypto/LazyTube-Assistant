@@ -6,6 +6,7 @@ from api.utils.telegram import send_telegram_message
 
 from .commands_basic import handle_help, handle_my_id, handle_start, handle_status
 from .commands_dispatch import handle_batch, handle_nlm, handle_note, handle_pic, handle_research, handle_slide
+from .commands_podcast import handle_listpodcast, handle_podcast, handle_subpodcast, handle_unsubpodcast
 from .commands_subscriptions import handle_clear, handle_list, handle_sub, handle_unsub
 from .context import UpdateContext
 from .types import TgUpdate
@@ -29,6 +30,11 @@ COMMAND_HANDLERS = {
     "/note": lambda ctx: handle_note(ctx.chat_id, ctx.text),
     "/batch": lambda ctx: handle_batch(ctx.chat_id, ctx.text),
     "/research": lambda ctx: handle_research(ctx.chat_id, ctx.text),
+    # Podcast 指令
+    "/subpodcast": lambda ctx: handle_subpodcast(ctx.chat_id, ctx.text),
+    "/unsubpodcast": lambda ctx: handle_unsubpodcast(ctx.chat_id, ctx.text),
+    "/listpodcast": lambda ctx: handle_listpodcast(ctx.chat_id),
+    "/podcast": lambda ctx: handle_podcast(ctx.chat_id, ctx.text),
 }
 
 

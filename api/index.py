@@ -16,6 +16,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from api.handlers.tg_webhook import TgUpdate, handle_telegram_update
+from api.utils.github_dispatch import GitHubActionManager
 from api.utils.help_text import build_help_text
 from api.utils.prompt_manager import get_nlm_prompt
 from app.config import Config
@@ -145,6 +146,57 @@ async def external_dispatch(
             )
             return JSONResponse(content={"ok": True})
 
+        # ── Podcast 指令（TG / LINE 通用）──────────────────────────────────
+        if command in ["podcast", "/podcast"]:
+            # 單次查詢最新一集
+            rss_url = url or ""
+            if not rss_url:
+                # 從訂閱清單取第一個
+                from app.podcast_state import get_subscriptions
+                subs = get_subscriptions()
+                rss_url = next(iter(subs), "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml")
+
+            # 若傳入的是頁面 URL，嘗試解析 RSS
+            if rss_url and not (rss_url.endswith(".xml") or "feeds." in rss_url):
+                from app.podcast_rss_resolver import resolve_rss
+                resolved, _ = resolve_rss(rss_url)
+                if resolved:
+                    rss_url = resolved
+
+            success = await GitHubActionManager.dispatch(
+                "podcast-on-demand.yml",
+                {"rss_url": rss_url, "mode": "latest", "chat_id": str(chat_id), "message_id": data.get("message_id", "")},
+                timeout=10.0,
+            )
+            if not success:
+                logger.error("podcast-on-demand dispatch failed for chat_id=%s", chat_id)
+                if not Notifier.send_text(chat_id, "❌ Podcast 任務派送失敗，請稍後再試。"):
+                    return JSONResponse(content={"ok": False, "error": "dispatch failed"}, status_code=500)
+            return JSONResponse(content={"ok": True})
+
+        if command in ["subpodcast", "/subpodcast"]:
+            from app.podcast_rss_resolver import resolve_rss
+            from app.podcast_state import add_subscription
+            from app.state_manager import StateManager
+            if not url:
+                Notifier.send_text(chat_id, "用法：subpodcast <podcast_url>")
+                return JSONResponse(content={"ok": False, "error": "missing url"}, status_code=400)
+
+            # 解析 RSS
+            rss_url, label = resolve_rss(url)
+            if not rss_url:
+                Notifier.send_text(chat_id, f"❌ 無法解析 RSS：{url}")
+                return JSONResponse(content={"ok": False, "error": "rss resolve failed"}, status_code=422)
+
+            added = add_subscription(rss_url, label)
+            await StateManager.sync_to_blob("processed_podcasts.json")
+            if added:
+                Notifier.send_text(chat_id, f"✅ 已訂閱：{label}\n{rss_url}")
+            else:
+                Notifier.send_text(chat_id, f"⚠️ 已訂閱過：{label}\n{rss_url}")
+            return JSONResponse(content={"ok": True})
+        # ──────────────────────────────────────────────────────────────────
+
         if not url:
             return JSONResponse(
                 content={"ok": False, "error": "Missing params"},
@@ -183,3 +235,4 @@ async def external_dispatch(
             content={"ok": False, "error": str(exc)},
             status_code=500,
         )
+

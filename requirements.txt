@@ -15,3 +15,6 @@ markdown>=3.6
 
 # Summarizer
 notebooklm-mcp-cli>=0.5.16
+
+# Podcast Scanner
+feedparser>=6.0.0
