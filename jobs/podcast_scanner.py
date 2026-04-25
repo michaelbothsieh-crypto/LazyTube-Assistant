@@ -39,10 +39,16 @@ MP3_SIZE_LIMIT_MB = 200
 
 # ── RSS 掃描 ──────────────────────────────────────────────────────────────
 
-def fetch_new_episodes(rss_url: str, mode: str = "daily", chat_id: str = "") -> list[dict]:
+def fetch_new_episodes(
+    rss_url: str,
+    mode: str = "daily",
+    chat_id: str = "",
+    episode_number: str = "",
+) -> list[dict]:
     """
     掃描單一 RSS，回傳待處理的集數。
-    mode="latest" → 強制取最新一集（不論是否處理過，on-demand 用）
+    mode="latest" + episode_number 空  → 取最新一集
+    mode="latest" + episode_number="655" → 在 title 中搜尋含 "655" 的集數
     mode="daily"  → 以 (rss_url, chat_id) 為複合 key 過濾已處理 GUID
     """
     print(f"📡 揉描 RSS：{rss_url}")
@@ -72,10 +78,23 @@ def fetch_new_episodes(rss_url: str, mode: str = "daily", chat_id: str = "") -> 
         return []
 
     if mode == "latest":
+        if episode_number:
+            # 在 title 中搜尋符合集數編號的集數
+            matched = [
+                ep for ep in episodes
+                if episode_number in ep["title"].replace(" ", "")
+                or f"EP{episode_number}" in ep["title"].upper()
+                or f"EP {episode_number}" in ep["title"].upper()
+                or f"第{episode_number}集" in ep["title"]
+            ]
+            if matched:
+                print(f"  ✅ 找到集數 {episode_number}：{matched[0]['title']}")
+                return [matched[0]]
+            # RSS 有可能只列出近期集數，找不到時提示
+            print(f"  ⚠️  找不到集數 {episode_number}（RSS 僅包含最近 {len(episodes)} 集），改取最新一集")
         return [episodes[0]]
 
     # daily：以 (rss_url, chat_id) 為複合 key 去重
-    # 排程模式沒有特定 chat_id，用空字串代表「全域排程推送」
     new = [ep for ep in episodes if not is_processed(rss_url, ep["guid"], chat_id)]
     print(f"  ✅ 新集數：{len(new)} / {len(episodes)}")
     return new
@@ -204,9 +223,10 @@ def main() -> None:
     mode = os.environ.get("PODCAST_MODE", "daily")
     on_demand_chat = os.environ.get("PODCAST_CHAT_ID", "")
     on_demand_msg = os.environ.get("PODCAST_MESSAGE_ID", "")
+    episode_number = os.environ.get("PODCAST_EPISODE_NUMBER", "").strip()  # e.g. "655"
     prompt_key = os.environ.get("CUSTOM_PROMPT", "finance")
     prompt = get_nlm_prompt(prompt_key)
-    print(f"📝 模式：{mode}  Prompt：{prompt_key}")
+    print(f"📝 模式：{mode}  Prompt：{prompt_key}  集數：{episode_number or '最新'}")
 
     # RSS 來源優先順序：環境變數 > 訂閱清單 > 預設股癌
     rss_env = os.environ.get("PODCAST_RSS_URLS", "").strip()
@@ -225,7 +245,9 @@ def main() -> None:
     total_success = 0
 
     for rss_url, label in rss_sources:
-        episodes = fetch_new_episodes(rss_url, mode=mode, chat_id=on_demand_chat)
+        episodes = fetch_new_episodes(
+            rss_url, mode=mode, chat_id=on_demand_chat, episode_number=episode_number
+        )
         if not episodes:
             print(f"🔚 [{label or rss_url[:40]}] 無新集數")
             continue

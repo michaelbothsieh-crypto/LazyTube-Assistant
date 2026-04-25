@@ -9,6 +9,9 @@ on:
       mode:
         description: "latest=最新一集 / daily=所有新集數"
         default: "latest"
+      episode_number:
+        description: "指定集數編號（如 655、654），留空 = 最新一集"
+        default: ""
       chat_id:
         description: "Telegram chat_id"
         required: true
@@ -58,6 +61,7 @@ jobs:
           CUSTOM_PROMPT: "finance"
           PODCAST_RSS_URLS: ${{ inputs.rss_url }}
           PODCAST_MODE: ${{ inputs.mode }}
+          PODCAST_EPISODE_NUMBER: ${{ inputs.episode_number }}
           PODCAST_CHAT_ID: ${{ inputs.chat_id }}
           PODCAST_MESSAGE_ID: ${{ inputs.message_id }}
         run: python jobs/podcast_scanner.py

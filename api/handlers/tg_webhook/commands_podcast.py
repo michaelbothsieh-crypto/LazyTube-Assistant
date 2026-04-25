@@ -152,13 +152,29 @@ async def handle_listpodcast(chat_id: str) -> None:
 
 async def handle_podcast(chat_id: str, text: str) -> None:
     """
-    /podcast [rss_url] — 單次查詢最新一集並立即分析回傳。
+    /podcast [url] [集數]  — 單次查詢指定集數並立即分析回傳。
+
+    用法：
+      /podcast                   → 最新一集（第1集）
+      /podcast 3                 → 第 3 新的集數
+      /podcast <url>             → 指定頻道最新一集
+      /podcast <url> 3           → 指定頻道第 3 新的集數
 
     不帶 url → 使用第一個訂閱頻道（或預設股癌）
     帶 url  → 臨時查詢，不寫入訂閱清單
     """
-    parts = text.strip().split(maxsplit=1)
-    rss_url = parts[1].strip() if len(parts) > 1 else ""
+    parts = text.strip().split()
+    args = parts[1:] if len(parts) > 1 else []
+
+    rss_url = ""
+    episode_number = ""  # e.g. "655", 空字串 = 最新一集
+
+    for arg in args:
+        # 純數字視為集數編號（如 655）
+        if arg.isdigit():
+            episode_number = arg
+        elif arg.startswith("http"):
+            rss_url = arg
 
     # 若沒帶 URL，從訂閱清單取第一個
     if not rss_url:
@@ -166,7 +182,6 @@ async def handle_podcast(chat_id: str, text: str) -> None:
         if subs:
             rss_url = next(iter(subs))
         else:
-            # 預設股癌
             rss_url = "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml"
 
     # 若傳入的是頁面 URL 而非 RSS，嘗試解析
@@ -175,20 +190,23 @@ async def handle_podcast(chat_id: str, text: str) -> None:
         if resolved:
             rss_url = resolved
 
+    episode_label = f"EP{episode_number}" if episode_number else "最新一集"
+
     pending = await send_telegram_message(
         chat_id,
         f"🎙️ <b>Podcast 即時分析已建立</b>\n\n"
-        f"RSS：<code>{rss_url[:80]}</code>\n\n"
+        f"📻 集數：{episode_label}\n"
+        f"🔗 RSS：<code>{rss_url[:80]}</code>\n\n"
         f"⏳ 預計需要 5-15 分鐘（含音檔下載 + AI 轉錄 + 財經分析），完成後自動推送。",
     )
     message_id = extract_message_id(pending)
 
-    # 觸發 on-demand GitHub Actions
     success = await GitHubActionManager.dispatch(
         "podcast-on-demand.yml",
         {
             "rss_url": rss_url,
-            "mode": "latest",          # 只取最新一集
+            "mode": "latest",
+            "episode_number": episode_number,  # 空字串 = 最新
             "chat_id": str(chat_id),
             "message_id": str(message_id),
         },
@@ -198,3 +216,5 @@ async def handle_podcast(chat_id: str, text: str) -> None:
     if not success:
         logger.error("podcast-on-demand dispatch failed for chat_id=%s", chat_id)
         await send_telegram_message(chat_id, "❌ 任務派送失敗，請稍後再試。")
+
+
