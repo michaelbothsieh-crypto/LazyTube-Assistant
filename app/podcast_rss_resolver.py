@@ -26,6 +26,8 @@ def resolve_rss(url: str) -> tuple[str | None, str]:
     """
     嘗試從 url 解析 RSS feed URL 與頻道名稱。
     回傳 (rss_url, label)，失敗時 rss_url 為 None。
+    注意：內部會呼叫 _probe_feed_label（下載整份 RSS），適合 GitHub Actions 環境。
+    Vercel webhook 請使用 resolve_rss_fast 避免超時。
     """
     url = url.strip().rstrip("/")
 
@@ -64,6 +66,36 @@ def resolve_rss(url: str) -> tuple[str | None, str]:
         return (rss, label) if label else (rss, _domain_label(url))
 
     return None, ""
+
+
+def resolve_rss_fast(url: str) -> str | None:
+    """
+    快速解析 RSS URL，不做 _probe_feed_label（不額外下載 RSS）。
+    適合在 Vercel serverless 函式內呼叫，避免超時。
+    回傳 rss_url 或 None。
+    """
+    url = url.strip().rstrip("/").rstrip(",")  # 也順便清掉意外的尾端逗號
+
+    if _looks_like_rss(url):
+        return url
+
+    # SoundOn
+    m = re.search(r"soundon\.fm/podcasts/([0-9a-f-]+)", url)
+    if m:
+        return f"https://feeds.soundon.fm/podcasts/{m.group(1)}.xml"
+
+    # Firstory
+    m = re.search(r"firstory\.me/user/([^/?#]+)", url)
+    if m:
+        return f"https://open.firstory.me/rss/user/{m.group(1)}"
+
+    # Apple Podcasts — 只打一次 iTunes API（~0.5s），不下整份 RSS
+    m = re.search(r"podcasts\.apple\.com/.+/id(\d+)", url)
+    if m:
+        return _resolve_apple_rss(m.group(1))
+
+    # HTML auto-discovery（最慢，視網站而定）
+    return _discover_from_html(url)
 
 
 def _looks_like_rss(url: str) -> bool:

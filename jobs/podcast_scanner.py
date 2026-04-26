@@ -39,6 +39,12 @@ DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
 
+def _looks_like_rss_url(url: str) -> bool:
+    """判斷 URL 是否已是 RSS feed（不需再解析）。"""
+    markers = [".xml", "/rss", "/feed", "feeds.", "rss2", "podcast.xml"]
+    return any(m in url.lower() for m in markers)
+
+
 # ── RSS 掃描 ──────────────────────────────────────────────────────────────
 
 def fetch_new_episodes(
@@ -49,11 +55,23 @@ def fetch_new_episodes(
 ) -> list[dict]:
     """
     掃描單一 RSS，回傳待處理的集數。
-    mode="latest" + episode_number 空  → 取最新一集
+    mode="latest" + episode_number 空  → 取最新一集（不做 dedup）
     mode="latest" + episode_number="655" → 在 title 中搜尋含 "655" 的集數
     mode="daily"  → 以 (rss_url, chat_id) 為複合 key 過濾已處理 GUID
     """
+    # 保險層：若收到 Apple Podcasts / SoundOn / Firstory 頁面 URL，先解析成 RSS
+    if not _looks_like_rss_url(rss_url):
+        from app.podcast_rss_resolver import resolve_rss_fast
+        resolved = resolve_rss_fast(rss_url)
+        if resolved:
+            print(f"  🔄 URL 已解析：{rss_url[:60]} → {resolved[:60]}")
+            rss_url = resolved
+        else:
+            print(f"  ❌ 無法解析 URL 為 RSS：{rss_url}")
+            return []
+
     print(f"📡 揉描 RSS：{rss_url}")
+
     try:
         feed = feedparser.parse(rss_url)
     except Exception as e:

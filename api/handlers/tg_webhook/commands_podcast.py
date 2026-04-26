@@ -16,7 +16,7 @@ import logging
 
 from api.utils.github_dispatch import GitHubActionManager
 from api.utils.telegram import send_telegram_message
-from app.podcast_rss_resolver import resolve_rss
+from app.podcast_rss_resolver import resolve_rss_fast
 from app.podcast_state import add_subscription, get_subscriptions, remove_subscription
 
 from .utils import extract_message_id
@@ -225,11 +225,18 @@ async def handle_podcast(chat_id: str, text: str) -> None:
         else:
             rss_url = "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml"
 
-    # 若傳入的是頁面 URL 而非 RSS，嘗試解析
+    # 若傳入的是頁面 URL 而非 RSS，嘗試快速解析（Vercel 環境，不下整份 RSS）
     if not rss_url.endswith(".xml") and "feeds." not in rss_url:
-        resolved, _ = resolve_rss(rss_url)
+        resolved = resolve_rss_fast(rss_url)
         if resolved:
             rss_url = resolved
+        else:
+            await send_telegram_message(
+                chat_id,
+                f"❌ 無法解析此 Podcast URL 的 RSS Feed：\n<code>{rss_url[:120]}</code>\n\n"
+                "請確認是否為有效的 Apple Podcasts / SoundOn / Firstory / RSS 網址。",
+            )
+            return
 
     episode_label = f"EP{episode_number}" if episode_number else "最新一集"
 
