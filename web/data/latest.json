@@ -1,0 +1,136 @@
+{
+  "generated_at": "2026-04-26T09:47:00+08:00",
+  "date": "2026-04-26",
+  "episodes_analyzed": 8,
+  "consensus": {
+    "stocks": [
+      { "ticker": "NVDA",  "name": "輝達",    "market": "US", "mentions": 8, "sentiment": "bullish", "kols": ["股癌","游庭皓","財報狗","升鴻投資","比爾"] },
+      { "ticker": "2330",  "name": "台積電",  "market": "TW", "mentions": 7, "sentiment": "bullish", "kols": ["股癌","財報狗","M平方","兆華","阿福"] },
+      { "ticker": "META",  "name": "Meta",    "market": "US", "mentions": 5, "sentiment": "bullish", "kols": ["股癌","比爾","升鴻投資"] },
+      { "ticker": "2454",  "name": "聯發科",  "market": "TW", "mentions": 4, "sentiment": "neutral", "kols": ["兆華","財報狗","阿福"] },
+      { "ticker": "MSFT",  "name": "微軟",    "market": "US", "mentions": 4, "sentiment": "bullish", "kols": ["游庭皓","比爾"] },
+      { "ticker": "AMZN",  "name": "亞馬遜",  "market": "US", "mentions": 3, "sentiment": "bullish", "kols": ["比爾","升鴻投資"] },
+      { "ticker": "3008",  "name": "大立光",  "market": "TW", "mentions": 3, "sentiment": "neutral", "kols": ["兆華","小朋友"] },
+      { "ticker": "GOOGL", "name": "Google", "market": "US", "mentions": 3, "sentiment": "bullish", "kols": ["股癌","游庭皓"] }
+    ],
+    "market_sentiment": { "bullish": 67, "bearish": 14, "neutral": 19 },
+    "consensus_score": 81,
+    "top_keywords": ["AI伺服器", "法說季", "台積電", "降息預期", "供應鏈"],
+    "weekly_theme": "AI 資本支出浪潮持續，法說季前市場偏多，台積電再創新高"
+  },
+  "episodes": [
+    {
+      "kol_id": "gooaye",
+      "kol_name": "股癌",
+      "host": "謝孟恭",
+      "avatar": "🦀",
+      "color": "#3b82f6",
+      "title": "EP655 - 法說季前的布局思路",
+      "published": "2026-04-26",
+      "summary": "謝孟恭認為 AI 伺服器需求未見頂，NVDA 雖然短線超漲但長線邏輯不變；台積電法說前市場情緒偏正面，建議持有。",
+      "sentiment": "bullish",
+      "stocks_mentioned": ["NVDA", "2330", "META"],
+      "report_url": ""
+    },
+    {
+      "kol_id": "yutin",
+      "kol_name": "游庭皓的財經皓角",
+      "host": "游庭皓",
+      "avatar": "📊",
+      "color": "#10b981",
+      "title": "4/26 早報 - 外資連三買，台股站穩 2 萬 2",
+      "published": "2026-04-26",
+      "summary": "外資連續三天買超，台積電帶動權值股走強，盤勢仍偏多；美債殖利率小幅回落，有利科技股估值。",
+      "sentiment": "bullish",
+      "stocks_mentioned": ["2330", "MSFT"],
+      "report_url": ""
+    },
+    {
+      "kol_id": "macromicro",
+      "kol_name": "MacroMicro 財經M平方",
+      "host": "Rachel",
+      "avatar": "🌐",
+      "color": "#8b5cf6",
+      "title": "降息路徑分析：2026 下半年的機會",
+      "published": "2026-04-25",
+      "summary": "從 PMI 與就業數據來看，美國軟著陸機率提升；M平方預期 Fed 第三季開始降息，有利風險資產。",
+      "sentiment": "bullish",
+      "stocks_mentioned": ["2330"],
+      "report_url": ""
+    },
+    {
+      "kol_id": "billkitchen",
+      "kol_name": "比爾的財經廚房",
+      "host": "楊比爾",
+      "avatar": "🍳",
+      "color": "#f59e0b",
+      "title": "聊聊大類資產配置：債券 vs 股票",
+      "published": "2026-04-25",
+      "summary": "在降息預期下，比爾建議增加科技股比重，適度減少短債；META 廣告業務超預期，AI 整合效果顯現。",
+      "sentiment": "bullish",
+      "stocks_mentioned": ["META", "MSFT", "AMZN"],
+      "report_url": ""
+    },
+    {
+      "kol_id": "zhaohualink",
+      "kol_name": "兆華與股惑仔",
+      "host": "李兆華",
+      "avatar": "📈",
+      "color": "#ef4444",
+      "title": "EP184 - 台股再創歷史新高的思考",
+      "published": "2026-04-24",
+      "summary": "台股指數創新高但中小型股落差大，兆華提醒注意籌碼面分歧；聯發科基本面改善，值得關注。",
+      "sentiment": "neutral",
+      "stocks_mentioned": ["2454", "3008"],
+      "report_url": ""
+    },
+    {
+      "kol_id": "caalaw",
+      "kol_name": "財報狗",
+      "host": "Jeff & Sky",
+      "avatar": "🐕",
+      "color": "#14b8a6",
+      "title": "台積電 & 聯發科財報前瞻",
+      "published": "2026-04-24",
+      "summary": "法說季前，財報狗分析台積電 CoWoS 產能持續滿載，聯發科手機晶片庫存回歸健康。",
+      "sentiment": "bullish",
+      "stocks_mentioned": ["2330", "2454", "NVDA"],
+      "report_url": ""
+    },
+    {
+      "kol_id": "shenghong",
+      "kol_name": "升鴻投資",
+      "host": "升鴻",
+      "avatar": "🚀",
+      "color": "#06b6d4",
+      "title": "NVDA 技術面解析",
+      "published": "2026-04-24",
+      "summary": "NVDA 突破前高，市場動能強勁；升鴻認為短線可能震盪但趨勢向上，META 廣告收益持續成長。",
+      "sentiment": "bullish",
+      "stocks_mentioned": ["NVDA", "META", "AMZN"],
+      "report_url": ""
+    },
+    {
+      "kol_id": "investlab",
+      "kol_name": "阿福の台美股研究室",
+      "host": "阿福",
+      "avatar": "🔬",
+      "color": "#6366f1",
+      "title": "台積電佈局時機討論",
+      "published": "2026-04-23",
+      "summary": "阿福從 PER 與 EV/EBITDA 角度分析台積電仍有上漲空間；聯發科 AI 手機晶片為下一個成長引擎。",
+      "sentiment": "bullish",
+      "stocks_mentioned": ["2330", "2454"],
+      "report_url": ""
+    }
+  ],
+  "consensus_history": [
+    { "date": "2026-04-26", "score": 81, "top_stock": "NVDA", "sentiment_bullish": 67 },
+    { "date": "2026-04-25", "score": 74, "top_stock": "NVDA", "sentiment_bullish": 61 },
+    { "date": "2026-04-24", "score": 78, "top_stock": "2330", "sentiment_bullish": 64 },
+    { "date": "2026-04-23", "score": 69, "top_stock": "NVDA", "sentiment_bullish": 58 },
+    { "date": "2026-04-22", "score": 55, "top_stock": "2330", "sentiment_bullish": 45 },
+    { "date": "2026-04-21", "score": 62, "top_stock": "NVDA", "sentiment_bullish": 52 },
+    { "date": "2026-04-18", "score": 70, "top_stock": "NVDA", "sentiment_bullish": 60 }
+  ]
+}

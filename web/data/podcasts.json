@@ -1,0 +1,110 @@
+[
+  {
+    "id": "gooaye",
+    "name": "股癌 Gooaye",
+    "host": "謝孟恭",
+    "rss": "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml",
+    "topics": ["台股","美股","市場分析"],
+    "color": "#3b82f6",
+    "avatar": "🦀"
+  },
+  {
+    "id": "yutin",
+    "name": "游庭皓的財經皓角",
+    "host": "游庭皓",
+    "rss": "https://feeds.soundon.fm/podcasts/f7b0362f-ef96-4b0c-a318-011d6b7e8f0a.xml",
+    "topics": ["台股","盤勢分析","早報"],
+    "color": "#10b981",
+    "avatar": "📊"
+  },
+  {
+    "id": "macromicro",
+    "name": "MacroMicro 財經M平方",
+    "host": "Rachel",
+    "rss": "https://feeds.soundon.fm/podcasts/9df2809a-a5bd-4c42-92a8-4a52bd1a9b09.xml",
+    "topics": ["總經","數據","全球市場"],
+    "color": "#8b5cf6",
+    "avatar": "🌐"
+  },
+  {
+    "id": "billkitchen",
+    "name": "比爾的財經廚房",
+    "host": "楊比爾",
+    "rss": "https://feeds.soundon.fm/podcasts/b854d9c7-2fd8-4e7c-9e30-3c7e7e34b2a1.xml",
+    "topics": ["宏觀","債券","大類資產"],
+    "color": "#f59e0b",
+    "avatar": "🍳"
+  },
+  {
+    "id": "zhaohualink",
+    "name": "兆華與股惑仔",
+    "host": "李兆華",
+    "rss": "https://feeds.soundon.fm/podcasts/64787a2d-9e3b-4c1d-a1f4-2e8c9b3d5a7f.xml",
+    "topics": ["台股","籌碼","實戰"],
+    "color": "#ef4444",
+    "avatar": "📈"
+  },
+  {
+    "id": "shenghong",
+    "name": "升鴻投資",
+    "host": "升鴻",
+    "rss": "https://feeds.soundon.fm/podcasts/45763076-1234-5678-abcd-ef0123456789.xml",
+    "topics": ["市場情緒","操盤","台股"],
+    "color": "#06b6d4",
+    "avatar": "🚀"
+  },
+  {
+    "id": "littlekid",
+    "name": "小朋友學投資",
+    "host": "Blue & Carry",
+    "rss": "https://feeds.soundon.fm/podcasts/e7816004-abcd-1234-5678-90abcdef1234.xml",
+    "topics": ["台股","新手","ETF"],
+    "color": "#84cc16",
+    "avatar": "🌱"
+  },
+  {
+    "id": "luyainl",
+    "name": "鈔錢部署",
+    "host": "盧燕俐",
+    "rss": "https://open.firstory.me/rss/user/cl5x5q0l700gq01w14gp36mjf",
+    "topics": ["ETF","基金","產業"],
+    "color": "#f97316",
+    "avatar": "💰"
+  },
+  {
+    "id": "jiuclass",
+    "name": "韭菜畢業班",
+    "host": "韭菜大叔",
+    "rss": "https://feeds.soundon.fm/podcasts/70907b12-3456-7890-abcd-ef1234567890.xml",
+    "topics": ["科技股","加密","台股"],
+    "color": "#ec4899",
+    "avatar": "🌿"
+  },
+  {
+    "id": "caalaw",
+    "name": "財報狗",
+    "host": "Jeff & Sky",
+    "rss": "https://feeds.soundon.fm/podcasts/77ec86f5-5678-90ab-cdef-123456789012.xml",
+    "topics": ["基本面","財報","產業"],
+    "color": "#14b8a6",
+    "avatar": "🐕"
+  },
+  {
+    "id": "investlab",
+    "name": "阿福の台美股研究室",
+    "host": "阿福",
+    "rss": "https://feeds.soundon.fm/podcasts/afu-tw-us-stocks-research.xml",
+    "topics": ["台股","美股","選股"],
+    "color": "#6366f1",
+    "avatar": "🔬"
+  },
+  {
+    "id": "tianxia",
+    "name": "聽天下",
+    "host": "天下雜誌",
+    "rss": "https://open.firstory.me/rss/user/ck7u2mp2k4enb0873mj6k2tqk",
+    "topics": ["國際","總經","新聞"],
+    "color": "#0ea5e9",
+    "avatar": "📰"
+  }
+]
