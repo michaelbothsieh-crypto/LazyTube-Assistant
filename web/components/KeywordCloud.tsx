@@ -1,33 +1,45 @@
-const SIZES = [
-  'text-xl font-black', 'text-lg font-bold', 'text-base font-semibold',
-  'text-sm font-medium', 'text-xs font-normal',
-]
+import { Tag } from '@/components/icons'
+
 const COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4',
-  '#ec4899', '#84cc16', '#f97316',
+  { text: 'var(--accent)',   bg: 'var(--accent-bg)',   border: 'var(--accent-border)'   },
+  { text: 'var(--bullish)',  bg: 'var(--bullish-bg)',  border: 'var(--bullish-border)'  },
+  { text: '#b45309',         bg: '#fffbeb',            border: '#fde68a'                },
+  { text: '#7c3aed',         bg: '#f5f3ff',            border: '#ddd6fe'                },
+  { text: '#0891b2',         bg: '#ecfeff',            border: '#a5f3fc'                },
 ]
+
+const WEIGHT = ['text-lg font-black', 'text-base font-bold', 'text-sm font-semibold', 'text-sm font-medium', 'text-xs font-medium']
 
 export default function KeywordCloud({ keywords }: { keywords: string[] }) {
   return (
-    <div className="glass p-5">
-      <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-        🏷️ <span>本週熱門關鍵詞</span>
-      </h2>
-      <div className="flex flex-wrap gap-2 justify-center">
-        {keywords.map((kw, i) => (
-          <span
-            key={kw}
-            className={`${SIZES[Math.min(i, SIZES.length - 1)]} px-3 py-1.5 rounded-lg cursor-default select-none transition-all hover:scale-110`}
-            style={{
-              color: COLORS[i % COLORS.length],
-              background: `${COLORS[i % COLORS.length]}15`,
-              border: `1px solid ${COLORS[i % COLORS.length]}30`,
-            }}
-          >
-            {kw}
-          </span>
-        ))}
+    <div className="card p-6 flex flex-col gap-4">
+      <div>
+        <p className="section-label mb-1">熱門關鍵詞</p>
+        <div className="flex items-center gap-2 mt-2">
+          <Tag size={16} style={{ color: 'var(--text-3)' }} />
+          <p className="text-base font-bold text-[var(--text-1)]">本期討論焦點</p>
+        </div>
       </div>
+
+      {keywords.length === 0 ? (
+        <p className="text-sm text-[var(--text-4)] py-4 text-center">暫無資料</p>
+      ) : (
+        <div className="flex flex-wrap gap-2.5">
+          {keywords.map((kw, i) => {
+            const c = COLORS[i % COLORS.length]
+            const w = WEIGHT[Math.min(i, WEIGHT.length - 1)]
+            return (
+              <span
+                key={kw}
+                className={`${w} px-3 py-1.5 rounded-lg select-none cursor-default transition-transform duration-150 hover:scale-105 hover:-translate-y-0.5`}
+                style={{ color: c.text, background: c.bg, border: `1px solid ${c.border}` }}
+              >
+                {kw}
+              </span>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

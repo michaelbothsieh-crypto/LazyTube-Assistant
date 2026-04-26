@@ -9,14 +9,12 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+        sans: ['Outfit', 'Noto Sans TC', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
-      colors: {
-        bg: { primary: '#060d1f', card: '#0d1b35' },
-      },
       animation: {
-        'fade-up': 'fadeUp 0.5s ease-out both',
+        'fade-up':  'fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) both',
+        'scale-in': 'scaleIn 0.35s cubic-bezier(0.16,1,0.3,1) both',
       },
     },
   },
