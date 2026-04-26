@@ -58,6 +58,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
+          # Redis — HTML 報告快取（/api/report-proxy），缺少則 fallback 純文字
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           CUSTOM_PROMPT: "podcast"
           PODCAST_RSS_URLS: ${{ inputs.rss_url }}
           PODCAST_MODE: ${{ inputs.mode }}
