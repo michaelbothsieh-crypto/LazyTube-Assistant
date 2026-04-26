@@ -29,6 +29,8 @@ from app.config import Config
 from app.notebook.notebook_session import NotebookSession
 from app.notebook.parsing import parse_query_output
 from app.notebook.runner import NotebookRunner
+from app.notifier.reporting import generate_podcast_html_report
+from app.notifier.service import Notifier
 from app.podcast_state import get_subscriptions, init_empty, is_processed, mark_processed
 from api.utils.prompt_manager import get_nlm_prompt
 
@@ -168,9 +170,9 @@ def analyze_with_nlm(runner: NotebookRunner, mp3_path: str, prompt: str) -> str 
         return parse_query_output(qr.stdout)
 
 
-# ── Telegram 推送 ─────────────────────────────────────────────────────────
+# ── 推送：HTML 報告 + Redis 連結 ────────────────────────────────
 
-def send_to_telegram(
+def send_podcast_report(
     title: str,
     analysis: str,
     published: str,
@@ -178,42 +180,51 @@ def send_to_telegram(
     chat_id: str = "",
     message_id: str = "",
 ) -> bool:
-    bot_token = Config.TG_BOT_TOKEN
+    """
+    將分析文字生成精美 HTML 報告，存入 Redis，發送 TG 摘要 + 連結。
+    若 Redis 未設定，則 fallback 為純文字推送（誅於 4096 字）。
+    """
     target_chat = chat_id or Config.TG_CHAT_ID
-    if not bot_token or not target_chat:
+    if not target_chat:
         print("  ⚠️  未設定 TG 憑證，跳過")
         return False
 
-    header = f"🎙️ <b>{label} 財經分析</b>\n📅 {published}\n📌 {title}\n\n"
-    message = header + analysis
-    if len(message) > 4096:
-        message = message[:4090] + "…"
+    # 將 pending 訊息刪除
+    if message_id:
+        Notifier.delete_pending_message(target_chat, message_id)
 
-    try:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={
-                "chat_id": target_chat,
-                "text": message,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-            },
-            timeout=30,
-        )
-        if resp.ok:
-            if message_id:
-                requests.post(
-                    f"https://api.telegram.org/bot{bot_token}/deleteMessage",
-                    json={"chat_id": target_chat, "message_id": int(message_id)},
-                    timeout=10,
-                )
-            print("  ✅ TG 推送成功")
-            return True
-        print(f"  ❌ TG 推送失敗：{resp.text}")
-        return False
-    except Exception as e:
-        print(f"  ❌ TG 例外：{e}")
-        return False
+    # 生成 HTML
+    print("  🎨 生成 HTML 報告...")
+    html_content = generate_podcast_html_report(
+        ep_title=title,
+        ep_date=published[:10] if published else "",
+        channel_label=label,
+        analysis=analysis,
+    )
+
+    # 摘要文字（前 200 字）
+    import re as _re
+    clean = _re.sub(r"【.*?】", "", analysis).strip()
+    preview = (clean[:200] + "…") if len(clean) > 200 else clean
+    caption = (
+        f"🎙️ <b>{label} 財經分析</b>\n"
+        f"📌 {title}\n"
+        f"📅 {published[:10] if published else ''}"
+        f"\n\n{preview}"
+    )
+
+    # 嘗試發送 HTML 報告連結
+    success = Notifier.send_report_link(target_chat, html_content, caption)
+    if success:
+        print("  ✅ HTML 報告推送成功")
+        return True
+
+    # Fallback：發送純文字
+    print("  ⚠️  Redis 未設定，改用純文字推送")
+    plain = f"🎙️ {label} 財經分析\n📌 {title}\n📅 {published}\n\n{analysis}"
+    if len(plain) > 4096:
+        plain = plain[:4090] + "…"
+    return Notifier.send_text(target_chat, plain, html=False)
 
 
 # ── 主流程 ────────────────────────────────────────────────────────────────
@@ -237,7 +248,8 @@ def main() -> None:
     prompt = get_nlm_prompt(prompt_key)
     print(f"📝 模式：{mode}  Prompt：{prompt_key}  集數：{episode_number or '最新'}")
 
-    # RSS 來源優先順序：環境變數 > 訂閱清單 > 預設股癌
+    # RSS 來源優先順序：環境變數 > 訂閱清單
+    # 兩者皆空時不執行（不再 fallback 預設頻道，避免未訂閱也自動推送）
     rss_env = os.environ.get("PODCAST_RSS_URLS", "").strip()
     if rss_env:
         rss_sources = [(u.strip(), "") for u in rss_env.split(",") if u.strip()]
@@ -246,9 +258,9 @@ def main() -> None:
         if subs:
             rss_sources = [(url, info.get("label", "")) for url, info in subs.items()]
         else:
-            rss_sources = [
-                ("https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml", "股癌")
-            ]
+            print("ℹ️  無 RSS 來源且無訂閱清單，結束。")
+            print("   使用 /subpodcast <url> 訂閱後即可自動推送。")
+            return
 
     runner = NotebookRunner()
     total_success = 0
@@ -277,7 +289,7 @@ def main() -> None:
                     print("  ❌ NLM 分析失敗")
                     continue
 
-                send_to_telegram(
+                send_podcast_report(
                     title=ep["title"],
                     analysis=analysis,
                     published=ep["published"],
@@ -285,6 +297,8 @@ def main() -> None:
                     chat_id=on_demand_chat,
                     message_id=on_demand_msg,
                 )
+                on_demand_msg = ""  # 已刪，避免安全網重複刪
+
 
                 # daily 模式才記錄已處理；
                 # 使用 on_demand_chat 作為 chat_id key：
