@@ -320,13 +320,21 @@ def main() -> None:
 
     runner = NotebookRunner()
     total_success = 0
+    error_msg = ""   # 最後一個錯誤訊息，供安全網使用
 
     for rss_url, label in rss_sources:
         episodes = fetch_new_episodes(
             rss_url, mode=mode, chat_id=on_demand_chat, episode_number=episode_number
         )
         if not episodes:
-            print(f"🔚 [{label or rss_url[:40]}] 無新集數")
+            msg = f"🔚 [{label or rss_url[:40]}] 無新集數"
+            print(msg)
+            if on_demand_chat and mode == "latest":
+                # on-demand 模式：找不到集數也要告知用戶
+                if episode_number:
+                    error_msg = f"⚠️ 找不到第 {episode_number} 集，請確認集數是否正確。"
+                else:
+                    error_msg = "⚠️ 此 Podcast 目前沒有可分析的新集數。"
             continue
 
         to_process = episodes[:1] if mode == "latest" else episodes[:MAX_EPISODES_PER_RUN]
@@ -338,10 +346,13 @@ def main() -> None:
             try:
                 mp3_path = download_audio(ep["audio_url"], ep["title"])
                 if not mp3_path:
+                    error_msg = f"❌ 音檔下載失敗：{ep['title'][:60]}"
+                    print(f"  {error_msg}")
                     continue
 
                 analysis = analyze_with_nlm(runner, mp3_path, prompt)
                 if not analysis:
+                    error_msg = f"❌ AI 分析失敗（NLM 無回應），請稍後再試。\n集數：{ep['title'][:60]}"
                     print("  ❌ NLM 分析失敗")
                     continue
 
@@ -354,17 +365,14 @@ def main() -> None:
                     message_id=on_demand_msg,
                 )
                 on_demand_msg = ""  # 已刪，避免安全網重複刪
+                error_msg = ""      # 成功，清除錯誤狀態
 
-
-                # daily 模式才記錄已處理；
-                # 使用 on_demand_chat 作為 chat_id key：
-                #   - 排程（daily， on_demand_chat="")：用空字串 key，全域排程不重複
-                #   - on-demand（latest mode）：不寫入，下次返回同一集也可再查
                 if mode == "daily":
                     mark_processed(rss_url, ep["guid"], chat_id=on_demand_chat)
                 total_success += 1
 
             except Exception as e:
+                error_msg = f"❌ 系統例外：{str(e)[:100]}"
                 print(f"  ❌ 例外：{e}")
             finally:
                 if mp3_path and os.path.exists(mp3_path):
@@ -377,11 +385,13 @@ def main() -> None:
     print(f"✨ 完成：成功 {total_success} 集")
     print("=" * 55)
 
-    # 安全網：無論成功或失敗，確保 pending 訊息一定被刪除
-    # （正常推送後 send_to_telegram 內部已刪，這裡是決關保障）
+    # 安全網：確保 on-demand 用戶一定收到回應
+    # 若成功推送，on_demand_msg 已在 send_podcast_report 內刪除（置空）
+    # 若失敗，這裡發送錯誤通知（同時替換掉 pending 訊息）
     if on_demand_chat and on_demand_msg:
         bot_token = Config.TG_BOT_TOKEN
         if bot_token:
+            # 先刪 pending 訊息
             try:
                 requests.post(
                     f"https://api.telegram.org/bot{bot_token}/deleteMessage",
@@ -389,7 +399,22 @@ def main() -> None:
                     timeout=10,
                 )
             except Exception:
-                pass  # 已刪或不存在，忽略
+                pass
+            # 再發錯誤通知
+            notice = error_msg or "⚠️ 分析未能完成，可能原因：音檔下載失敗 / AI 服務暫時無法使用。\n請稍後再試，或嘗試其他集數。"
+            try:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        "chat_id": on_demand_chat,
+                        "text": f"🎙️ Podcast 分析結果\n\n{notice}",
+                        "parse_mode": "HTML",
+                    },
+                    timeout=10,
+                )
+            except Exception:
+                pass
+
 
 
 if __name__ == "__main__":
