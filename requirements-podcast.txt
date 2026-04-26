@@ -1,0 +1,5 @@
+# Podcast on-demand workflow only
+requests
+platformdirs
+notebooklm-mcp-cli>=0.5.16
+feedparser>=6.0.0

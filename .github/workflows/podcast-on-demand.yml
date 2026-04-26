@@ -21,6 +21,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUNBUFFERED: "1"
 
 jobs:
   analyze:
@@ -38,20 +39,21 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-podcast-${{ hashFiles('requirements-podcast.txt') }}
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-podcast.txt
 
       - name: Restore processed_podcasts state
+        if: inputs.mode == 'daily'
         continue-on-error: true
         env:
           GH_PAT_WORKFLOW: ${{ secrets.GH_PAT_WORKFLOW }}
           GH_REPO_OWNER: ${{ secrets.GH_REPO_OWNER }}
           GH_REPO_NAME: ${{ secrets.GH_REPO_NAME }}
-        run: python jobs/podcast_sync_helper.py restore
+        run: python -u jobs/podcast_sync_helper.py restore
 
       - name: Run podcast analyzer
         env:
@@ -69,7 +71,7 @@ jobs:
           PODCAST_EPISODE_NUMBER: ${{ inputs.episode_number }}
           PODCAST_CHAT_ID: ${{ inputs.chat_id }}
           PODCAST_MESSAGE_ID: ${{ inputs.message_id }}
-        run: python jobs/podcast_scanner.py
+        run: python -u jobs/podcast_scanner.py
 
 
       - name: Persist state（僅 daily 模式才需要更新）
@@ -78,4 +80,4 @@ jobs:
           GH_PAT_WORKFLOW: ${{ secrets.GH_PAT_WORKFLOW }}
           GH_REPO_OWNER: ${{ secrets.GH_REPO_OWNER }}
           GH_REPO_NAME: ${{ secrets.GH_REPO_NAME }}
-        run: python jobs/podcast_sync_helper.py persist
+        run: python -u jobs/podcast_sync_helper.py persist

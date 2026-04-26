@@ -54,6 +54,7 @@ class Config:
     # Redis 快取 TTL（秒）
     REDIS_HTML_TTL: int = int(os.environ.get("REDIS_HTML_TTL", 86400))   # HTML 報告：24h
     REDIS_PDF_TTL: int  = int(os.environ.get("REDIS_PDF_TTL",  3600))    # PDF 報告：1h
+    REDIS_PODCAST_TTL: int = int(os.environ.get("REDIS_PODCAST_TTL", 604800))
 
     # 排程系統：有效的 preferred_time 時段（台北時間，偶數小時）
     # master-scheduler 在這些時段的 :30 分執行，與 yt-summary 的 :00 分完全錯開

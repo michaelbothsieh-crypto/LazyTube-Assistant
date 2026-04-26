@@ -33,6 +33,7 @@ from app.notebook.parsing import parse_query_output
 from app.notebook.runner import NotebookRunner
 from app.notifier.reporting import generate_podcast_html_report
 from app.notifier.service import Notifier
+from app.podcast_cache import get_cached_analysis, set_cached_analysis
 from app.podcast_state import get_subscriptions, init_empty, is_processed, mark_processed
 from api.utils.prompt_manager import get_nlm_prompt
 
@@ -393,6 +394,24 @@ def main() -> None:
             print(f"📻 {ep['title']}  [{ep['published']}]")
             mp3_path = None
             try:
+                cached_analysis = get_cached_analysis(rss_url, ep["guid"], prompt_key)
+                if cached_analysis:
+                    print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
+                    send_podcast_report(
+                        title=ep["title"],
+                        analysis=cached_analysis,
+                        published=ep["published"],
+                        label=label or "Podcast",
+                        chat_id=on_demand_chat,
+                        message_id=on_demand_msg,
+                    )
+                    on_demand_msg = ""
+                    error_msg = ""
+                    if mode == "daily":
+                        mark_processed(rss_url, ep["guid"], chat_id=on_demand_chat)
+                    total_success += 1
+                    continue
+
                 mp3_path = download_audio(ep["audio_url"], ep["title"])
                 if not mp3_path:
                     error_msg = f"❌ 音檔下載失敗：{ep['title'][:60]}"
@@ -404,6 +423,9 @@ def main() -> None:
                     error_msg = f"❌ AI 分析失敗（NLM 無回應），請稍後再試。\n集數：{ep['title'][:60]}"
                     print("  ❌ NLM 分析失敗")
                     continue
+
+                if set_cached_analysis(rss_url, ep["guid"], prompt_key, analysis):
+                    print(f"  💾 已寫入 Podcast 分析快取（TTL {Config.REDIS_PODCAST_TTL}s）")
 
                 send_podcast_report(
                     title=ep["title"],
