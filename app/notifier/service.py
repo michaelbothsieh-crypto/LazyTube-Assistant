@@ -11,7 +11,7 @@ from app.config import Config
 from .cache_store import CacheStore
 from .channels import is_line_chat
 from .line_client import LineClient
-from .telegram_client import TelegramClient
+from .telegram_client import TelegramClient, html_escape
 
 
 def _make_tg() -> TelegramClient | None:
@@ -113,15 +113,50 @@ class Notifier:
         return cache.cache_text(html_content, prefix="html_report", ttl_seconds=1800, route="/api/report-proxy")
 
     @classmethod
-    def send_report_link(cls, chat_id: str, html_content: str, caption: str) -> bool:
+    def send_report_link(
+        cls,
+        chat_id: str,
+        html_content: str,
+        caption: str,
+        *,
+        label: str = "",
+        title: str = "",
+        ep_date: str = "",
+        preview: str = "",
+    ) -> bool:
+        """
+        將 HTML 報告存入 Redis，發送標顯附加連結。
+        若有傳 label/title/ep_date/preview，內部自動 escape 後組合 HTML。
+        若只傳 caption（舊式確保相容），則直接使用。
+        """
         proxy_url = cls.cache_html_to_redis(html_content)
         if not proxy_url:
             return False
+
+        # 全新方式：傳入各欄位，內部做 escape，確保安全
+        if label or title:
+            safe_label   = html_escape(label or "Podcast")
+            safe_title   = html_escape(title)
+            safe_date    = html_escape(ep_date)
+            safe_preview = html_escape(preview)
+            safe_url     = html_escape(proxy_url)  # URL 一般不含特殊字元，但保险起見
+            tg_msg = (
+                f"🎤 <b>{safe_label} 財經分析</b>\n"
+                f"📌 {safe_title}\n"
+                f"📅 {safe_date}"
+            )
+            if safe_preview:
+                tg_msg += f"\n\n{safe_preview}"
+            tg_msg += f"\n\n📎 <a href='{safe_url}'>點此查看完整 HTML 報告</a>"
+        else:
+            # 興容舊式：直接使用傳入的 caption（呼叫者自資正穎）
+            safe_url = html_escape(proxy_url)
+            tg_msg = f"{caption}\n\n📎 <a href='{safe_url}'>點此查看完整 HTML 報告</a>"
+
         if is_line_chat(chat_id):
+            plain = f"🎤 {label or 'Podcast'} 財經分析\n📌 {title}\n📅 {ep_date}\n\n{preview}\n\n完整報告：{proxy_url}"
             return cls._line.push_messages(chat_id, [
-                {"type": "text", "text": caption[:5000]},
-                {"type": "text", "text": f"完整報告連結：\n{proxy_url}\n\n(30 分鐘後過期)"},
+                {"type": "text", "text": plain[:5000]},
             ]) if cls._line else False
-        # TG：html=True 讓 <b> 等標籤正確渲染
-        full_msg = f"{caption}\n\n📎 <a href='{proxy_url}'>點此查看完整 HTML 報告</a>"
-        return cls.send_text(chat_id, full_msg, html=True)
+
+        return cls.send_text(chat_id, tg_msg, html=True)

@@ -15,6 +15,7 @@ class TelegramClient:
             "text": text if html else _to_safe_html(text),
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
+            "link_preview_options": {"is_disabled": True},
         }
         try:
             response = post_json(self._bot_url("sendMessage"), payload=payload)
@@ -75,3 +76,14 @@ class TelegramClient:
 def _to_safe_html(text: str) -> str:
     safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return safe_text.replace("📔", "<b>📔").replace("\n📺", "</b>\n📺")
+
+
+def html_escape(text: str) -> str:
+    """對純文字欄位做最小 HTML 轉義，確保不破壞 Telegram HTML parse_mode。"""
+    return (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )

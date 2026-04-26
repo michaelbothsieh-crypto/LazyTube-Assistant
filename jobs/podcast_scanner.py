@@ -249,15 +249,8 @@ def send_podcast_report(
     # 正確解析 RSS 日期（RFC 2822 → YYYY-MM-DD）
     ep_date = format_rss_date(published)
 
-    # caption 使用 HTML 格式（send_report_link 內部用 html=True 傳送）
-    caption = (
-        f"🎙️ <b>{label} 財經分析</b>\n"
-        f"📌 {title}\n"
-        f"📅 {ep_date}"
-        f"\n\n{preview}"
-    )
-
-    # 同時用正確日期更新 HTML 報告
+    # 生成 HTML 報告
+    print("  🎨 生成 HTML 報告...")
     html_content = generate_podcast_html_report(
         ep_title=title,
         ep_date=ep_date,
@@ -265,8 +258,17 @@ def send_podcast_report(
         analysis=analysis,
     )
 
-    # 嘗試發送 HTML 報告連結（內部用 html=True，標籤會正確渲染）
-    success = Notifier.send_report_link(target_chat, html_content, caption)
+    # 嘗試發送 HTML 報告連結
+    # 各欄位分開傳入，由 service.py 內部做 html_escape，防止標題特殊字元破壞解析
+    success = Notifier.send_report_link(
+        target_chat,
+        html_content,
+        "",          # caption 留空，改用下方具名欄位
+        label=label,
+        title=title,
+        ep_date=ep_date,
+        preview=preview,
+    )
     if success:
         print("  ✅ HTML 報告推送成功")
         return True
@@ -277,6 +279,7 @@ def send_podcast_report(
     if len(plain) > 4096:
         plain = plain[:4090] + "…"
     return Notifier.send_text(target_chat, plain, html=False)
+
 
 
 
