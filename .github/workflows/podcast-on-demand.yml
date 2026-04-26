@@ -58,10 +58,11 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
-          # Redis — HTML 報告快取（/api/report-proxy），缺少則 fallback 純文字
+          # Redis — HTML 報告快取（/api/report-proxy）
+          # 注意：不注入 APP_BASE_URL，讓 config.py 的 fallback 生效
+          # （空字串 Secret 會覆蓋 fallback 導致相對路徑，TG 連結失效）
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           CUSTOM_PROMPT: "podcast"
           PODCAST_RSS_URLS: ${{ inputs.rss_url }}
           PODCAST_MODE: ${{ inputs.mode }}
@@ -69,6 +70,7 @@ jobs:
           PODCAST_CHAT_ID: ${{ inputs.chat_id }}
           PODCAST_MESSAGE_ID: ${{ inputs.message_id }}
         run: python jobs/podcast_scanner.py
+
 
       - name: Persist state（僅 daily 模式才需要更新）
         if: always() && inputs.mode == 'daily'

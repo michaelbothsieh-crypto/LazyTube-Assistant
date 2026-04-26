@@ -54,16 +54,17 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           NLM_COOKIE_BASE64: ${{ secrets.NLM_COOKIE_BASE64 }}
-          # Redis — HTML 報告快取，缺少則 fallback 純文字
+          # Redis — HTML 報告快取
+          # 注意：不注入 APP_BASE_URL，讓 config.py 的 fallback 生效
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           CUSTOM_PROMPT: "podcast"
           PODCAST_EPISODE_NUMBER: ""
           # PODCAST_RSS_URLS 不設定 → 自動使用訂閱清單
           # 若清單為空則不執行，避免誤推預設頻道
         run: |
           python jobs/podcast_scanner.py
+
 
       - name: Persist processed state to GitHub
         if: always()
