@@ -147,6 +147,14 @@ def generate_podcast_html_report(
     """
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    # ── 移除 NLM 引用腳注 [1], [1, 2], [1-3], [7-9] ──────────────
+    def strip_citations(text: str) -> str:
+        # 移除 [數字]、[數字, 數字]、[數字-數字] 等各種引用格式
+        text = re.sub(r'\s*\[\d+(?:[,，\s\-–]+\d+)*\]', '', text)
+        return text.strip()
+
+    analysis = strip_citations(analysis)
+
     # ── 解析分段 ──────────────────────────────────────────────────────
     def extract_section(text: str, header: str) -> str:
         m = re.search(rf"【{re.escape(header)}】\s*(.*?)(?=【|$)", text, re.DOTALL)
@@ -169,15 +177,28 @@ def generate_podcast_html_report(
 
     # 把股票標的每行轉為 HTML 卡片
     def render_stocks(text: str) -> str:
-        lines = [l.strip().lstrip("-•·1234567890.） ") for l in text.split("\n") if l.strip()]
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
         cards = []
         for line in lines:
-            # 嘗試拆出 ticker：「NVDA - 看好」 or「台積電（2330）— xxx」
-            ticker_m = re.match(r"^([A-Z0-9]{2,6}|[\u4e00-\u9fff]{2,6}(?:（\w+）)?)\s*[-—–]\s*(.*)", line)
+            # 移除前導符號（子彈、數字、▸ 等）
+            clean = re.sub(r'^[\-•·▸▶►▷\u25b8\s\d]+[.)）]?\s*', '', line)
+            if not clean:
+                continue
+
+            # 跳過純 emoji 行（如 🇹🇼 獨立一行）
+            if re.match(r'^[\U0001F000-\U0001FFFF\u2600-\u27BF\s]+$', clean):
+                continue
+
+            # 嘗試拆出 ticker
+            # 格式：「NVDA：xxx」「台積電（2330）：xxx」「華通 (2313)：xxx」
+            ticker_m = re.match(
+                r'^([A-Z]{2,6}|[\u4e00-\u9fff]{2,6}(?:[（(][\w\-]+[)）])?)\s*[：:—–-]\s*(.+)',
+                clean
+            )
             if ticker_m:
                 ticker = ticker_m.group(1)
-                comment = ticker_m.group(2)
-                is_us = bool(re.match(r"^[A-Z]{2,5}$", ticker))
+                comment = ticker_m.group(2).strip()
+                is_us = bool(re.match(r'^[A-Z]{2,5}$', ticker))
                 flag = "🇺🇸" if is_us else "🇹🇼"
                 cards.append(
                     f'<div class="stock-card">'
@@ -187,7 +208,7 @@ def generate_podcast_html_report(
                     f'</div>'
                 )
             else:
-                cards.append(f'<div class="stock-item"><span class="bullet">▸</span>{line}</div>')
+                cards.append(f'<div class="stock-item"><span class="bullet">▸</span>{clean}</div>')
         return "\n".join(cards) if cards else f"<p class='muted'>{text}</p>"
 
     def nl2p(text: str) -> str:
