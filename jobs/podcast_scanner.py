@@ -260,6 +260,7 @@ def send_podcast_report(
 
     # 嘗試發送 HTML 報告連結
     # 各欄位分開傳入，由 service.py 內部做 html_escape，防止標題特殊字元破壞解析
+    print(f"  🔍 Redis 狀態：URL={bool(Config.REDIS_URL)} TOKEN={bool(Config.REDIS_TOKEN)}")
     success = Notifier.send_report_link(
         target_chat,
         html_content,
@@ -273,12 +274,14 @@ def send_podcast_report(
         print("  ✅ HTML 報告推送成功")
         return True
 
-    # Fallback：發送純文字（不含 HTML 標籤）
-    print("  ⚠️  Redis 未設定，改用純文字推送")
-    plain = f"🎙️ {label} 財經分析\n📌 {title}\n📅 {ep_date}\n\n{preview}"
-    if len(plain) > 4096:
-        plain = plain[:4090] + "…"
-    return Notifier.send_text(target_chat, plain, html=False)
+    # Fallback：Redis 未設定，改用分段純文字
+    print("  ⚠️  Redis 未設定 (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN 未配置)")
+    print("  ⚠️  改用純文字推送（設定 GitHub Secrets 即可解鎖 HTML 報告連結功能）")
+    # 完整分析文字，不再限制 200 字
+    header = f"🎙️ {label} 財經分析\n📌 {title}\n📅 {ep_date}\n\n"
+    body = analysis if len(header + analysis) <= 4096 else analysis[:4090 - len(header)] + "…"
+    return Notifier.send_text(target_chat, header + body, html=False)
+
 
 
 
