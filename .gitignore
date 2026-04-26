@@ -44,3 +44,8 @@ subscriptions.json
 
 # Tool output
 graphify-out/
+
+# Agent skills
+.agents/
+.claude/
+skills-lock.json
