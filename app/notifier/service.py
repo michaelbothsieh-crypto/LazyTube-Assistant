@@ -98,19 +98,29 @@ class Notifier:
         except Exception as e:
             logger.warning("delete_pending_message failed chat=%s msg=%s: %s", chat_id, message_id, e)
 
-    @staticmethod
-    def cache_report_to_redis(file_path: str) -> Optional[str]:
-        cache = _make_cache()
-        if not cache:
+    @classmethod
+    def cache_report_to_redis(cls, file_path: str) -> Optional[str]:
+        """PDF 報告存 Redis，回傳代理 URL。"""
+        if not cls._cache:
             return None
-        return cache.cache_file(file_path, prefix="pdf_report", ttl_seconds=600, route="/api/pdf-proxy")
+        return cls._cache.cache_file(
+            file_path,
+            prefix="pdf_report",
+            ttl_seconds=Config.REDIS_PDF_TTL,
+            route="/api/pdf-proxy",
+        )
 
-    @staticmethod
-    def cache_html_to_redis(html_content: str) -> Optional[str]:
-        cache = _make_cache()
-        if not cache:
+    @classmethod
+    def cache_html_to_redis(cls, html_content: str) -> Optional[str]:
+        """HTML 報告存 Redis，回傳代理 URL。"""
+        if not cls._cache:
             return None
-        return cache.cache_text(html_content, prefix="html_report", ttl_seconds=1800, route="/api/report-proxy")
+        return cls._cache.cache_text(
+            html_content,
+            prefix="html_report",
+            ttl_seconds=Config.REDIS_HTML_TTL,
+            route="/api/report-proxy",
+        )
 
     @classmethod
     def send_report_link(

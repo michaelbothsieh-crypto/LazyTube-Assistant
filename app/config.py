@@ -48,8 +48,12 @@ class Config:
     GH_REPO_NAME = os.environ.get("GH_REPO_NAME")
     GH_REPO_BRANCH = os.environ.get("GH_REPO_BRANCH", "main")
 
-    # 報告代理伺服器基礎 URL
-    APP_BASE_URL = os.environ.get("APP_BASE_URL", "https://lazy-tube-assistant.vercel.app")
+    # 報告代理伺服器基礎 URL（用 or 防止空字串覆蓋 fallback）
+    APP_BASE_URL = os.environ.get("APP_BASE_URL") or "https://lazy-tube-assistant.vercel.app"
+
+    # Redis 快取 TTL（秒）
+    REDIS_HTML_TTL: int = int(os.environ.get("REDIS_HTML_TTL", 86400))   # HTML 報告：24h
+    REDIS_PDF_TTL: int  = int(os.environ.get("REDIS_PDF_TTL",  3600))    # PDF 報告：1h
 
     # 排程系統：有效的 preferred_time 時段（台北時間，偶數小時）
     # master-scheduler 在這些時段的 :30 分執行，與 yt-summary 的 :00 分完全錯開

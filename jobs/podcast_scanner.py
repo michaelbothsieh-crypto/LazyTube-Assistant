@@ -11,6 +11,8 @@ podcast_scanner.py — 每日定時掃描 Podcast RSS，上傳 NLM 取得財經�
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -161,10 +163,6 @@ def _extract_audio_url(entry) -> str | None:
 
 
 # ── 音檔下載 + 壓縮 ─────────────────────────────────────────────────────────
-
-import shutil
-import subprocess
-
 
 def compress_audio(src_path: str) -> str:
     """
