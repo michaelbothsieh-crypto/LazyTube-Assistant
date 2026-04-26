@@ -122,4 +122,6 @@ class Notifier:
                 {"type": "text", "text": caption[:5000]},
                 {"type": "text", "text": f"完整報告連結：\n{proxy_url}\n\n(30 分鐘後過期)"},
             ]) if cls._line else False
-        return cls.send_text(chat_id, f"{caption}\n\n完整報告：{proxy_url}", html=False)
+        # TG：html=True 讓 <b> 等標籤正確渲染
+        full_msg = f"{caption}\n\n📎 <a href='{proxy_url}'>點此查看完整 HTML 報告</a>"
+        return cls.send_text(chat_id, full_msg, html=True)

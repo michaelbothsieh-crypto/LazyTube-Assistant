@@ -45,6 +45,36 @@ def _looks_like_rss_url(url: str) -> bool:
     return any(m in url.lower() for m in markers)
 
 
+def format_rss_date(raw: str) -> str:
+    """
+    將 RSS 各種日期格式統一轉為 YYYY-MM-DD。
+    支援：
+      RFC 2822  "Fri, 24 Apr 2026 02:00:00 +0000"
+      ISO 8601  "2026-04-24T02:00:00+00:00"
+      已是 YYYY-MM-DD 格式則直接回傳前 10 字元
+    """
+    if not raw:
+        return ""
+    from email.utils import parsedate
+    import calendar
+    # 嘗試 RFC 2822
+    try:
+        t = parsedate(raw)
+        if t:
+            return f"{t[0]:04d}-{t[1]:02d}-{t[2]:02d}"
+    except Exception:
+        pass
+    # 嘗試 ISO 8601 / 其他帶 T 的格式
+    try:
+        import datetime
+        dt = datetime.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    # fallback：截取前 10 字元（若已是 YYYY-MM-DD）
+    return raw[:10]
+
+
 # ── RSS 掃描 ──────────────────────────────────────────────────────────────
 
 def fetch_new_episodes(
@@ -211,38 +241,43 @@ def send_podcast_report(
     if message_id:
         Notifier.delete_pending_message(target_chat, message_id)
 
-    # 生成 HTML
-    print("  🎨 生成 HTML 報告...")
+    # 摘要文字（前 200 字）與日期解析
+    import re as _re
+    clean = _re.sub(r"【.*?】", "", analysis).strip()
+    preview = (clean[:200] + "…") if len(clean) > 200 else clean
+
+    # 正確解析 RSS 日期（RFC 2822 → YYYY-MM-DD）
+    ep_date = format_rss_date(published)
+
+    # caption 使用 HTML 格式（send_report_link 內部用 html=True 傳送）
+    caption = (
+        f"🎙️ <b>{label} 財經分析</b>\n"
+        f"📌 {title}\n"
+        f"📅 {ep_date}"
+        f"\n\n{preview}"
+    )
+
+    # 同時用正確日期更新 HTML 報告
     html_content = generate_podcast_html_report(
         ep_title=title,
-        ep_date=published[:10] if published else "",
+        ep_date=ep_date,
         channel_label=label,
         analysis=analysis,
     )
 
-    # 摘要文字（前 200 字）
-    import re as _re
-    clean = _re.sub(r"【.*?】", "", analysis).strip()
-    preview = (clean[:200] + "…") if len(clean) > 200 else clean
-    caption = (
-        f"🎙️ <b>{label} 財經分析</b>\n"
-        f"📌 {title}\n"
-        f"📅 {published[:10] if published else ''}"
-        f"\n\n{preview}"
-    )
-
-    # 嘗試發送 HTML 報告連結
+    # 嘗試發送 HTML 報告連結（內部用 html=True，標籤會正確渲染）
     success = Notifier.send_report_link(target_chat, html_content, caption)
     if success:
         print("  ✅ HTML 報告推送成功")
         return True
 
-    # Fallback：發送純文字
+    # Fallback：發送純文字（不含 HTML 標籤）
     print("  ⚠️  Redis 未設定，改用純文字推送")
-    plain = f"🎙️ {label} 財經分析\n📌 {title}\n📅 {published}\n\n{analysis}"
+    plain = f"🎙️ {label} 財經分析\n📌 {title}\n📅 {ep_date}\n\n{preview}"
     if len(plain) > 4096:
         plain = plain[:4090] + "…"
     return Notifier.send_text(target_chat, plain, html=False)
+
 
 
 # ── 主流程 ────────────────────────────────────────────────────────────────
