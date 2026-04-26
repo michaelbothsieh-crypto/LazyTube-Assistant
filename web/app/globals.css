@@ -552,3 +552,70 @@ a {
     width: calc(100% - 1.6rem);
   }
 }
+
+/* Detail Page Compatibility Styles */
+:root {
+  --text-1: var(--text-main);
+  --text-2: var(--text-dim);
+  --text-3: var(--text-faint);
+  --text-4: #6b82a3;
+  --border: var(--line);
+  --border-strong: #2e3e5c;
+  
+  --bullish: #81ffd4;
+  --bullish-bg: rgba(129, 255, 212, 0.1);
+  --bullish-border: rgba(129, 255, 212, 0.25);
+  
+  --bearish: #ff8f8f;
+  --bearish-bg: rgba(255, 143, 143, 0.1);
+  --bearish-border: rgba(255, 143, 143, 0.25);
+  
+  --neutral: #9caed1;
+  --neutral-bg: rgba(156, 174, 209, 0.1);
+  --neutral-border: rgba(156, 174, 209, 0.25);
+  
+  --accent-bg: rgba(102, 163, 255, 0.1);
+  --accent-border: rgba(102, 163, 255, 0.25);
+}
+
+.card {
+  background: linear-gradient(160deg, rgba(15, 24, 43, 0.94) 0%, rgba(8, 13, 25, 0.94) 100%);
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section-label {
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.ticker-tw, .ticker-us {
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.4rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.ticker-tw {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.ticker-us {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
