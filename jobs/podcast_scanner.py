@@ -160,16 +160,58 @@ def _extract_audio_url(entry) -> str | None:
     return None
 
 
-# ── 音檔下載 ──────────────────────────────────────────────────────────────
+# ── 音檔下載 + 壓縮 ─────────────────────────────────────────────────────────
+
+import shutil
+import subprocess
+
+
+def compress_audio(src_path: str) -> str:
+    """
+    用 ffmpeg 把音檔壓縮成 32kbps mono 16kHz MP3（僅用於語音辨識，音質夠用）。
+    典型節省：128kbps stereo 60MB → 32kbps mono ~15MB（4x 縮小）。
+    若 ffmpeg 不存在，直接回傳原路徑。
+    """
+    if not shutil.which("ffmpeg"):
+        print("  ℹ️  ffmpeg 未安裝，跳過壓縮步驟")
+        return src_path
+
+    compressed = src_path.replace(".mp3", "_c.mp3").replace(".m4a", "_c.mp3")
+    cmd = [
+        "ffmpeg", "-y", "-i", src_path,
+        "-ac", "1",          # 單聲道
+        "-ar", "16000",      # 16kHz（語音辨識標準取樣率）
+        "-b:a", "32k",       # 32kbps 夠 NLM 辨識
+        "-map_metadata", "-1",  # 不帶 metadata，減少檔案
+        "-loglevel", "error",
+        compressed,
+    ]
+    t0 = time.time()
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    elapsed = time.time() - t0
+
+    if result.returncode == 0 and os.path.exists(compressed):
+        orig_mb = os.path.getsize(src_path) / (1024 * 1024)
+        comp_mb = os.path.getsize(compressed) / (1024 * 1024)
+        ratio = (1 - comp_mb / orig_mb) * 100 if orig_mb > 0 else 0
+        print(f"  🗜️  壓縮完成：{orig_mb:.1f}MB → {comp_mb:.1f}MB (-{ratio:.0f}%) [{elapsed:.0f}s]")
+        os.remove(src_path)   # 刪掉原始大檔
+        return compressed
+    else:
+        print(f"  ⚠️  ffmpeg 壓縮失敗，使用原始檔：{result.stderr[:200]}")
+        return src_path
+
 
 def download_audio(audio_url: str, title: str, max_retries: int = 2) -> str | None:
     """
-    下載音檔到暫存檔。失敗最多重試 max_retries 次，間隔 10 秒。
+    下載音檔到暫存檔後立即壓縮（ffmpeg 可用時）。
+    失敗最多重試 max_retries 次，間隔 10 秒。
     """
     suffix = ".m4a" if "m4a" in audio_url.lower() else ".mp3"
     for attempt in range(1, max_retries + 2):  # 1 .. max_retries+1
         label = f" (第 {attempt} 次嘗試)" if attempt > 1 else ""
         print(f"  ⬇️  下載音檔：{title}{label}")
+        t0 = time.time()
         try:
             resp = requests.get(audio_url, timeout=DOWNLOAD_TIMEOUT_SEC, stream=True)
             resp.raise_for_status()
@@ -183,8 +225,10 @@ def download_audio(audio_url: str, title: str, max_retries: int = 2) -> str | No
                         os.remove(tmp_path)
                         print(f"  ⚠️  超過 {MP3_SIZE_LIMIT_MB}MB，跳過")
                         return None
-            print(f"  ✅ 下載完成：{size_mb:.1f}MB")
-            return tmp_path
+            elapsed = time.time() - t0
+            print(f"  ✅ 下載完成：{size_mb:.1f}MB [{elapsed:.0f}s]")
+            # 立即壓縮，減少 NLM 上傳時間
+            return compress_audio(tmp_path)
         except Exception as e:
             print(f"  ❌ 下載失敗：{e}")
             if attempt <= max_retries:
@@ -203,6 +247,7 @@ def analyze_with_nlm(runner: NotebookRunner, mp3_path: str, prompt: str) -> str 
             return None
         print(f"  📓 Notebook：{session.notebook_id}")
         print("  ⏳ 上傳音檔等待轉錄...")
+        t0 = time.time()
         result = runner.run(
             "source", "add", session.notebook_id,
             "--file", mp3_path, "--wait", verbose=True,
@@ -210,12 +255,15 @@ def analyze_with_nlm(runner: NotebookRunner, mp3_path: str, prompt: str) -> str 
         if result.returncode != 0:
             print(f"  ❌ 上傳失敗：{result.stderr}")
             return None
-        print("  ✅ 轉錄完成，開始 query...")
+        print(f"  ✅ 轉錄完成 [{time.time()-t0:.0f}s]，開始 query...")
+        t1 = time.time()
         qr = runner.run("query", "notebook", session.notebook_id, prompt)
         if qr.returncode != 0:
             print(f"  ❌ query 失敗：{qr.stderr}")
             return None
+        print(f"  ✅ Query 完成 [{time.time()-t1:.0f}s]")
         return parse_query_output(qr.stdout)
+
 
 
 # ── 推送：HTML 報告 + Redis 連結 ────────────────────────────────
