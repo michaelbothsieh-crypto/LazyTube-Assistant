@@ -65,3 +65,26 @@ def test_delete_pending_message_handles_exception_gracefully():
         Notifier.delete_pending_message("123456", "789")
         mock_logger.warning.assert_called_once()
         assert "789" in str(mock_logger.warning.call_args.args)
+
+
+def test_send_report_link_strips_numeric_citations_from_mobile_preview():
+    mock_tg = _mock_tg()
+    mock_tg.send_text.return_value = True
+    with patch.object(Notifier, "_tg", mock_tg), \
+         patch("app.notifier.service.is_line_chat", return_value=False), \
+         patch("app.notifier.service.Notifier.cache_html_to_redis", return_value="https://example.com/report"):
+        assert Notifier.send_report_link(
+            "123",
+            "<html></html>",
+            "",
+            label="Podcast",
+            title="EP1084 [1]",
+            ep_date="2026-04-24",
+            preview="今天大漲 [1]，但風險仍在 [2, 3]。",
+        )
+        sent_text = mock_tg.send_text.call_args.args[1]
+        assert "EP1084 [1]" not in sent_text
+        assert "今天大漲 [1]" not in sent_text
+        assert "[2, 3]" not in sent_text
+        assert "EP1084" in sent_text
+        assert "今天大漲，但風險仍在。" in sent_text

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,12 @@ def _make_cache() -> CacheStore | None:
     if Config.REDIS_URL and Config.REDIS_TOKEN:
         return CacheStore(Config.REDIS_URL, Config.REDIS_TOKEN, Config.APP_BASE_URL)
     return None
+
+
+def _strip_numeric_citations(text: str) -> str:
+    if not text:
+        return text
+    return re.sub(r"\s*\[\d+(?:\s*(?:,|-)\s*\d+)*\]", "", text).strip()
 
 
 class Notifier:
@@ -146,15 +153,14 @@ class Notifier:
         # 組純文字 caption（podcast 傳入欄位 / research 直接傳 caption）
         if label or title:
             # 清理標題：移除腳注符號 [1]、【】等避免混淆
-            import re
-            clean_title = re.sub(r'\[\d+\]', '', title).strip()
+            clean_title = _strip_numeric_citations(title)
             plain_caption = (
                 f"🎙️ {label} 財經分析\n"
                 f"📌 {clean_title}\n"
                 f"📅 {ep_date}"
             )
             if preview:
-                plain_caption += f"\n\n{preview}"
+                plain_caption += f"\n\n{_strip_numeric_citations(preview)}"
         else:
             plain_caption = caption
 
@@ -170,4 +176,3 @@ class Notifier:
         safe_caption = html_escape(plain_caption)
         tg_msg = f'{safe_caption}\n\n📎 <a href="{proxy_url}">點此查看完整 HTML 報告</a>'
         return cls.send_text(chat_id, tg_msg, html=True)
-
