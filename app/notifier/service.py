@@ -139,7 +139,7 @@ class Notifier:
             safe_title   = html_escape(title)
             safe_date    = html_escape(ep_date)
             safe_preview = html_escape(preview)
-            safe_url     = html_escape(proxy_url)  # URL 一般不含特殊字元，但保险起見
+            # URL 不做 html_escape（URL 本身無需 escape，且 Telegram href 必須用雙引號）
             tg_msg = (
                 f"🎤 <b>{safe_label} 財經分析</b>\n"
                 f"📌 {safe_title}\n"
@@ -147,11 +147,10 @@ class Notifier:
             )
             if safe_preview:
                 tg_msg += f"\n\n{safe_preview}"
-            tg_msg += f"\n\n📎 <a href='{safe_url}'>點此查看完整 HTML 報告</a>"
+            tg_msg += f'\n\n📎 <a href="{proxy_url}">點此查看完整 HTML 報告</a>'
         else:
-            # 興容舊式：直接使用傳入的 caption（呼叫者自資正穎）
-            safe_url = html_escape(proxy_url)
-            tg_msg = f"{caption}\n\n📎 <a href='{safe_url}'>點此查看完整 HTML 報告</a>"
+            # 兼容舊式：直接使用傳入的 caption（呼叫者自負正確性）
+            tg_msg = f'{caption}\n\n📎 <a href="{proxy_url}">點此查看完整 HTML 報告</a>'
 
         if is_line_chat(chat_id):
             plain = f"🎤 {label or 'Podcast'} 財經分析\n📌 {title}\n📅 {ep_date}\n\n{preview}\n\n完整報告：{proxy_url}"
