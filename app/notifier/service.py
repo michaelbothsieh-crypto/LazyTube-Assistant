@@ -125,37 +125,39 @@ class Notifier:
         preview: str = "",
     ) -> bool:
         """
-        將 HTML 報告存入 Redis，發送標顯附加連結。
-        若有傳 label/title/ep_date/preview，內部自動 escape 後組合 HTML。
-        若只傳 caption（舊式確保相容），則直接使用。
+        將 HTML 報告存入 Redis，發送摘要文字 + 可點擊 HTML 超連結。
+        策略：caption 組成純文字（不含任何 HTML tag），
+        僅最後加一個 <a href> 連結，與 /research 行為一致。
         """
         proxy_url = cls.cache_html_to_redis(html_content)
         if not proxy_url:
             return False
 
-        # 全新方式：傳入各欄位，內部做 escape，確保安全
+        # 組純文字 caption（podcast 傳入欄位 / research 直接傳 caption）
         if label or title:
-            safe_label   = html_escape(label or "Podcast")
-            safe_title   = html_escape(title)
-            safe_date    = html_escape(ep_date)
-            safe_preview = html_escape(preview)
-            # URL 不做 html_escape（URL 本身無需 escape，且 Telegram href 必須用雙引號）
-            tg_msg = (
-                f"🎤 <b>{safe_label} 財經分析</b>\n"
-                f"📌 {safe_title}\n"
-                f"📅 {safe_date}"
+            # 清理標題：移除腳注符號 [1]、【】等避免混淆
+            import re
+            clean_title = re.sub(r'\[\d+\]', '', title).strip()
+            plain_caption = (
+                f"🎙️ {label} 財經分析\n"
+                f"📌 {clean_title}\n"
+                f"📅 {ep_date}"
             )
-            if safe_preview:
-                tg_msg += f"\n\n{safe_preview}"
-            tg_msg += f'\n\n📎 <a href="{proxy_url}">點此查看完整 HTML 報告</a>'
+            if preview:
+                plain_caption += f"\n\n{preview}"
         else:
-            # 兼容舊式：直接使用傳入的 caption（呼叫者自負正確性）
-            tg_msg = f'{caption}\n\n📎 <a href="{proxy_url}">點此查看完整 HTML 報告</a>'
+            plain_caption = caption
 
+        # Line
         if is_line_chat(chat_id):
-            plain = f"🎤 {label or 'Podcast'} 財經分析\n📌 {title}\n📅 {ep_date}\n\n{preview}\n\n完整報告：{proxy_url}"
+            plain = f"{plain_caption}\n\n完整報告：{proxy_url}"
             return cls._line.push_messages(chat_id, [
                 {"type": "text", "text": plain[:5000]},
             ]) if cls._line else False
 
+        # Telegram：純文字 + 唯一一個 <a> tag（最小化 HTML，最穩定）
+        # 先把純文字部分 escape，然後拼接 <a> 連結
+        safe_caption = html_escape(plain_caption)
+        tg_msg = f'{safe_caption}\n\n📎 <a href="{proxy_url}">點此查看完整 HTML 報告</a>'
         return cls.send_text(chat_id, tg_msg, html=True)
+
