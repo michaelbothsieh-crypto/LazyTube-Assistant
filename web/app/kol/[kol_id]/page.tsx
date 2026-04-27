@@ -94,6 +94,20 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
             </a>
           )}
         </div>
+        <div className="kol-quick-facts">
+          <div>
+            <small>Host</small>
+            <strong>{ep.host}</strong>
+          </div>
+          <div>
+            <small>Published</small>
+            <strong>{ep.published}</strong>
+          </div>
+          <div>
+            <small>Stocks</small>
+            <strong>{ep.stocks_mentioned.length}</strong>
+          </div>
+        </div>
       </section>
 
       {/* CSS marquee — server-component safe (no GSAP) */}
