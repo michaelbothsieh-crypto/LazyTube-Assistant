@@ -62,6 +62,7 @@ jobs:
           PODCAST_EPISODE_NUMBER: ""
           # PODCAST_RSS_URLS 不設定 → 自動使用訂閱清單
           # 若清單為空則不執行，避免誤推預設頻道
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           python jobs/podcast_scanner.py
 
