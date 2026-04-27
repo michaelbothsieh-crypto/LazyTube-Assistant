@@ -607,12 +607,13 @@ def main() -> None:
                     ep_summary, ep_stocks, ep_sentiment = _parse_nlm_analysis(analysis)
                     print(f"  [PARSE] sentiment={ep_sentiment} stocks={ep_stocks[:5]}")
                     _db_kol_id = ensure_kol(rss_url, label or "")
+                    # summary 存完整分析文字，讓詳細頁面能顯示完整報告
                     write_episode(
                         kol_id=_db_kol_id,
                         guid=ep["guid"],
                         title=ep["title"],
                         published_str=format_rss_date(ep["published"]),
-                        summary=ep_summary or analysis[:1000],
+                        summary=analysis,
                         sentiment=ep_sentiment,
                         stocks_mentioned=ep_stocks,
                         report_url="",

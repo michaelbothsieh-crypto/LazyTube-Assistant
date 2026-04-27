@@ -113,10 +113,17 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
       <section className="chapter-wide">
         <div className="bento-grid grid-flow-dense">
 
-          {/* Summary — span 4 */}
+          {/* Summary — span 4：完整報告，支援換行段落 */}
           <article className="bento-card kol-summary-card">
-            <p>本集摘要</p>
-            <p className="kol-summary-text">{ep.summary}</p>
+            <p>本集完整分析</p>
+            <div className="kol-summary-body">
+              {ep.summary.split('\n').map((line, i) => {
+                if (!line.trim()) return <div key={i} className="kol-summary-spacer" />
+                if (line.startsWith('【') && line.endsWith('】'))
+                  return <p key={i} className="kol-summary-section-title">{line}</p>
+                return <p key={i} className="kol-summary-text">{line}</p>
+              })}
+            </div>
           </article>
 
           {/* Sentiment / meta — span 2 */}
