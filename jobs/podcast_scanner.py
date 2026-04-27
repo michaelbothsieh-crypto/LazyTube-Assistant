@@ -50,6 +50,32 @@ def _looks_like_rss_url(url: str) -> bool:
     return any(m in url.lower() for m in markers)
 
 
+def _build_episode_prompt(base_prompt: str, ep: dict) -> str:
+    """
+    將 RSS 元資料注入 prompt 開頭，讓 NLM 以正確人名、節目名稱作為
+    音訊轉錄的修正參考。通用於所有頻道，不需手動設定字典。
+
+    注入格式（只有有值才加入）：
+      【本集背景資訊】
+      節目名稱：游庭皓的財經皓角
+      主持人：游庭皓
+      本集標題：2026/4/24 費半破萬點...
+    """
+    lines = []
+    if ep.get("feed_title"):
+        lines.append(f"節目名稱：{ep['feed_title']}")
+    if ep.get("feed_author"):
+        lines.append(f"主持人：{ep['feed_author']}")
+    if ep.get("title"):
+        lines.append(f"本集標題：{ep['title']}")
+
+    if not lines:
+        return base_prompt
+
+    context = "【本集背景資訊（請以此修正音訊中的人名與節目專有名詞）】\n" + "\n".join(lines)
+    return f"{context}\n\n{base_prompt}"
+
+
 def _apple_episode_hint(url: str) -> dict:
     """
     偵測 Apple Podcasts 單集 URL（含 ?i= 參數）並萃取比對線索。
@@ -156,6 +182,10 @@ def fetch_new_episodes(
         print(f"  ⚠️  RSS 解析失敗：{e}")
         return []
 
+    # 頻道層級元資料（用於 prompt 注入，提升人名/專有名詞辨識精確度）
+    feed_title = feed.feed.get("title", "").strip()
+    feed_author = feed.feed.get("author", feed.feed.get("itunes_author", "")).strip()
+
     episodes = []
     for entry in feed.entries:
         guid = entry.get("id") or entry.get("link", "")
@@ -170,6 +200,8 @@ def fetch_new_episodes(
             "audio_url": audio_url,
             "published": entry.get("published", ""),
             "rss_url": rss_url,
+            "feed_title": feed_title,
+            "feed_author": feed_author,
         })
 
     if not episodes:
@@ -483,7 +515,11 @@ def main() -> None:
                     print(f"  {error_msg}")
                     continue
 
-                analysis = analyze_with_nlm(runner, mp3_path, prompt)
+                # 將 RSS 元資料（頻道名、主持人、集數標題）注入 prompt 開頭，
+                # 讓 NLM 能以正確的人名與專有名詞作為轉錄修正參考，通用於所有頻道。
+                ep_prompt = _build_episode_prompt(prompt, ep)
+
+                analysis = analyze_with_nlm(runner, mp3_path, ep_prompt)
                 if not analysis:
                     error_msg = f"❌ AI 分析失敗（NLM 無回應），請稍後再試。\n集數：{ep['title'][:60]}"
                     print("  ❌ NLM 分析失敗")
