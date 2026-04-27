@@ -912,6 +912,26 @@ a {
   text-transform: none !important;
 }
 
+.kol-stock-horizon {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: rgba(145, 170, 218, 0.1);
+  border: 1px solid rgba(145, 170, 218, 0.18);
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.kol-stock-levels {
+  margin: 0.22rem 0 0 !important;
+  font-size: 0.76rem !important;
+  color: var(--accent-2) !important;
+  font-family: monospace !important;
+  letter-spacing: 0 !important;
+}
+
 .kol-stock-name {
   flex: 1;
   font-size: 0.85rem;

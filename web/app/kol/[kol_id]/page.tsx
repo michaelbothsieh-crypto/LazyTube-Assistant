@@ -1,3 +1,4 @@
+import React from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAllKolIds, getEpisodeByKolId, getLatestStocks, getConsensusHistory } from '@/lib/data'
@@ -17,24 +18,50 @@ const SENT = {
   neutral: { label: '中性觀望', color: 'var(--neutral)', bg: 'var(--neutral-bg)', border: 'var(--neutral-border)', Icon: Minus },
 }
 
+interface StockOpinion {
+  ticker: string
+  direction: string   // 多方看好 | 空方謹慎 | 中性觀望
+  timeHorizon: string // 短線 | 中線 | 長線
+  priceLevel: string  // 關鍵價位，無則為 '—'
+  comment: string
+}
+
 function parseSummary(summary: string) {
   const transcriptMatch = summary.match(/【文字紀錄】\s*([\s\S]*?)(?=\n【|$)/)
   const transcript = transcriptMatch?.[1]?.trim() ?? ''
 
-  const conclusionSectionMatch = summary.match(/【投資倒數小結】\s*([\s\S]*)$/)
-  const conclusionSection = conclusionSectionMatch?.[1]?.trim() ?? ''
-
-  const stockSectionMatch = conclusionSection.match(/1[．.、][^\n]*[：:]([\s\S]*?)(?=\n2[．.、]|$)/)
-  const stockLines = stockSectionMatch?.[1]?.trim().split('\n').filter(l => l.trim()) ?? []
-
-  const stockOpinions: { ticker: string; comment: string }[] = []
-  for (const line of stockLines) {
-    const m = line.match(/^([A-Z]{1,5}|\d{4})(?:[（(][^）)]*[）)])?[：:\-\s]+(.+)/)
-    if (m) stockOpinions.push({ ticker: m[1], comment: m[2].trim() })
+  // ── 新格式：【個股觀點】以「｜」分隔五欄 ──────────────────────────────
+  const stockOpinions: StockOpinion[] = []
+  const stockSectionNew = summary.match(/【個股觀點】\s*([\s\S]*?)(?=\n【|$)/)
+  if (stockSectionNew) {
+    for (const line of stockSectionNew[1].trim().split('\n')) {
+      const parts = line.split('｜').map(p => p.trim())
+      if (parts.length >= 5) {
+        stockOpinions.push({
+          ticker:      parts[0],
+          direction:   parts[1],
+          timeHorizon: parts[2],
+          priceLevel:  parts[3],
+          comment:     parts.slice(4).join('｜'),
+        })
+      }
+    }
   }
 
-  const conclusionMatch = conclusionSection.match(/2[．.、][^\n]*[：:]\s*([\s\S]*)$/)
-  const conclusion = conclusionMatch?.[1]?.trim() ?? ''
+  // ── 舊格式 fallback：從【投資倒數小結】解析 ──────────────────────────
+  if (!stockOpinions.length) {
+    const oldSection = summary.match(/1[．.、][^\n]*[：:]([\s\S]*?)(?=\n2[．.、]|$)/)
+    const oldLines = oldSection?.[1]?.trim().split('\n').filter(l => l.trim()) ?? []
+    for (const line of oldLines) {
+      const m = line.match(/^([A-Z]{1,5}|\d{4})(?:[（(][^）)]*[）)])?[：:\-\s]+(.+)/)
+      if (m) stockOpinions.push({ ticker: m[1], direction: '', timeHorizon: '', priceLevel: '', comment: m[2].trim() })
+    }
+  }
+
+  // ── 結論：新格式取【市場總結與操作建議】，舊格式取「本集結論」 ─────────
+  const conclusionNew = summary.match(/【市場總結與操作建議】\s*([\s\S]*?)(?=\n【|$)/)
+  const conclusionOld = summary.match(/2[．.、][^\n]*[：:]\s*([\s\S]*?)(?=\n【|$)/)
+  const conclusion = conclusionNew?.[1]?.trim() ?? conclusionOld?.[1]?.trim() ?? ''
 
   return { transcript, stockOpinions, conclusion }
 }
@@ -59,7 +86,7 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
   )
 
   const { transcript, stockOpinions, conclusion } = parseSummary(ep.summary)
-  const stockOpinionMap = new Map(stockOpinions.map(s => [s.ticker, s.comment]))
+  const stockOpinionMap = new Map(stockOpinions.map(s => [s.ticker, s]))
 
   // Double for seamless CSS marquee loop
   const marqueeTickers = stockDetails.length > 0
@@ -171,9 +198,10 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
               <div className="kol-stocks-grid">
                 {stockDetails.map(s => {
                   const ssc = SENT[s.sentiment]
-                  const opinion = stockOpinionMap.get(s.ticker)
+                  const op = stockOpinionMap.get(s.ticker)
+                  const dirSsc = op?.direction ? Object.values(SENT).find(v => v.label === op.direction) : null
                   return (
-                    <div key={s.ticker} className={`kol-stock-item${opinion ? ' kol-stock-item-v' : ''}`}>
+                    <div key={s.ticker} className={`kol-stock-item${op ? ' kol-stock-item-v' : ''}`}>
                       <div className="kol-stock-row">
                         <span className={/^\d/.test(s.ticker) ? 'ticker-tw' : 'ticker-us'}>
                           {s.ticker}
@@ -181,14 +209,24 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
                         <span className="kol-stock-name">{s.name}</span>
                         <span
                           className="kol-stock-badge"
-                          style={{ background: ssc.bg, border: `1px solid ${ssc.border}`, color: ssc.color }}
+                          style={{
+                            background: (dirSsc ?? ssc).bg,
+                            border: `1px solid ${(dirSsc ?? ssc).border}`,
+                            color: (dirSsc ?? ssc).color,
+                          }}
                         >
-                          <ssc.Icon size={11} />
-                          {s.sentiment === 'bullish' ? '多' : s.sentiment === 'bearish' ? '空' : '中'}
+                          {React.createElement((dirSsc ?? ssc).Icon, { size: 11 })}
+                          {op?.direction || (s.sentiment === 'bullish' ? '多方看好' : s.sentiment === 'bearish' ? '空方謹慎' : '中性觀望')}
                         </span>
+                        {op?.timeHorizon && (
+                          <span className="kol-stock-horizon">{op.timeHorizon}</span>
+                        )}
                         <span className="kol-stock-mentions">{s.mentions}x</span>
                       </div>
-                      {opinion && <p className="kol-stock-comment">{opinion}</p>}
+                      {op?.priceLevel && op.priceLevel !== '—' && (
+                        <p className="kol-stock-levels">關鍵價位：{op.priceLevel}</p>
+                      )}
+                      {op?.comment && <p className="kol-stock-comment">{op.comment}</p>}
                     </div>
                   )
                 })}
