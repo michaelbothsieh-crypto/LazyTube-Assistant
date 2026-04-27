@@ -144,41 +144,49 @@ export async function getAllKolIds(): Promise<string[]> {
 }
 
 // 取最新共識日的股票列表（供 KOL 詳細頁查關聯）
-export async function getLatestStocks(): Promise<Stock[]> {
-  const db = sql()
-  const rows = await db`
-    SELECT sm.ticker, sm.name, sm.market, sm.mentions, sm.sentiment, sm.kols
-    FROM stock_mentions sm
-    WHERE sm.date = (SELECT MAX(date) FROM consensus_daily)
-    ORDER BY sm.mentions DESC
-  `
-  return rows.map((s): Stock => ({
-    ticker: s.ticker,
-    name: s.name,
-    market: s.market as 'TW' | 'US',
-    mentions: Number(s.mentions),
-    sentiment: s.sentiment as 'bullish' | 'bearish' | 'neutral',
-    kols: s.kols ?? [],
-  }))
-}
+export const getLatestStocks = unstable_cache(
+  async (): Promise<Stock[]> => {
+    const db = sql()
+    const rows = await db`
+      SELECT sm.ticker, sm.name, sm.market, sm.mentions, sm.sentiment, sm.kols
+      FROM stock_mentions sm
+      WHERE sm.date = (SELECT MAX(date) FROM consensus_daily)
+      ORDER BY sm.mentions DESC
+    `
+    return rows.map((s): Stock => ({
+      ticker: s.ticker,
+      name: s.name,
+      market: s.market as 'TW' | 'US',
+      mentions: Number(s.mentions),
+      sentiment: s.sentiment as 'bullish' | 'bearish' | 'neutral',
+      kols: s.kols ?? [],
+    }))
+  },
+  ['latest-stocks'],
+  { revalidate: 300 },
+)
 
-export async function getConsensusHistory(): Promise<ConsensusHistory[]> {
-  const db = sql()
-  const rows = await db`
-    SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
-    FROM consensus_daily
-    ORDER BY date ASC
-    LIMIT 30
-  `
-  return rows.map((h): ConsensusHistory => ({
-    date: h.date instanceof Date
-      ? h.date.toISOString().slice(0, 10)
-      : String(h.date),
-    score: Number(h.consensus_score),
-    top_stock: h.top_stock ?? '',
-    sentiment_bullish: Number(h.bullish_pct),
-  }))
-}
+export const getConsensusHistory = unstable_cache(
+  async (): Promise<ConsensusHistory[]> => {
+    const db = sql()
+    const rows = await db`
+      SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
+      FROM consensus_daily
+      ORDER BY date ASC
+      LIMIT 30
+    `
+    return rows.map((h): ConsensusHistory => ({
+      date: h.date instanceof Date
+        ? h.date.toISOString().slice(0, 10)
+        : String(h.date),
+      score: Number(h.consensus_score),
+      top_stock: h.top_stock ?? '',
+      sentiment_bullish: Number(h.bullish_pct),
+    }))
+  },
+  ['consensus-history'],
+  { revalidate: 300 },
+)
 
 function emptyConsensusData(): ConsensusData {
   return {

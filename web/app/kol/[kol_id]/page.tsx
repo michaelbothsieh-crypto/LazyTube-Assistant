@@ -31,10 +31,10 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
   const sc = SENT[ep.sentiment]
   const accentColor = ep.color || '#81ffd4'
 
-  const stockDetails = ep.stocks_mentioned.map(ticker => {
-    const found = latestStocks.find(s => s.ticker === ticker)
-    return found ?? { ticker, name: ticker, market: 'US' as const, mentions: 1, sentiment: 'neutral' as const, kols: [] }
-  })
+  const stockMap = new Map(latestStocks.map(s => [s.ticker, s]))
+  const stockDetails = ep.stocks_mentioned.map(ticker =>
+    stockMap.get(ticker) ?? { ticker, name: ticker, market: 'US' as const, mentions: 1, sentiment: 'neutral' as const, kols: [] }
+  )
 
   // Double for seamless CSS marquee loop
   const marqueeTickers = stockDetails.length > 0
