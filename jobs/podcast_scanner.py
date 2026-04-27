@@ -28,6 +28,7 @@ if str(project_root) not in sys.path:
 
 from app.auth import AuthManager
 from app.config import Config
+from app.db_writer import compute_and_write_consensus, ensure_kol, write_episode
 from app.notebook.notebook_session import NotebookSession
 from app.notebook.parsing import parse_query_output
 from app.notebook.runner import NotebookRunner
@@ -427,6 +428,20 @@ def main() -> None:
                 if set_cached_analysis(rss_url, ep["guid"], prompt_key, analysis):
                     print(f"  💾 已寫入 Podcast 分析快取（TTL {Config.REDIS_PODCAST_TTL}s）")
 
+                # 寫入 Neon DB（僅 daily 模式，on-demand 不存 DB）
+                if mode == "daily":
+                    _db_kol_id = ensure_kol(rss_url, label or "")
+                    write_episode(
+                        kol_id=_db_kol_id,
+                        guid=ep["guid"],
+                        title=ep["title"],
+                        published_str=format_rss_date(ep["published"]),
+                        summary=analysis[:1000],
+                        sentiment="neutral",   # podcast_scanner 暫不解析情緒
+                        stocks_mentioned=[],
+                        report_url="",
+                    )
+
                 send_podcast_report(
                     title=ep["title"],
                     analysis=analysis,
@@ -455,6 +470,11 @@ def main() -> None:
     print(f"\n{'=' * 55}")
     print(f"✨ 完成：成功 {total_success} 集")
     print("=" * 55)
+
+    # Daily 模式：更新共識儀表板
+    if mode == "daily" and total_success > 0:
+        print("\n📊 更新 Neon DB 共識指標...")
+        compute_and_write_consensus()
 
     # 安全網：確保 on-demand 用戶一定收到回應
     # 若成功推送，on_demand_msg 已在 send_podcast_report 內刪除（置空）

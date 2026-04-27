@@ -1,35 +1,190 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
-import type { ConsensusData, Episode } from '@/types'
+import { neon } from '@neondatabase/serverless'
+import type { ConsensusData, Episode, Stock, ConsensusHistory } from '@/types'
 
-// Module-level in-memory cache — survives across requests in the same process.
-// Works correctly with Next.js ISR: each revalidation cycle gets fresh data
-// once the TTL expires. In serverless cold starts, the file is re-read.
-const CACHE_TTL_MS = 10 * 60 * 1000 // 10 min (shorter than ISR 30 min)
-
-let _data: ConsensusData | null = null
-let _dataTs = 0
-
-export function getLatestData(): ConsensusData {
-  const now = Date.now()
-  if (_data && now - _dataTs < CACHE_TTL_MS) return _data
-
-  const raw = readFileSync(join(process.cwd(), 'data', 'latest.json'), 'utf-8')
-  _data = JSON.parse(raw) as ConsensusData
-  _dataTs = now
-  return _data
+function sql() {
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error('DATABASE_URL 未設定')
+  return neon(url)
 }
 
-export function getEpisodeByKolId(data: ConsensusData, kolId: string): Episode | null {
-  return data.episodes.find(ep => ep.kol_id === kolId) ?? null
+export async function getLatestData(): Promise<ConsensusData> {
+  const db = sql()
+
+  // 取最新一天的共識資料
+  const [consensus] = await db`
+    SELECT * FROM consensus_daily ORDER BY date DESC LIMIT 1
+  `
+
+  if (!consensus) {
+    return emptyConsensusData()
+  }
+
+  const latestDate: string = consensus.date instanceof Date
+    ? consensus.date.toISOString().slice(0, 10)
+    : String(consensus.date)
+
+  // 平行查詢：股票 + 集數 + 歷史
+  const [stocks, episodes, history] = await Promise.all([
+    db`
+      SELECT ticker, name, market, mentions, sentiment, kols
+      FROM stock_mentions
+      WHERE date = ${latestDate}
+      ORDER BY mentions DESC
+    `,
+    db`
+      SELECT e.kol_id, k.kol_name, k.host, k.avatar, k.color,
+             e.title, e.published, e.summary, e.sentiment,
+             e.stocks_mentioned, e.report_url
+      FROM episodes e
+      JOIN kols k ON k.kol_id = e.kol_id
+      WHERE e.analysis_date = ${latestDate}
+      ORDER BY e.analyzed_at DESC
+    `,
+    db`
+      SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
+      FROM consensus_daily
+      ORDER BY date DESC
+      LIMIT 14
+    `,
+  ])
+
+  return {
+    generated_at: consensus.generated_at instanceof Date
+      ? consensus.generated_at.toISOString()
+      : String(consensus.generated_at),
+    date: latestDate,
+    episodes_analyzed: Number(consensus.episodes_analyzed),
+    consensus: {
+      stocks: stocks.map((s): Stock => ({
+        ticker: s.ticker,
+        name: s.name,
+        market: s.market as 'TW' | 'US',
+        mentions: Number(s.mentions),
+        sentiment: s.sentiment as 'bullish' | 'bearish' | 'neutral',
+        kols: s.kols ?? [],
+      })),
+      market_sentiment: {
+        bullish: Number(consensus.bullish_pct),
+        neutral: Number(consensus.neutral_pct),
+        bearish: Number(consensus.bearish_pct),
+      },
+      consensus_score: Number(consensus.consensus_score),
+      top_keywords: consensus.top_keywords ?? [],
+      weekly_theme: consensus.weekly_theme ?? '',
+    },
+    episodes: episodes.map((e): Episode => ({
+      kol_id: e.kol_id,
+      kol_name: e.kol_name,
+      host: e.host ?? '',
+      avatar: e.avatar ?? '🎙️',
+      color: e.color ?? '#6366f1',
+      title: e.title,
+      published: e.published instanceof Date
+        ? e.published.toISOString().slice(0, 10)
+        : String(e.published ?? ''),
+      summary: e.summary ?? '',
+      sentiment: e.sentiment as 'bullish' | 'bearish' | 'neutral',
+      stocks_mentioned: e.stocks_mentioned ?? [],
+      report_url: e.report_url ?? '',
+    })),
+    consensus_history: [...history].reverse().map((h): ConsensusHistory => ({
+      date: h.date instanceof Date
+        ? h.date.toISOString().slice(0, 10)
+        : String(h.date),
+      score: Number(h.consensus_score),
+      top_stock: h.top_stock ?? '',
+      sentiment_bullish: Number(h.bullish_pct),
+    })),
+  }
 }
 
-// Cache key for podcast deduplication (use in Python Redis layer):
-// Key pattern: podcast:dedupe:{kol_id}:{sha256(episode_title)[:12]}
-// TTL: 86400s (24h)
-// On hit: return cached result URL → skip NotebookLM analysis
-// On miss: run analysis → store result URL under this key
-export function podcastCacheKey(kolId: string, episodeTitle: string): string {
-  // This function is only for documentation — actual hashing happens in Python
-  return `podcast:dedupe:${kolId}:${episodeTitle.slice(0, 12).replace(/\s/g, '_')}`
+export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> {
+  const db = sql()
+  const rows = await db`
+    SELECT e.kol_id, k.kol_name, k.host, k.avatar, k.color,
+           e.title, e.published, e.summary, e.sentiment,
+           e.stocks_mentioned, e.report_url
+    FROM episodes e
+    JOIN kols k ON k.kol_id = e.kol_id
+    WHERE e.kol_id = ${kolId}
+    ORDER BY e.analyzed_at DESC
+    LIMIT 1
+  `
+  if (!rows.length) return null
+  const e = rows[0]
+  return {
+    kol_id: e.kol_id,
+    kol_name: e.kol_name,
+    host: e.host ?? '',
+    avatar: e.avatar ?? '🎙️',
+    color: e.color ?? '#6366f1',
+    title: e.title,
+    published: e.published instanceof Date
+      ? e.published.toISOString().slice(0, 10)
+      : String(e.published ?? ''),
+    summary: e.summary ?? '',
+    sentiment: e.sentiment as 'bullish' | 'bearish' | 'neutral',
+    stocks_mentioned: e.stocks_mentioned ?? [],
+    report_url: e.report_url ?? '',
+  }
+}
+
+export async function getAllKolIds(): Promise<string[]> {
+  const db = sql()
+  const rows = await db`SELECT DISTINCT kol_id FROM episodes ORDER BY kol_id`
+  return rows.map(r => r.kol_id as string)
+}
+
+// 取最新共識日的股票列表（供 KOL 詳細頁查關聯）
+export async function getLatestStocks(): Promise<Stock[]> {
+  const db = sql()
+  const rows = await db`
+    SELECT sm.ticker, sm.name, sm.market, sm.mentions, sm.sentiment, sm.kols
+    FROM stock_mentions sm
+    WHERE sm.date = (SELECT MAX(date) FROM consensus_daily)
+    ORDER BY sm.mentions DESC
+  `
+  return rows.map((s): Stock => ({
+    ticker: s.ticker,
+    name: s.name,
+    market: s.market as 'TW' | 'US',
+    mentions: Number(s.mentions),
+    sentiment: s.sentiment as 'bullish' | 'bearish' | 'neutral',
+    kols: s.kols ?? [],
+  }))
+}
+
+export async function getConsensusHistory(): Promise<ConsensusHistory[]> {
+  const db = sql()
+  const rows = await db`
+    SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
+    FROM consensus_daily
+    ORDER BY date ASC
+    LIMIT 14
+  `
+  return rows.map((h): ConsensusHistory => ({
+    date: h.date instanceof Date
+      ? h.date.toISOString().slice(0, 10)
+      : String(h.date),
+    score: Number(h.consensus_score),
+    top_stock: h.top_stock ?? '',
+    sentiment_bullish: Number(h.bullish_pct),
+  }))
+}
+
+function emptyConsensusData(): ConsensusData {
+  return {
+    generated_at: new Date().toISOString(),
+    date: new Date().toISOString().slice(0, 10),
+    episodes_analyzed: 0,
+    consensus: {
+      stocks: [],
+      market_sentiment: { bullish: 0, neutral: 0, bearish: 0 },
+      consensus_score: 0,
+      top_keywords: [],
+      weekly_theme: '尚無資料',
+    },
+    episodes: [],
+    consensus_history: [],
+  }
 }

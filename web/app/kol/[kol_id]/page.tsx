@@ -1,16 +1,17 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getLatestData, getEpisodeByKolId } from '@/lib/data'
+import { getAllKolIds, getEpisodeByKolId, getLatestStocks, getConsensusHistory } from '@/lib/data'
+import ConsensusChart from '@/components/ConsensusChart'
 import {
   ArrowLeft, Calendar, TrendUp, TrendDown, Minus,
   Mic, ExternalLink, Users, BarChart2, ChevronRight,
 } from '@/components/icons'
 
-export const revalidate = 1800
+export const revalidate = 300
 
-export function generateStaticParams() {
-  const data = getLatestData()
-  return data.episodes.map(ep => ({ kol_id: ep.kol_id }))
+export async function generateStaticParams() {
+  const ids = await getAllKolIds()
+  return ids.map(kol_id => ({ kol_id }))
 }
 
 const SENT = {
@@ -19,21 +20,23 @@ const SENT = {
   neutral: { label: '中性觀望', color: 'var(--neutral)', bg: 'var(--neutral-bg)', border: 'var(--neutral-border)', Icon: Minus },
 }
 
-export default function KOLDetailPage({ params }: { params: { kol_id: string } }) {
-  const data = getLatestData()
-  const ep   = getEpisodeByKolId(data, params.kol_id)
+export default async function KOLDetailPage({ params }: { params: Promise<{ kol_id: string }> }) {
+  const { kol_id } = await params
+
+  const [ep, latestStocks, history] = await Promise.all([
+    getEpisodeByKolId(kol_id),
+    getLatestStocks(),
+    getConsensusHistory(),
+  ])
+
   if (!ep) notFound()
 
   const sc = SENT[ep.sentiment]
 
   const stockDetails = ep.stocks_mentioned.map(ticker => {
-    const found = data.consensus.stocks.find(s => s.ticker === ticker)
+    const found = latestStocks.find(s => s.ticker === ticker)
     return found ?? { ticker, name: ticker, market: 'US' as const, mentions: 1, sentiment: 'neutral' as const, kols: [] }
   })
-
-  const otherEpisodes = data.episodes.filter(
-    e => e.kol_id === ep.kol_id && e.title !== ep.title
-  )
 
   return (
     <div className="min-h-[100dvh]" style={{ background: 'var(--bg)' }}>
@@ -42,7 +45,7 @@ export default function KOLDetailPage({ params }: { params: { kol_id: string } }
       <header
         className="sticky top-0 z-50"
         style={{
-          background: 'rgba(255,255,255,0.92)',
+          background: 'rgba(11,18,32,0.85)',
           backdropFilter: 'blur(16px)',
           borderBottom: '1px solid var(--border)',
         }}
@@ -82,7 +85,7 @@ export default function KOLDetailPage({ params }: { params: { kol_id: string } }
                   color: ep.color,
                 }}
               >
-                {ep.kol_name[0]}
+                {ep.avatar || ep.kol_name[0] || '?'}
               </div>
 
               <div className="flex-1 min-w-0">
@@ -145,6 +148,11 @@ export default function KOLDetailPage({ params }: { params: { kol_id: string } }
           )}
         </div>
 
+        {/* Consensus history chart */}
+        {history.length > 1 && (
+          <ConsensusChart history={history} />
+        )}
+
         {/* Stocks mentioned */}
         {stockDetails.length > 0 && (
           <div className="card p-6">
@@ -181,29 +189,6 @@ export default function KOLDetailPage({ params }: { params: { kol_id: string } }
                   </div>
                 )
               })}
-            </div>
-          </div>
-        )}
-
-        {/* Other episodes */}
-        {otherEpisodes.length > 0 && (
-          <div className="card p-6">
-            <p className="section-label mb-4">同頻道其他集數</p>
-            <div className="space-y-2">
-              {otherEpisodes.map(other => (
-                <Link
-                  key={other.kol_id + other.title}
-                  href={`/kol/${other.kol_id}`}
-                  className="flex items-center gap-3 p-3 rounded-xl transition-colors group hover:bg-[var(--surface-2)]"
-                  style={{ border: '1px solid var(--border)' }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--text-2)] truncate">{other.title}</p>
-                    <p className="text-xs text-[var(--text-4)] font-mono mt-0.5">{other.published}</p>
-                  </div>
-                  <ChevronRight size={15} style={{ color: 'var(--text-4)' }} className="transition-transform duration-150 group-hover:translate-x-0.5" />
-                </Link>
-              ))}
             </div>
           </div>
         )}

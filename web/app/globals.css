@@ -126,9 +126,8 @@ a {
   border-radius: 3rem;
   background:
     radial-gradient(70% 70% at 50% 12%, rgba(111, 167, 255, 0.35) 0%, rgba(14, 19, 34, 0) 72%),
-    linear-gradient(180deg, rgba(8, 12, 22, 0.8) 0%, rgba(7, 10, 19, 0.35) 100%),
-    url('https://picsum.photos/seed/capital-flow/2000/1200') center/cover no-repeat;
-  filter: contrast(125%) saturate(70%) brightness(0.58);
+    radial-gradient(120% 80% at 80% 90%, rgba(129, 255, 212, 0.08) 0%, transparent 60%),
+    linear-gradient(160deg, rgba(15, 26, 54, 0.95) 0%, rgba(5, 7, 15, 0.98) 100%);
 }
 
 .hero-kicker {
@@ -592,6 +591,14 @@ a {
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.scale-in {
+  animation: scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fade-up {
+  animation: fadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .section-label {
