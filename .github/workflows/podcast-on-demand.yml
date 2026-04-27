@@ -71,6 +71,7 @@ jobs:
           PODCAST_EPISODE_NUMBER: ${{ inputs.episode_number }}
           PODCAST_CHAT_ID: ${{ inputs.chat_id }}
           PODCAST_MESSAGE_ID: ${{ inputs.message_id }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -u jobs/podcast_scanner.py
 
 
