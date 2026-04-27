@@ -76,6 +76,80 @@ def _build_episode_prompt(base_prompt: str, ep: dict) -> str:
     return f"{context}\n\n{base_prompt}"
 
 
+def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
+    """
+    從 NLM podcast prompt 的分析結果中提取結構化資料：
+    - summary  : 本集結論（2-3 句，用於 DB 摘要欄）
+    - stocks   : 提及的股票代碼列表（台股 4 碼 + 美股大寫）
+    - sentiment: 'bullish' | 'bearish' | 'neutral'
+
+    對應 podcast prompt 格式：
+      【文字紀錄】 ...
+      【投資倒數小結】
+      1. 台美股焦點標的：...
+      2. 本集結論：...
+    """
+    # ── 摘要：優先取「2. 本集結論」段落 ─────────────────────────────────
+    summary = ""
+    m = re.search(r'2[\.、]\s*本集結論[：:]\s*(.*?)(?=\n\n|\Z)', analysis, re.DOTALL)
+    if m:
+        summary = m.group(1).strip()
+    if not summary:
+        # Fallback：取【投資倒數小結】後第一段
+        m2 = re.search(r'【投資倒數小結】\s*(.*?)(?=\n\n\n|\Z)', analysis, re.DOTALL)
+        if m2:
+            summary = m2.group(1).strip()[:400]
+    if not summary:
+        summary = analysis[:400].strip()
+
+    # ── 股票代碼：從「1. 台美股焦點標的」段落提取 ────────────────────────
+    stocks: list[str] = []
+    m3 = re.search(r'1[\.、]\s*台美股焦點標的[：:](.*?)(?=2[\.、]|\Z)', analysis, re.DOTALL)
+    if m3:
+        section = m3.group(1)
+        tw = re.findall(r'\b(\d{4})\b', section)
+        us = re.findall(r'\b([A-Z]{2,5})\b', section)
+        skip = {
+            'AI', 'IT', 'US', 'TW', 'Q1', 'Q2', 'Q3', 'Q4',
+            'EPS', 'ETF', 'PE', 'PB', 'EV', 'IPO', 'RSI', 'MA',
+            'CEO', 'CFO', 'GDP', 'CPI', 'PCE', 'FED', 'ECB',
+        }
+        stocks = list(dict.fromkeys(tw + [t for t in us if t not in skip]))
+
+    # 同時比對中文公司名 → ticker（補充純中文文本的情況）
+    cn_map: dict[str, str] = {
+        "台積電": "2330", "輝達": "NVDA", "英偉達": "NVDA",
+        "特斯拉": "TSLA", "超微": "AMD", "蘋果": "AAPL",
+        "微軟": "MSFT", "谷歌": "GOOGL", "亞馬遜": "AMZN",
+        "鴻海": "2317", "聯發科": "2454", "廣達": "2382",
+        "富邦金": "2881", "國泰金": "2882", "大立光": "3008",
+        "台達電": "2308", "英特爾": "INTC", "美光": "MU",
+        "高通": "QCOM", "博通": "AVGO", "Meta": "META",
+        "ARM": "ARM", "台塑": "1301", "中鋼": "2002",
+        "聯電": "2303", "日月光": "3711", "瑞昱": "2379",
+        "緯創": "3231", "技嘉": "2376", "微星": "2377",
+    }
+    for cn, ticker in cn_map.items():
+        if cn in analysis and ticker not in stocks:
+            stocks.append(ticker)
+
+    # ── 情緒判斷：正負關鍵詞計分 ─────────────────────────────────────────
+    bullish_kw = ['看多', '偏多', '樂觀', '買進', '做多', '突破', '強勢',
+                  '利多', '長多', '看好', '正向', '走強', '上攻', '偏樂']
+    bearish_kw = ['看空', '偏空', '謹慎', '賣出', '做空', '回檔', '壓力',
+                  '利空', '下跌', '危險', '風險高', '弱勢', '偏保守', '下行']
+    bull = sum(analysis.count(w) for w in bullish_kw)
+    bear = sum(analysis.count(w) for w in bearish_kw)
+    if bull > bear + 2:
+        sentiment = 'bullish'
+    elif bear > bull + 2:
+        sentiment = 'bearish'
+    else:
+        sentiment = 'neutral'
+
+    return summary, stocks, sentiment
+
+
 def _apple_episode_hint(url: str) -> dict:
     """
     偵測 Apple Podcasts 單集 URL（含 ?i= 參數）並萃取比對線索。
@@ -530,15 +604,17 @@ def main() -> None:
 
                 # 寫入 Neon DB（僅 daily 模式，on-demand 不存 DB）
                 if mode == "daily":
+                    ep_summary, ep_stocks, ep_sentiment = _parse_nlm_analysis(analysis)
+                    print(f"  [PARSE] sentiment={ep_sentiment} stocks={ep_stocks[:5]}")
                     _db_kol_id = ensure_kol(rss_url, label or "")
                     write_episode(
                         kol_id=_db_kol_id,
                         guid=ep["guid"],
                         title=ep["title"],
                         published_str=format_rss_date(ep["published"]),
-                        summary=analysis[:1000],
-                        sentiment="neutral",   # podcast_scanner 暫不解析情緒
-                        stocks_mentioned=[],
+                        summary=ep_summary or analysis[:1000],
+                        sentiment=ep_sentiment,
+                        stocks_mentioned=ep_stocks,
                         report_url="",
                     )
 

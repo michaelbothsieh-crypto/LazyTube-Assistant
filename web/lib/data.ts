@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless'
+import { unstable_cache } from 'next/cache'
 import type { ConsensusData, Episode, Stock, ConsensusHistory } from '@/types'
 
 function sql() {
@@ -7,7 +8,14 @@ function sql() {
   return neon(url)
 }
 
-export async function getLatestData(): Promise<ConsensusData> {
+// 一次 ISR 週期（300s）內不管幾個頁面呼叫，只打一次 DB
+export const getLatestData = unstable_cache(
+  _getLatestData,
+  ['latest-consensus-data'],
+  { revalidate: 300, tags: ['consensus'] }
+)
+
+async function _getLatestData(): Promise<ConsensusData> {
   const db = sql()
 
   // 取最新一天的共識資料
@@ -44,7 +52,7 @@ export async function getLatestData(): Promise<ConsensusData> {
       SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
       FROM consensus_daily
       ORDER BY date DESC
-      LIMIT 14
+      LIMIT 30
     `,
   ])
 
@@ -160,7 +168,7 @@ export async function getConsensusHistory(): Promise<ConsensusHistory[]> {
     SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
     FROM consensus_daily
     ORDER BY date ASC
-    LIMIT 14
+    LIMIT 30
   `
   return rows.map((h): ConsensusHistory => ({
     date: h.date instanceof Date

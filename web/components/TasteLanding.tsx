@@ -139,7 +139,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
 
   const topStocks = data.consensus.stocks.slice(0, 5)
   const keywords = data.consensus.top_keywords.slice(0, 5)
-  const episodes = data.episodes.slice(0, 6)
+  const episodes = data.episodes.slice(0, 15)
 
   return (
     <main ref={rootRef} className="taste-root overflow-x-hidden w-full max-w-full">
@@ -210,8 +210,8 @@ export default function TasteLanding({ data }: TasteLandingProps) {
             <small>{t.generatedAt} {data.generated_at}</small>
           </article>
 
-          <article className="bento-card bento-theme" data-scale-image>
-            <img src="https://picsum.photos/seed/taiwan-semiconductor/900/700" alt="" />
+          <article className="bento-card bento-theme">
+            <div className="bento-theme-glow" />
             <div>
               <p>{t.thesis}</p>
               <h3>{data.consensus.weekly_theme}</h3>
@@ -276,18 +276,34 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <div className="accordion-stack">
             {episodes.map((ep, i) => (
               <Link key={`${ep.kol_id}-${i}`} href={`/kol/${ep.kol_id}`} className="accordion-item">
+                {/* 以 KOL 色彩光暈取代 picsum 圖片 */}
                 <div className="accordion-image-wrap">
-                  <img
-                    data-scale-image
-                    src={`https://picsum.photos/seed/${ep.kol_id}-${i}/1100/700`}
-                    alt=""
-                    className="accordion-image"
+                  <div
+                    className="accordion-color-swatch"
+                    style={{ background: ep.color || '#6366f1' }}
                   />
+                  <div
+                    className="accordion-avatar"
+                    style={{ color: ep.color || '#6366f1', borderColor: `${ep.color || '#6366f1'}40` }}
+                  >
+                    {ep.avatar || ep.kol_name[0] || '🎙'}
+                  </div>
                 </div>
                 <div className="accordion-content">
                   <span>{ep.kol_name}</span>
                   <h3>{ep.title}</h3>
-                  <p>{ep.summary}</p>
+                  <p>{ep.summary.slice(0, 120)}{ep.summary.length > 120 ? '…' : ''}</p>
+                  <div className="accordion-meta">
+                    <span
+                      className="acc-sentiment"
+                      style={{ color: sentimentColor[ep.sentiment] }}
+                    >
+                      ● {ep.sentiment === 'bullish' ? t.bullish : ep.sentiment === 'bearish' ? t.bearish : t.neutral}
+                    </span>
+                    {ep.stocks_mentioned.slice(0, 4).map(ticker => (
+                      <span key={ticker} className="acc-ticker">{ticker}</span>
+                    ))}
+                  </div>
                 </div>
               </Link>
             ))}
