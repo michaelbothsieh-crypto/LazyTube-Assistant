@@ -49,6 +49,43 @@ def _looks_like_rss_url(url: str) -> bool:
     return any(m in url.lower() for m in markers)
 
 
+def _apple_episode_hint(url: str) -> dict:
+    """
+    偵測 Apple Podcasts 單集 URL（含 ?i= 參數）並萃取比對線索。
+    URL 格式：podcasts.apple.com/.../podcast/{slug}/id{show_id}?i={episode_trackid}
+    回傳 {'date': 'YYYY-MM-DD', 'slug': '...'}，若非單集 URL 則回傳 {}。
+    """
+    from urllib.parse import urlparse, parse_qs, unquote
+    parsed = urlparse(url)
+    if "podcasts.apple.com" not in parsed.netloc:
+        return {}
+    if "i" not in parse_qs(parsed.query):
+        return {}
+
+    # 從 path 找到 episode slug（跳過 locale、"podcast"、"id{digits}" 段）
+    path = unquote(parsed.path)
+    slug = ""
+    for seg in path.split("/"):
+        if not seg:
+            continue
+        if re.match(r"id\d+$", seg):
+            continue
+        if seg == "podcast":
+            continue
+        if re.match(r"[a-z]{2}$", seg):   # locale e.g. "tw"
+            continue
+        slug = seg
+        break
+
+    hint: dict = {"slug": slug, "date": ""}
+    # slug 通常以 YYYY-M-D 開頭，例如 "2026-4-24-五-費半破萬點..."
+    date_m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", slug)
+    if date_m:
+        y, mo, d = date_m.groups()
+        hint["date"] = f"{y}-{int(mo):02d}-{int(d):02d}"
+    return hint
+
+
 def format_rss_date(raw: str) -> str:
     """
     將 RSS 各種日期格式統一轉為 YYYY-MM-DD。
@@ -91,17 +128,23 @@ def fetch_new_episodes(
     掃描單一 RSS，回傳待處理的集數。
     mode="latest" + episode_number 空  → 取最新一集（不做 dedup）
     mode="latest" + episode_number="655" → 在 title 中搜尋含 "655" 的集數
+    mode="latest" + Apple episode URL   → 從 URL 萃取日期/關鍵字比對正確集數
     mode="daily"  → 以 (rss_url, chat_id) 為複合 key 過濾已處理 GUID
     """
+    # 在解析 RSS 前先記錄 Apple 單集 URL 的線索（解析後 rss_url 會被替換掉）
+    apple_hint = _apple_episode_hint(rss_url)
+    if apple_hint:
+        print(f"  [INFO] 偵測到 Apple 單集 URL，比對線索：date={apple_hint['date']} slug={apple_hint['slug'][:40]}")
+
     # 保險層：若收到 Apple Podcasts / SoundOn / Firstory 頁面 URL，先解析成 RSS
     if not _looks_like_rss_url(rss_url):
         from app.podcast_rss_resolver import resolve_rss_fast
         resolved = resolve_rss_fast(rss_url)
         if resolved:
-            print(f"  🔄 URL 已解析：{rss_url[:60]} → {resolved[:60]}")
+            print(f"  [OK] URL 已解析：{rss_url[:60]} → {resolved[:60]}")
             rss_url = resolved
         else:
-            print(f"  ❌ 無法解析 URL 為 RSS：{rss_url}")
+            print(f"  [FAIL] 無法解析 URL 為 RSS：{rss_url}")
             return []
 
     print(f"📡 揉描 RSS：{rss_url}")
@@ -142,10 +185,30 @@ def fetch_new_episodes(
                 or f"第{episode_number}集" in ep["title"]
             ]
             if matched:
-                print(f"  ✅ 找到集數 {episode_number}：{matched[0]['title']}")
+                print(f"  [OK] 找到集數 {episode_number}：{matched[0]['title']}")
                 return [matched[0]]
-            # RSS 有可能只列出近期集數，找不到時提示
-            print(f"  ⚠️  找不到集數 {episode_number}（RSS 僅包含最近 {len(episodes)} 集），改取最新一集")
+            print(f"  [WARN] 找不到集數 {episode_number}（RSS 僅包含最近 {len(episodes)} 集），改取最新一集")
+
+        elif apple_hint:
+            # Apple 單集 URL：優先以發布日期比對，其次以 slug 關鍵字比對
+            if apple_hint["date"]:
+                date_matched = [
+                    ep for ep in episodes
+                    if apple_hint["date"] in format_rss_date(ep["published"])
+                ]
+                if date_matched:
+                    print(f"  [OK] Apple 單集 URL 日期比對成功 {apple_hint['date']}：{date_matched[0]['title']}")
+                    return [date_matched[0]]
+
+            # 日期比對失敗，改用 slug 關鍵字（取前 5 個非空 token）
+            slug_tokens = [t for t in apple_hint["slug"].split("-") if len(t) > 1][:5]
+            for ep in episodes:
+                if any(tok in ep["title"] for tok in slug_tokens):
+                    print(f"  [OK] Apple 單集 URL 關鍵字比對成功：{ep['title']}")
+                    return [ep]
+
+            print(f"  [WARN] Apple 單集 URL 無法比對到對應集數，改取最新一集")
+
         return [episodes[0]]
 
     # daily：以 (rss_url, chat_id) 為複合 key 去重
