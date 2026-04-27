@@ -226,7 +226,11 @@ async def handle_podcast(chat_id: str, text: str) -> None:
             rss_url = "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml"
 
     # 若傳入的是頁面 URL 而非 RSS，嘗試快速解析（Vercel 環境，不下整份 RSS）
-    if not rss_url.endswith(".xml") and "feeds." not in rss_url:
+    # 例外：Apple Podcasts 單集 URL（含 ?i= episode trackId）必須原樣傳給 Actions，
+    # 讓 podcast_scanner.py 提取集數線索後再解析 RSS，否則集數資訊會遺失。
+    is_apple_episode_url = "podcasts.apple.com" in rss_url and "?i=" in rss_url
+
+    if not is_apple_episode_url and not rss_url.endswith(".xml") and "feeds." not in rss_url:
         resolved = resolve_rss_fast(rss_url)
         if resolved:
             rss_url = resolved
