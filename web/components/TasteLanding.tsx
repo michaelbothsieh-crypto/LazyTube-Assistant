@@ -137,9 +137,16 @@ export default function TasteLanding({ data }: TasteLandingProps) {
     { scope: rootRef }
   )
 
+  const [sentFilter, setSentFilter] = useState<'all' | 'bullish' | 'neutral' | 'bearish'>('all')
+
   const topStocks = data.consensus.stocks.slice(0, 5)
   const keywords = data.consensus.top_keywords.slice(0, 5)
   const episodes = data.episodes.slice(0, 15)
+
+  const filteredEpisodes = sentFilter === 'all' ? episodes : episodes.filter(ep => ep.sentiment === sentFilter)
+  const bullishCount = episodes.filter(ep => ep.sentiment === 'bullish').length
+  const neutralCount = episodes.filter(ep => ep.sentiment === 'neutral').length
+  const bearishCount = episodes.filter(ep => ep.sentiment === 'bearish').length
 
   return (
     <main ref={rootRef} className="taste-root overflow-x-hidden w-full max-w-full">
@@ -261,53 +268,76 @@ export default function TasteLanding({ data }: TasteLandingProps) {
       </section>
 
       <section id="desire" className="chapter chapter-wide">
-        <div className="desire-layout">
-          <aside className="desire-left">
-            <h2>{t.desireTitle}</h2>
-            <p ref={textRevealRef} className="reveal-text">
-              {t.reveal.split(
-                ' '
-              ).map((w, i) => (
-                <span key={`${w}-${i}`}>{w} </span>
-              ))}
-            </p>
-          </aside>
+        <div className="kol-section-header">
+          <h2>{t.desireTitle}</h2>
+          <div className="kol-filter-tabs">
+            <button
+              type="button"
+              className={sentFilter === 'all' ? 'active' : ''}
+              onClick={() => setSentFilter('all')}
+            >
+              全部 {episodes.length}
+            </button>
+            <button
+              type="button"
+              className={sentFilter === 'bullish' ? 'active' : ''}
+              onClick={() => setSentFilter('bullish')}
+            >
+              多方 {bullishCount}
+            </button>
+            <button
+              type="button"
+              className={sentFilter === 'neutral' ? 'active-neutral' : ''}
+              onClick={() => setSentFilter('neutral')}
+            >
+              中性 {neutralCount}
+            </button>
+            {bearishCount > 0 && (
+              <button
+                type="button"
+                className={sentFilter === 'bearish' ? 'active-bearish' : ''}
+                onClick={() => setSentFilter('bearish')}
+              >
+                空方 {bearishCount}
+              </button>
+            )}
+          </div>
+        </div>
 
-          <div className="accordion-stack">
-            {episodes.map((ep, i) => (
-              <Link key={`${ep.kol_id}-${i}`} href={`/kol/${ep.kol_id}`} className="accordion-item">
-                {/* 以 KOL 色彩光暈取代 picsum 圖片 */}
-                <div className="accordion-image-wrap">
-                  <div
-                    className="accordion-color-swatch"
-                    style={{ background: ep.color || '#6366f1' }}
-                  />
-                  <div
-                    className="accordion-avatar"
-                    style={{ color: ep.color || '#6366f1', borderColor: `${ep.color || '#6366f1'}40` }}
+        <div className="kol-grid">
+          {filteredEpisodes.map((ep, i) => {
+            const sentLabel = ep.sentiment === 'bullish' ? t.bullish : ep.sentiment === 'bearish' ? t.bearish : t.neutral
+            const sentBg = ep.sentiment === 'bullish'
+              ? 'rgba(129,255,212,0.12)'
+              : ep.sentiment === 'bearish'
+              ? 'rgba(255,143,143,0.12)'
+              : 'rgba(151,166,190,0.12)'
+            const sentBorder = ep.sentiment === 'bullish'
+              ? 'rgba(129,255,212,0.3)'
+              : ep.sentiment === 'bearish'
+              ? 'rgba(255,143,143,0.3)'
+              : 'rgba(151,166,190,0.3)'
+            return (
+              <Link key={`${ep.kol_id}-${i}`} href={`/kol/${ep.kol_id}`} className="kol-card">
+                <div className="kol-card-top">
+                  <div className="kol-card-avatar">{ep.avatar || ep.kol_name[0] || '🎙'}</div>
+                  <span className="kol-card-name">{ep.kol_name}</span>
+                  <span
+                    className="kol-card-sent"
+                    style={{ background: sentBg, border: `1px solid ${sentBorder}`, color: sentimentColor[ep.sentiment] }}
                   >
-                    {ep.avatar || ep.kol_name[0] || '🎙'}
-                  </div>
+                    {sentLabel}
+                  </span>
                 </div>
-                <div className="accordion-content">
-                  <span>{ep.kol_name}</span>
-                  <h3>{ep.title}</h3>
-                  <p>{ep.summary.slice(0, 120)}{ep.summary.length > 120 ? '…' : ''}</p>
-                  <div className="accordion-meta">
-                    <span
-                      className="acc-sentiment"
-                      style={{ color: sentimentColor[ep.sentiment] }}
-                    >
-                      ● {ep.sentiment === 'bullish' ? t.bullish : ep.sentiment === 'bearish' ? t.bearish : t.neutral}
-                    </span>
-                    {ep.stocks_mentioned.slice(0, 4).map(ticker => (
-                      <span key={ticker} className="acc-ticker">{ticker}</span>
-                    ))}
-                  </div>
+                <p className="kol-card-title">{ep.title}</p>
+                <div className="kol-card-tickers">
+                  {ep.stocks_mentioned.slice(0, 5).map(ticker => (
+                    <span key={ticker}>{ticker}</span>
+                  ))}
                 </div>
               </Link>
-            ))}
-          </div>
+            )
+          })}
         </div>
       </section>
 
