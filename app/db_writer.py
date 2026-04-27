@@ -168,7 +168,7 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
                 rows = cur.fetchall()
 
         if not rows:
-            print(f"  ℹ️  {today} 無集數，跳過 consensus 計算")
+            print(f"  [INFO] {today} no episodes, skipping consensus")
             return True
 
         # ── Sentiment distribution ────────────────────────────────────────
@@ -262,10 +262,10 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
                     )
             conn.commit()
 
-        print(f"  ✅ Consensus 已更新：score={consensus_score} bullish={bullish_pct}%"
-              f" ({n} 集, {len(stock_rows)} 支標的)")
+        print(f"  [OK] Consensus updated: score={consensus_score} bullish={bullish_pct}%"
+              f" ({n} eps, {len(stock_rows)} stocks)")
         return True
 
     except Exception as exc:
-        print(f"  ⚠️  compute_and_write_consensus 失敗：{exc}")
+        print(f"  [WARN] compute_and_write_consensus failed: {exc}")
         return False
