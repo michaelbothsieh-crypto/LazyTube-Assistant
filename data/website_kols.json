@@ -1,0 +1,37 @@
+[
+  {
+    "label": "股癌 Podcast",
+    "kol_id": "gooaye",
+    "rss_url": "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml"
+  },
+  {
+    "label": "游庭皓的財經皓角",
+    "kol_id": "yutin",
+    "rss_url": "https://feeds.soundcloud.com/users/soundcloud:users:735679489/sounds.rss"
+  },
+  {
+    "label": "MacroMicro 財經M平方",
+    "kol_id": "macromicro",
+    "rss_url": "https://feeds.soundon.fm/podcasts/d2aab16c-3a70-4023-b52b-e50f07852ecd.xml"
+  },
+  {
+    "label": "比爾的財經廚房",
+    "kol_id": "billkitchen",
+    "rss_url": "https://anchor.fm/s/120ba8d0/podcast/rss"
+  },
+  {
+    "label": "兆華與股惑仔",
+    "kol_id": "zhaohualink",
+    "rss_url": "https://feeds.soundon.fm/podcasts/91be014b-9f55-4bf3-a910-b232eda82d11.xml"
+  },
+  {
+    "label": "財報狗",
+    "kol_id": "caalaw",
+    "rss_url": "https://feed.firstory.me/rss/user/clcftm46z000201z45w1c47fi"
+  },
+  {
+    "label": "呱吉的股市觀察",
+    "kol_id": "morales",
+    "rss_url": "https://feeds.soundon.fm/podcasts/ecd31076-d12d-46dc-ba11-32d24b41cca5.xml"
+  }
+]

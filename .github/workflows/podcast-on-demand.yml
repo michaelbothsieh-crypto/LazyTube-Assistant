@@ -65,6 +65,7 @@ jobs:
           # （空字串 Secret 會覆蓋 fallback 導致相對路徑，TG 連結失效）
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           CUSTOM_PROMPT: "podcast"
           PODCAST_RSS_URLS: ${{ inputs.rss_url }}
           PODCAST_MODE: ${{ inputs.mode }}

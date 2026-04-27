@@ -525,12 +525,28 @@ def main() -> None:
     prompt = get_nlm_prompt(prompt_key)
     print(f"📝 模式：{mode}  Prompt：{prompt_key}  集數：{episode_number or '最新'}")
 
-    # RSS 來源優先順序：環境變數 > 訂閱清單
-    # 兩者皆空時不執行（不再 fallback 預設頻道，避免未訂閱也自動推送）
+    # RSS 來源優先順序：
+    #   1. PODCAST_RSS_URLS 環境變數（on-demand 單次查詢）
+    #   2. WEBSITE_KOLS_FILE（網站專屬 KOL 清單，daily scanner 使用）
+    #   3. processed_podcasts.json 訂閱清單（TG /subpodcast 訂閱）
     rss_env = os.environ.get("PODCAST_RSS_URLS", "").strip()
+    website_kols_file = os.environ.get("WEBSITE_KOLS_FILE", "").strip()
+
     if rss_env:
         rss_sources = [(u.strip(), "") for u in rss_env.split(",") if u.strip()]
+    elif website_kols_file and Path(website_kols_file).exists():
+        import json as _json
+        try:
+            kols = _json.loads(Path(website_kols_file).read_text(encoding="utf-8"))
+            rss_sources = [(k["rss_url"], k.get("label", "")) for k in kols if k.get("rss_url")]
+            print(f"📋 網站 KOL 清單：{len(rss_sources)} 個頻道（{website_kols_file}）")
+        except Exception as e:
+            print(f"⚠️  無法讀取 {website_kols_file}：{e}，改用訂閱清單")
+            rss_sources = []
     else:
+        rss_sources = []
+
+    if not rss_sources:
         subs = get_subscriptions()
         if subs:
             rss_sources = [(url, info.get("label", "")) for url, info in subs.items()]

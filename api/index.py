@@ -150,30 +150,39 @@ async def external_dispatch(
 
         # ── Podcast 指令（TG / LINE 通用）──────────────────────────────────
         if command in ["podcast", "/podcast"]:
-            # 單次查詢最新一集
             rss_url = url or ""
+            episode_number = str(data.get("episode_number", "")).strip()
+
             if not rss_url:
-                # 從訂閱清單取第一個
                 from app.podcast_state import get_subscriptions
                 subs = get_subscriptions()
                 rss_url = next(iter(subs), "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml")
 
-            # 若傳入的是頁面 URL，嘗試解析 RSS
-            if rss_url and not (rss_url.endswith(".xml") or "feeds." in rss_url):
-                from app.podcast_rss_resolver import resolve_rss
-                resolved, _ = resolve_rss(rss_url)
+            # Apple 單集 URL（含 ?i=）必須原樣傳給 Actions，讓 scanner 萃取集數線索
+            is_apple_episode_url = "podcasts.apple.com" in rss_url and "?i=" in rss_url
+
+            if not is_apple_episode_url and not rss_url.endswith(".xml") and "feeds." not in rss_url:
+                from app.podcast_rss_resolver import resolve_rss_fast
+                resolved = resolve_rss_fast(rss_url)
                 if resolved:
                     rss_url = resolved
 
+            Notifier.send_text(chat_id, "🎙️ Podcast 分析已建立，預計 5-15 分鐘後完成並推送。")
+
             success = await GitHubActionManager.dispatch(
                 "podcast-on-demand.yml",
-                {"rss_url": rss_url, "mode": "latest", "chat_id": str(chat_id), "message_id": data.get("message_id", "")},
+                {
+                    "rss_url": rss_url,
+                    "mode": "latest",
+                    "episode_number": episode_number,
+                    "chat_id": str(chat_id),
+                    "message_id": data.get("message_id", ""),
+                },
                 timeout=10.0,
             )
             if not success:
                 logger.error("podcast-on-demand dispatch failed for chat_id=%s", chat_id)
-                if not Notifier.send_text(chat_id, "❌ Podcast 任務派送失敗，請稍後再試。"):
-                    return JSONResponse(content={"ok": False, "error": "dispatch failed"}, status_code=500)
+                Notifier.send_text(chat_id, "❌ Podcast 任務派送失敗，請稍後再試。")
             return JSONResponse(content={"ok": True})
 
         if command in ["subpodcast", "/subpodcast"]:

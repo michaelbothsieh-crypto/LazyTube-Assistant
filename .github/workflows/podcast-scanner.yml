@@ -58,10 +58,11 @@ jobs:
           # 注意：不注入 APP_BASE_URL，讓 config.py 的 fallback 生效
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           CUSTOM_PROMPT: "podcast"
           PODCAST_EPISODE_NUMBER: ""
-          # PODCAST_RSS_URLS 不設定 → 自動使用訂閱清單
-          # 若清單為空則不執行，避免誤推預設頻道
+          # 網站專屬 KOL 清單（與 TG /subpodcast 訂閱完全分開）
+          WEBSITE_KOLS_FILE: data/website_kols.json
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           python jobs/podcast_scanner.py
