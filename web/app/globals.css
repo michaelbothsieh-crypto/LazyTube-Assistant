@@ -43,12 +43,12 @@ a {
 }
 
 .chapter {
-  padding: clamp(4rem, 7vw, 6rem) 1.25rem;
+  padding: clamp(3.2rem, 5.2vw, 4.8rem) 1.25rem;
 }
 
 .chapter-wide {
-  padding-top: clamp(4.8rem, 8vw, 6.8rem);
-  padding-bottom: clamp(5rem, 8.5vw, 7rem);
+  padding-top: clamp(3.8rem, 6vw, 5.4rem);
+  padding-bottom: clamp(4rem, 6.4vw, 5.8rem);
 }
 
 .taste-nav {
@@ -168,7 +168,7 @@ a {
 }
 
 .hero-cta-row {
-  margin-top: 2rem;
+  margin-top: 1.4rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -201,7 +201,7 @@ a {
 
 .taste-marquee {
   width: min(1180px, calc(100% - 2.8rem));
-  margin: 0 auto 1.45rem;
+  margin: 0 auto 1rem;
   overflow: hidden;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -528,7 +528,7 @@ a {
 }
 
 .taste-footer {
-  margin-top: 3.2rem;
+  margin-top: 2.2rem;
   padding-top: 1.2rem;
   border-top: 1px solid var(--line);
   display: flex;
@@ -543,13 +543,13 @@ a {
 
 @media (max-width: 1024px) {
   .chapter {
-    padding-top: 6rem;
-    padding-bottom: 6rem;
+    padding-top: 4.3rem;
+    padding-bottom: 4.3rem;
   }
 
   .chapter-wide {
-    padding-top: 7.2rem;
-    padding-bottom: 7.2rem;
+    padding-top: 4.8rem;
+    padding-bottom: 4.8rem;
   }
 
   .bento-score,
@@ -769,6 +769,28 @@ a {
   gap: 0.4rem;
 }
 
+/* Conclusion / future direction card */
+.kol-conclusion-card {
+  grid-column: span 6;
+  border-left: 3px solid var(--accent);
+}
+
+.kol-conclusion-body {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kol-conclusion-text {
+  margin: 0 !important;
+  color: var(--text-dim) !important;
+  font-size: 1rem !important;
+  line-height: 1.78 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
 /* Summary bento card */
 .kol-summary-card {
   grid-column: span 4;
@@ -866,6 +888,28 @@ a {
   border-radius: 0.85rem;
   border: 1px solid rgba(145, 170, 218, 0.16);
   background: rgba(10, 16, 30, 0.55);
+}
+
+.kol-stock-item-v {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.kol-stock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.kol-stock-comment {
+  margin: 0.32rem 0 0 !important;
+  font-size: 0.8rem !important;
+  color: var(--text-faint) !important;
+  line-height: 1.55 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
 }
 
 .kol-stock-name {

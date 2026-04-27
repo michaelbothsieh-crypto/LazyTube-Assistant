@@ -17,6 +17,28 @@ const SENT = {
   neutral: { label: '中性觀望', color: 'var(--neutral)', bg: 'var(--neutral-bg)', border: 'var(--neutral-border)', Icon: Minus },
 }
 
+function parseSummary(summary: string) {
+  const transcriptMatch = summary.match(/【文字紀錄】\s*([\s\S]*?)(?=\n【|$)/)
+  const transcript = transcriptMatch?.[1]?.trim() ?? ''
+
+  const conclusionSectionMatch = summary.match(/【投資倒數小結】\s*([\s\S]*)$/)
+  const conclusionSection = conclusionSectionMatch?.[1]?.trim() ?? ''
+
+  const stockSectionMatch = conclusionSection.match(/1[．.、][^\n]*[：:]([\s\S]*?)(?=\n2[．.、]|$)/)
+  const stockLines = stockSectionMatch?.[1]?.trim().split('\n').filter(l => l.trim()) ?? []
+
+  const stockOpinions: { ticker: string; comment: string }[] = []
+  for (const line of stockLines) {
+    const m = line.match(/^([A-Z]{1,5}|\d{4})(?:[（(][^）)]*[）)])?[：:\-\s]+(.+)/)
+    if (m) stockOpinions.push({ ticker: m[1], comment: m[2].trim() })
+  }
+
+  const conclusionMatch = conclusionSection.match(/2[．.、][^\n]*[：:]\s*([\s\S]*)$/)
+  const conclusion = conclusionMatch?.[1]?.trim() ?? ''
+
+  return { transcript, stockOpinions, conclusion }
+}
+
 export default async function KOLDetailPage({ params }: { params: Promise<{ kol_id: string }> }) {
   const { kol_id } = await params
 
@@ -35,6 +57,9 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
   const stockDetails = ep.stocks_mentioned.map(ticker =>
     stockMap.get(ticker) ?? { ticker, name: ticker, market: 'US' as const, mentions: 1, sentiment: 'neutral' as const, kols: [] }
   )
+
+  const { transcript, stockOpinions, conclusion } = parseSummary(ep.summary)
+  const stockOpinionMap = new Map(stockOpinions.map(s => [s.ticker, s.comment]))
 
   // Double for seamless CSS marquee loop
   const marqueeTickers = stockDetails.length > 0
@@ -127,11 +152,55 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
       <section className="chapter-wide">
         <div className="bento-grid grid-flow-dense">
 
-          {/* Summary — span 4：完整報告，支援換行段落 */}
+          {/* Conclusion / future direction — span 6, highest priority */}
+          {conclusion && (
+            <article className="bento-card kol-conclusion-card">
+              <p>本集結論 · 未來方向</p>
+              <div className="kol-conclusion-body">
+                {conclusion.split('\n').filter(l => l.trim()).map((line, i) => (
+                  <p key={i} className="kol-conclusion-text">{line}</p>
+                ))}
+              </div>
+            </article>
+          )}
+
+          {/* Stocks with individual opinions — span 6 */}
+          {stockDetails.length > 0 && (
+            <article className="bento-card kol-stocks-card">
+              <p>本集提及標的</p>
+              <div className="kol-stocks-grid">
+                {stockDetails.map(s => {
+                  const ssc = SENT[s.sentiment]
+                  const opinion = stockOpinionMap.get(s.ticker)
+                  return (
+                    <div key={s.ticker} className={`kol-stock-item${opinion ? ' kol-stock-item-v' : ''}`}>
+                      <div className="kol-stock-row">
+                        <span className={/^\d/.test(s.ticker) ? 'ticker-tw' : 'ticker-us'}>
+                          {s.ticker}
+                        </span>
+                        <span className="kol-stock-name">{s.name}</span>
+                        <span
+                          className="kol-stock-badge"
+                          style={{ background: ssc.bg, border: `1px solid ${ssc.border}`, color: ssc.color }}
+                        >
+                          <ssc.Icon size={11} />
+                          {s.sentiment === 'bullish' ? '多' : s.sentiment === 'bearish' ? '空' : '中'}
+                        </span>
+                        <span className="kol-stock-mentions">{s.mentions}x</span>
+                      </div>
+                      {opinion && <p className="kol-stock-comment">{opinion}</p>}
+                    </div>
+                  )
+                })}
+              </div>
+            </article>
+          )}
+
+          {/* Transcript — span 4 */}
           <article className="bento-card kol-summary-card">
-            <p>本集完整分析</p>
+            <p>{transcript ? '文字紀錄' : '本集完整分析'}</p>
             <div className="kol-summary-body">
-              {ep.summary.split('\n').map((line, i) => {
+              {(transcript || ep.summary).split('\n').map((line, i) => {
                 if (!line.trim()) return <div key={i} className="kol-summary-spacer" />
                 if (line.startsWith('【') && line.endsWith('】'))
                   return <p key={i} className="kol-summary-section-title">{line}</p>
@@ -165,34 +234,6 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
             </div>
           </article>
 
-          {/* Stocks — span 6 */}
-          {stockDetails.length > 0 && (
-            <article className="bento-card kol-stocks-card">
-              <p>本集提及標的</p>
-              <div className="kol-stocks-grid">
-                {stockDetails.map(s => {
-                  const ssc = SENT[s.sentiment]
-                  return (
-                    <div key={s.ticker} className="kol-stock-item">
-                      <span className={/^\d/.test(s.ticker) ? 'ticker-tw' : 'ticker-us'}>
-                        {s.ticker}
-                      </span>
-                      <span className="kol-stock-name">{s.name}</span>
-                      <span
-                        className="kol-stock-badge"
-                        style={{ background: ssc.bg, border: `1px solid ${ssc.border}`, color: ssc.color }}
-                      >
-                        <ssc.Icon size={11} />
-                        {s.sentiment === 'bullish' ? '多' : s.sentiment === 'bearish' ? '空' : '中'}
-                      </span>
-                      <span className="kol-stock-mentions">{s.mentions}x</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </article>
-          )}
-
           {/* Chart — span 6 */}
           {history.length > 1 && (
             <article className="bento-card kol-chart-card">
@@ -204,7 +245,7 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
         </div>
 
         {/* Footer — mirrors .taste-footer */}
-        <div className="taste-footer" style={{ marginTop: '4rem' }}>
+        <div className="taste-footer" style={{ marginTop: '2.6rem' }}>
           <Link href="/" className="kol-back-link">
             <ArrowLeft size={14} />
             回到所有 KOL 今日摘要
