@@ -242,13 +242,29 @@ async def handle_podcast(chat_id: str, text: str) -> None:
             )
             return
 
-    episode_label = f"EP{episode_number}" if episode_number else "最新一集"
+    if episode_number:
+        episode_label = f"EP{episode_number}"
+    elif is_apple_episode_url:
+        # 從 URL path 提取日期/標題作為顯示用標籤
+        from urllib.parse import urlparse, unquote
+        _path = unquote(urlparse(rss_url).path)
+        _slug = next(
+            (s for s in _path.split("/")
+             if s and s != "podcast" and not s.startswith("id") and len(s) > 2 and not (len(s) == 2 and s.isalpha())),
+            ""
+        )
+        episode_label = _slug[:40] or "指定集數"
+        display_url = rss_url[:80]
+    else:
+        episode_label = "最新一集"
+
+    display_url = rss_url[:80]
 
     pending = await send_telegram_message(
         chat_id,
         f"🎙️ <b>Podcast 即時分析已建立</b>\n\n"
         f"📻 集數：{episode_label}\n"
-        f"🔗 RSS：<code>{rss_url[:80]}</code>\n\n"
+        f"🔗 來源：<code>{display_url}</code>\n\n"
         f"⏳ 預計需要 5-15 分鐘（含音檔下載 + AI 轉錄 + 財經分析），完成後自動推送。",
     )
     message_id = extract_message_id(pending)
