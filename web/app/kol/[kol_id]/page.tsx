@@ -2,10 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAllKolIds, getEpisodeByKolId, getLatestStocks, getConsensusHistory } from '@/lib/data'
 import ConsensusChart from '@/components/ConsensusChart'
-import {
-  ArrowLeft, Calendar, TrendUp, TrendDown, Minus,
-  Mic, ExternalLink, Users, BarChart2, ChevronRight,
-} from '@/components/icons'
+import { ArrowLeft, TrendUp, TrendDown, Minus, ExternalLink } from '@/components/icons'
 
 export const revalidate = 300
 
@@ -32,180 +29,170 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
   if (!ep) notFound()
 
   const sc = SENT[ep.sentiment]
+  const accentColor = ep.color || '#81ffd4'
 
   const stockDetails = ep.stocks_mentioned.map(ticker => {
     const found = latestStocks.find(s => s.ticker === ticker)
     return found ?? { ticker, name: ticker, market: 'US' as const, mentions: 1, sentiment: 'neutral' as const, kols: [] }
   })
 
+  // Double for seamless CSS marquee loop
+  const marqueeTickers = stockDetails.length > 0
+    ? [...stockDetails, ...stockDetails]
+    : []
+
   return (
-    <div className="min-h-[100dvh]" style={{ background: 'var(--bg)' }}>
+    <div className="kol-detail-root">
 
-      {/* Sticky back nav */}
-      <header
-        className="sticky top-0 z-50"
-        style={{
-          background: 'rgba(11,18,32,0.85)',
-          backdropFilter: 'blur(16px)',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-sm font-medium transition-colors group"
-            style={{ color: 'var(--text-3)' }}
-          >
-            <ArrowLeft
-              size={16}
-              className="transition-transform duration-200 group-hover:-translate-x-0.5"
-            />
-            返回儀表板
-          </Link>
-          <span style={{ color: 'var(--border-strong)' }}>/</span>
-          <span className="text-sm text-[var(--text-2)] truncate font-medium">{ep.kol_name}</span>
-        </div>
-      </header>
+      {/* Floating pill nav — mirrors homepage .taste-nav */}
+      <nav className="taste-nav">
+        <Link href="/" className="kol-back-link">
+          <ArrowLeft size={15} />
+          儀表板
+        </Link>
+        <span className="taste-brand" style={{ maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {ep.kol_name}
+        </span>
+        <span className="taste-chip">{ep.published}</span>
+      </nav>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6 scale-in">
-
-        {/* KOL header card */}
+      {/* Hero — editorial dark aesthetic matching homepage */}
+      <section className="kol-hero chapter">
         <div
-          className="card overflow-hidden"
-          style={{ borderTop: `4px solid ${ep.color}` }}
+          className="kol-hero-backdrop"
+          style={{
+            background: `radial-gradient(70% 70% at 50% 0%, ${accentColor}28 0%, transparent 70%)`,
+          }}
+        />
+        <div
+          className="kol-hero-avatar"
+          style={{ background: `${accentColor}18`, border: `2px solid ${accentColor}40`, color: accentColor }}
         >
-          <div className="p-7 sm:p-8">
-            <div className="flex items-start gap-5">
-              {/* Avatar */}
-              <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black flex-shrink-0"
-                style={{
-                  background: `${ep.color}18`,
-                  border: `2px solid ${ep.color}40`,
-                  color: ep.color,
-                }}
-              >
-                {ep.avatar || ep.kol_name[0] || '?'}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-3 mb-2">
-                  <h1 className="text-xl font-bold text-[var(--text-1)]">{ep.kol_name}</h1>
-                  <span
-                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold"
-                    style={{ background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color }}
-                  >
-                    <sc.Icon size={13} />
-                    {sc.label}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--text-3)]">
-                  <span className="flex items-center gap-1.5">
-                    <Users size={14} />
-                    {ep.host}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Mic size={14} />
-                    Podcast
-                  </span>
-                  <span className="flex items-center gap-1.5 font-mono text-xs">
-                    <Calendar size={13} />
-                    {ep.published}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+          {ep.avatar || ep.kol_name[0] || '?'}
         </div>
-
-        {/* Episode content */}
-        <div className="card p-7 sm:p-8 space-y-5">
-          <div>
-            <p className="section-label mb-3">本集內容</p>
-            <h2 className="text-lg font-bold text-[var(--text-1)] leading-snug mb-4">
-              {ep.title}
-            </h2>
-            <p className="text-sm text-[var(--text-2)] leading-relaxed max-w-[65ch]">
-              {ep.summary}
-            </p>
-          </div>
-
+        <p className="hero-kicker">{ep.host} · Podcast</p>
+        <h1 className="hero-title kol-hero-title">
+          {ep.title}
+        </h1>
+        <div className="kol-hero-badges">
+          <span
+            className="kol-sentiment-badge"
+            style={{ background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color }}
+          >
+            <sc.Icon size={14} />
+            {sc.label}
+          </span>
           {ep.report_url && (
             <a
               href={ep.report_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
-              style={{
-                background: 'var(--accent-bg)',
-                border: '1px solid var(--accent-border)',
-                color: 'var(--accent)',
-              }}
+              className="hero-btn hero-btn-ghost kol-report-btn"
             >
               <ExternalLink size={14} />
-              查看完整 AI 分析報告
+              AI 分析報告
             </a>
           )}
         </div>
+      </section>
 
-        {/* Consensus history chart */}
-        {history.length > 1 && (
-          <ConsensusChart history={history} />
-        )}
-
-        {/* Stocks mentioned */}
-        {stockDetails.length > 0 && (
-          <div className="card p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <BarChart2 size={18} style={{ color: 'var(--accent)' }} />
-              <p className="section-label">本集提及標的</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {stockDetails.map(s => {
-                const ssc = SENT[s.sentiment]
-                return (
-                  <div
-                    key={s.ticker}
-                    className="flex items-center gap-3 p-4 rounded-xl transition-colors"
-                    style={{
-                      background: 'var(--surface-2)',
-                      border: '1px solid var(--border)',
-                    }}
-                  >
-                    <span className={/^\d/.test(s.ticker) ? 'ticker-tw' : 'ticker-us'}>
-                      {s.ticker}
-                    </span>
-                    <span className="text-sm text-[var(--text-2)] flex-1 truncate font-medium">{s.name}</span>
-                    <span
-                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-semibold"
-                      style={{ background: ssc.bg, border: `1px solid ${ssc.border}`, color: ssc.color }}
-                    >
-                      <ssc.Icon size={11} />
-                      {s.sentiment === 'bullish' ? '多' : s.sentiment === 'bearish' ? '空' : '中'}
-                    </span>
-                    <span className="text-xs font-mono font-bold text-[var(--text-4)]">
-                      {s.mentions}x
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
+      {/* CSS marquee — server-component safe (no GSAP) */}
+      {marqueeTickers.length > 0 && (
+        <div className="taste-marquee">
+          <div className="css-marquee-track">
+            {marqueeTickers.map((s, i) => (
+              <span key={`${s.ticker}-${i}`} className="marquee-item">
+                {s.ticker} {s.name}
+              </span>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Back CTA */}
-        <div className="pt-2 pb-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm font-medium transition-colors"
-            style={{ color: 'var(--text-3)' }}
-          >
-            <ArrowLeft size={15} />
-            回到所有 KOL 今日摘要
-          </Link>
+      {/* Bento grid — same 6-col system as homepage */}
+      <section className="chapter-wide">
+        <div className="bento-grid grid-flow-dense">
+
+          {/* Summary — span 4 */}
+          <article className="bento-card kol-summary-card">
+            <p>本集摘要</p>
+            <p className="kol-summary-text">{ep.summary}</p>
+          </article>
+
+          {/* Sentiment / meta — span 2 */}
+          <article className="bento-card kol-meta-card">
+            <p>情緒 / 基本資訊</p>
+            <div className="kol-meta-content">
+              <div className="kol-sentiment-large" style={{ color: sc.color }}>
+                <sc.Icon size={28} />
+                <span>{sc.label}</span>
+              </div>
+              <div className="kol-meta-list">
+                <div className="kol-meta-row">
+                  <span>主持人</span>
+                  <span>{ep.host}</span>
+                </div>
+                <div className="kol-meta-row">
+                  <span>發布日期</span>
+                  <span style={{ fontFamily: 'monospace' }}>{ep.published}</span>
+                </div>
+                <div className="kol-meta-row">
+                  <span>提及標的</span>
+                  <span>{ep.stocks_mentioned.length} 檔</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          {/* Stocks — span 6 */}
+          {stockDetails.length > 0 && (
+            <article className="bento-card kol-stocks-card">
+              <p>本集提及標的</p>
+              <div className="kol-stocks-grid">
+                {stockDetails.map(s => {
+                  const ssc = SENT[s.sentiment]
+                  return (
+                    <div key={s.ticker} className="kol-stock-item">
+                      <span className={/^\d/.test(s.ticker) ? 'ticker-tw' : 'ticker-us'}>
+                        {s.ticker}
+                      </span>
+                      <span className="kol-stock-name">{s.name}</span>
+                      <span
+                        className="kol-stock-badge"
+                        style={{ background: ssc.bg, border: `1px solid ${ssc.border}`, color: ssc.color }}
+                      >
+                        <ssc.Icon size={11} />
+                        {s.sentiment === 'bullish' ? '多' : s.sentiment === 'bearish' ? '空' : '中'}
+                      </span>
+                      <span className="kol-stock-mentions">{s.mentions}x</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </article>
+          )}
+
+          {/* Chart — span 6 */}
+          {history.length > 1 && (
+            <article className="bento-card kol-chart-card">
+              <p>共識分數歷史</p>
+              <ConsensusChart history={history} />
+            </article>
+          )}
+
         </div>
 
-      </main>
+        {/* Footer — mirrors .taste-footer */}
+        <div className="taste-footer" style={{ marginTop: '4rem' }}>
+          <Link href="/" className="kol-back-link">
+            <ArrowLeft size={14} />
+            回到所有 KOL 今日摘要
+          </Link>
+          <span>PodConsensus</span>
+          <span>{ep.published}</span>
+        </div>
+      </section>
+
     </div>
   )
 }
