@@ -1,37 +1,122 @@
 [
   {
-    "label": "股癌 Podcast",
     "kol_id": "gooaye",
+    "label": "股癌 Podcast",
+    "host": "謝孟恭",
+    "avatar": "🦀",
+    "color": "#3b82f6",
     "rss_url": "https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml"
   },
   {
-    "label": "游庭皓的財經皓角",
     "kol_id": "yutin",
+    "label": "游庭皓的財經皓角",
+    "host": "游庭皓",
+    "avatar": "📊",
+    "color": "#10b981",
     "rss_url": "https://feeds.soundcloud.com/users/soundcloud:users:735679489/sounds.rss"
   },
   {
-    "label": "MacroMicro 財經M平方",
     "kol_id": "macromicro",
+    "label": "MacroMicro 財經M平方",
+    "host": "Rachel",
+    "avatar": "🌐",
+    "color": "#8b5cf6",
     "rss_url": "https://feeds.soundon.fm/podcasts/d2aab16c-3a70-4023-b52b-e50f07852ecd.xml"
   },
   {
-    "label": "比爾的財經廚房",
     "kol_id": "billkitchen",
+    "label": "比爾的財經廚房",
+    "host": "楊比爾",
+    "avatar": "🍳",
+    "color": "#f59e0b",
     "rss_url": "https://anchor.fm/s/120ba8d0/podcast/rss"
   },
   {
-    "label": "兆華與股惑仔",
     "kol_id": "zhaohualink",
+    "label": "兆華與股惑仔",
+    "host": "李兆華",
+    "avatar": "📈",
+    "color": "#ef4444",
     "rss_url": "https://feeds.soundon.fm/podcasts/91be014b-9f55-4bf3-a910-b232eda82d11.xml"
   },
   {
-    "label": "財報狗",
     "kol_id": "caalaw",
+    "label": "財報狗",
+    "host": "Jeff & Sky",
+    "avatar": "🐕",
+    "color": "#14b8a6",
     "rss_url": "https://feed.firstory.me/rss/user/clcftm46z000201z45w1c47fi"
   },
   {
-    "label": "呱吉的股市觀察",
     "kol_id": "morales",
+    "label": "呱吉的股市觀察",
+    "host": "邱威傑（呱吉）",
+    "avatar": "🐸",
+    "color": "#22c55e",
     "rss_url": "https://feeds.soundon.fm/podcasts/ecd31076-d12d-46dc-ba11-32d24b41cca5.xml"
+  },
+  {
+    "kol_id": "shenghong",
+    "label": "升鴻投資",
+    "host": "升鴻",
+    "avatar": "🚀",
+    "color": "#06b6d4",
+    "rss_url": ""
+  },
+  {
+    "kol_id": "investlab",
+    "label": "阿福の台美股研究室",
+    "host": "阿福",
+    "avatar": "🔬",
+    "color": "#6366f1",
+    "rss_url": ""
+  },
+  {
+    "kol_id": "activeinv",
+    "label": "主動式投資人",
+    "host": "James Ko",
+    "avatar": "⚡",
+    "color": "#f97316",
+    "rss_url": ""
+  },
+  {
+    "kol_id": "engstock",
+    "label": "工程師投資記",
+    "host": "陳峻誌",
+    "avatar": "💻",
+    "color": "#a78bfa",
+    "rss_url": ""
+  },
+  {
+    "kol_id": "twsenior",
+    "label": "台股老司機",
+    "host": "老司機",
+    "avatar": "🚗",
+    "color": "#fb7185",
+    "rss_url": ""
+  },
+  {
+    "kol_id": "richie",
+    "label": "富朋友理財筆記",
+    "host": "Richie",
+    "avatar": "💰",
+    "color": "#fbbf24",
+    "rss_url": ""
+  },
+  {
+    "kol_id": "stockfeel",
+    "label": "股感知識庫",
+    "host": "股感團隊",
+    "avatar": "📚",
+    "color": "#34d399",
+    "rss_url": ""
+  },
+  {
+    "kol_id": "afterwork",
+    "label": "下班後的投資啟蒙",
+    "host": "Brian",
+    "avatar": "🌙",
+    "color": "#818cf8",
+    "rss_url": ""
   }
 ]

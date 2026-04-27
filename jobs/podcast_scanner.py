@@ -504,6 +504,76 @@ def send_podcast_report(
 
 
 
+# ── KOL metadata helpers ──────────────────────────────────────────────────
+
+import hashlib as _hashlib
+import json as _json
+
+
+def _load_kol_registry(website_kols_file: str) -> dict[str, dict]:
+    """
+    Load website_kols.json and return a dict keyed by rss_url for O(1) lookup.
+    Also returns entries with empty rss_url (keyed by kol_id) for registration.
+    """
+    if not website_kols_file or not Path(website_kols_file).exists():
+        return {}
+    try:
+        kols = _json.loads(Path(website_kols_file).read_text(encoding="utf-8"))
+        registry: dict[str, dict] = {}
+        for k in kols:
+            if k.get("rss_url"):
+                registry[k["rss_url"]] = k
+        return registry
+    except Exception as e:
+        print(f"⚠️  無法讀取 KOL registry：{e}")
+        return {}
+
+
+def _register_all_kols(website_kols_file: str) -> None:
+    """Upsert metadata for ALL KOLs in website_kols.json — including those without RSS."""
+    if not website_kols_file or not Path(website_kols_file).exists():
+        return
+    try:
+        kols = _json.loads(Path(website_kols_file).read_text(encoding="utf-8"))
+        for k in kols:
+            if k.get("kol_id"):
+                ensure_kol(k)
+        print(f"  ✅ 已注冊 {len(kols)} 個 KOL metadata")
+    except Exception as e:
+        print(f"⚠️  KOL metadata 注冊失敗：{e}")
+
+
+def _build_kol_meta(rss_url: str, label: str, registry: dict[str, dict]) -> dict:
+    """Return full KOL metadata from registry, or minimal fallback keyed by MD5."""
+    if rss_url in registry:
+        return registry[rss_url]
+    return {
+        "kol_id": _hashlib.md5(rss_url.encode()).hexdigest()[:10],
+        "label": label or rss_url[:40],
+        "host": "",
+        "avatar": "🎙️",
+        "color": "#6366f1",
+        "rss_url": rss_url,
+    }
+
+
+def _write_episode_to_db(kol_meta: dict, ep: dict, analysis: str) -> None:
+    """Ensure KOL exists, parse analysis, write episode. Always called on success."""
+    ep_summary, ep_stocks, ep_sentiment = _parse_nlm_analysis(analysis)
+    print(f"  [DB] sentiment={ep_sentiment} stocks={ep_stocks[:5]}")
+    kol_id = ensure_kol(kol_meta)
+    write_episode(
+        kol_id=kol_id,
+        guid=ep["guid"],
+        title=ep["title"],
+        published_str=format_rss_date(ep["published"]),
+        summary=analysis,
+        sentiment=ep_sentiment,
+        stocks_mentioned=ep_stocks,
+        report_url="",
+    )
+
+
 # ── 主流程 ────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -520,36 +590,44 @@ def main() -> None:
     mode = os.environ.get("PODCAST_MODE", "daily")
     on_demand_chat = os.environ.get("PODCAST_CHAT_ID", "")
     on_demand_msg = os.environ.get("PODCAST_MESSAGE_ID", "")
-    episode_number = os.environ.get("PODCAST_EPISODE_NUMBER", "").strip()  # e.g. "655"
-    prompt_key = os.environ.get("CUSTOM_PROMPT", "podcast")  # 預設使用 podcast 專屬 prompt
+    episode_number = os.environ.get("PODCAST_EPISODE_NUMBER", "").strip()
+    prompt_key = os.environ.get("CUSTOM_PROMPT", "podcast")
     prompt = get_nlm_prompt(prompt_key)
     print(f"📝 模式：{mode}  Prompt：{prompt_key}  集數：{episode_number or '最新'}")
 
-    # RSS 來源優先順序：
-    #   1. PODCAST_RSS_URLS 環境變數（on-demand 單次查詢）
-    #   2. WEBSITE_KOLS_FILE（網站專屬 KOL 清單，daily scanner 使用）
-    #   3. processed_podcasts.json 訂閱清單（TG /subpodcast 訂閱）
-    rss_env = os.environ.get("PODCAST_RSS_URLS", "").strip()
     website_kols_file = os.environ.get("WEBSITE_KOLS_FILE", "").strip()
 
+    # 啟動時先把所有 KOL metadata 寫進 DB（含無 RSS 的 KOL）
+    # 這是 SSOT 同步的核心步驟，確保網站顯示永遠跟 website_kols.json 一致
+    if website_kols_file:
+        print("\n📋 同步 KOL metadata...")
+        _register_all_kols(website_kols_file)
+
+    # 建立 rss_url → kol_meta 的查找表
+    kol_registry = _load_kol_registry(website_kols_file)
+
+    # RSS 來源優先順序：
+    #   1. PODCAST_RSS_URLS 環境變數（on-demand 單次查詢）
+    #   2. WEBSITE_KOLS_FILE 中有 rss_url 的 KOL（daily scanner）
+    #   3. processed_podcasts.json 訂閱清單（TG /subpodcast）
+    rss_env = os.environ.get("PODCAST_RSS_URLS", "").strip()
+
     if rss_env:
-        rss_sources = [(u.strip(), "") for u in rss_env.split(",") if u.strip()]
-    elif website_kols_file and Path(website_kols_file).exists():
-        import json as _json
-        try:
-            kols = _json.loads(Path(website_kols_file).read_text(encoding="utf-8"))
-            rss_sources = [(k["rss_url"], k.get("label", "")) for k in kols if k.get("rss_url")]
-            print(f"📋 網站 KOL 清單：{len(rss_sources)} 個頻道（{website_kols_file}）")
-        except Exception as e:
-            print(f"⚠️  無法讀取 {website_kols_file}：{e}，改用訂閱清單")
-            rss_sources = []
+        rss_sources = [rss_url.strip() for rss_url in rss_env.split(",") if rss_url.strip()]
+    elif kol_registry:
+        rss_sources = list(kol_registry.keys())
+        print(f"📋 網站 KOL RSS：{len(rss_sources)} 個頻道")
     else:
         rss_sources = []
 
     if not rss_sources:
         subs = get_subscriptions()
         if subs:
-            rss_sources = [(url, info.get("label", "")) for url, info in subs.items()]
+            rss_sources = list(subs.keys())
+            # 把訂閱清單的 label 也加進 registry（fallback）
+            for url, info in subs.items():
+                if url not in kol_registry:
+                    kol_registry[url] = _build_kol_meta(url, info.get("label", ""), {})
         else:
             print("ℹ️  無 RSS 來源且無訂閱清單，結束。")
             print("   使用 /subpodcast <url> 訂閱後即可自動推送。")
@@ -557,21 +635,23 @@ def main() -> None:
 
     runner = NotebookRunner()
     total_success = 0
-    error_msg = ""   # 最後一個錯誤訊息，供安全網使用
+    error_msg = ""
 
-    for rss_url, label in rss_sources:
+    for rss_url in rss_sources:
+        kol_meta = _build_kol_meta(rss_url, "", kol_registry)
+        label = kol_meta.get("label", "")
+
         episodes = fetch_new_episodes(
             rss_url, mode=mode, chat_id=on_demand_chat, episode_number=episode_number
         )
         if not episodes:
-            msg = f"🔚 [{label or rss_url[:40]}] 無新集數"
-            print(msg)
+            print(f"🔚 [{label or rss_url[:40]}] 無新集數")
             if on_demand_chat and mode == "latest":
-                # on-demand 模式：找不到集數也要告知用戶
-                if episode_number:
-                    error_msg = f"⚠️ 找不到第 {episode_number} 集，請確認集數是否正確。"
-                else:
-                    error_msg = "⚠️ 此 Podcast 目前沒有可分析的新集數。"
+                error_msg = (
+                    f"⚠️ 找不到第 {episode_number} 集，請確認集數是否正確。"
+                    if episode_number
+                    else "⚠️ 此 Podcast 目前沒有可分析的新集數。"
+                )
             continue
 
         to_process = episodes[:1] if mode == "latest" else episodes[:MAX_EPISODES_PER_RUN]
@@ -584,6 +664,8 @@ def main() -> None:
                 cached_analysis = get_cached_analysis(rss_url, ep["guid"], prompt_key)
                 if cached_analysis:
                     print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
+                    # 快取命中也要寫 DB，確保網站資訊完整
+                    _write_episode_to_db(kol_meta, ep, cached_analysis)
                     send_podcast_report(
                         title=ep["title"],
                         analysis=cached_analysis,
@@ -605,10 +687,7 @@ def main() -> None:
                     print(f"  {error_msg}")
                     continue
 
-                # 將 RSS 元資料（頻道名、主持人、集數標題）注入 prompt 開頭，
-                # 讓 NLM 能以正確的人名與專有名詞作為轉錄修正參考，通用於所有頻道。
                 ep_prompt = _build_episode_prompt(prompt, ep)
-
                 analysis = analyze_with_nlm(runner, mp3_path, ep_prompt)
                 if not analysis:
                     error_msg = f"❌ AI 分析失敗（NLM 無回應），請稍後再試。\n集數：{ep['title'][:60]}"
@@ -618,22 +697,8 @@ def main() -> None:
                 if set_cached_analysis(rss_url, ep["guid"], prompt_key, analysis):
                     print(f"  💾 已寫入 Podcast 分析快取（TTL {Config.REDIS_PODCAST_TTL}s）")
 
-                # 寫入 Neon DB（僅 daily 模式，on-demand 不存 DB）
-                if mode == "daily":
-                    ep_summary, ep_stocks, ep_sentiment = _parse_nlm_analysis(analysis)
-                    print(f"  [PARSE] sentiment={ep_sentiment} stocks={ep_stocks[:5]}")
-                    _db_kol_id = ensure_kol(rss_url, label or "")
-                    # summary 存完整分析文字，讓詳細頁面能顯示完整報告
-                    write_episode(
-                        kol_id=_db_kol_id,
-                        guid=ep["guid"],
-                        title=ep["title"],
-                        published_str=format_rss_date(ep["published"]),
-                        summary=analysis,
-                        sentiment=ep_sentiment,
-                        stocks_mentioned=ep_stocks,
-                        report_url="",
-                    )
+                # 無論 daily 或 on-demand，分析成功就寫 DB
+                _write_episode_to_db(kol_meta, ep, analysis)
 
                 send_podcast_report(
                     title=ep["title"],
@@ -643,8 +708,8 @@ def main() -> None:
                     chat_id=on_demand_chat,
                     message_id=on_demand_msg,
                 )
-                on_demand_msg = ""  # 已刪，避免安全網重複刪
-                error_msg = ""      # 成功，清除錯誤狀態
+                on_demand_msg = ""
+                error_msg = ""
 
                 if mode == "daily":
                     mark_processed(rss_url, ep["guid"], chat_id=on_demand_chat)
@@ -670,12 +735,9 @@ def main() -> None:
         compute_and_write_consensus()
 
     # 安全網：確保 on-demand 用戶一定收到回應
-    # 若成功推送，on_demand_msg 已在 send_podcast_report 內刪除（置空）
-    # 若失敗，這裡發送錯誤通知（同時替換掉 pending 訊息）
     if on_demand_chat and on_demand_msg:
         bot_token = Config.TG_BOT_TOKEN
         if bot_token:
-            # 先刪 pending 訊息
             try:
                 requests.post(
                     f"https://api.telegram.org/bot{bot_token}/deleteMessage",
@@ -684,7 +746,6 @@ def main() -> None:
                 )
             except Exception:
                 pass
-            # 再發錯誤通知
             notice = error_msg or "⚠️ 分析未能完成，可能原因：音檔下載失敗 / AI 服務暫時無法使用。\n請稍後再試，或嘗試其他集數。"
             try:
                 requests.post(

@@ -36,26 +36,35 @@ def _slugify(text: str) -> str:
     return text[:24].rstrip("-") or "kol"
 
 
-def ensure_kol(rss_url: str, label: str) -> str:
+def ensure_kol(kol_meta: dict) -> str:
     """
-    確保 kols 表有這個頻道的記錄，回傳 kol_id。
-    若不存在則以 rss_url hash 為 kol_id 新增一筆。
+    Upsert KOL from a metadata dict (from website_kols.json or fallback).
+    Required key: kol_id. Optional: label/kol_name, host, avatar, color, rss_url.
+    Returns kol_id.
     """
-    import hashlib
-    kol_id = hashlib.md5(rss_url.encode()).hexdigest()[:10]
+    kol_id = kol_meta["kol_id"]
+    kol_name = kol_meta.get("label") or kol_meta.get("kol_name") or kol_id
     with _get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT kol_id FROM kols WHERE kol_id = %s", (kol_id,))
-            if cur.fetchone():
-                return kol_id
-            kol_name = label or _slugify(rss_url)
             cur.execute(
                 """
-                INSERT INTO kols (kol_id, kol_name, rss_url)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (kol_id) DO NOTHING
+                INSERT INTO kols (kol_id, kol_name, host, avatar, color, rss_url)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (kol_id) DO UPDATE SET
+                  kol_name = EXCLUDED.kol_name,
+                  host     = COALESCE(NULLIF(EXCLUDED.host,   ''), kols.host),
+                  avatar   = COALESCE(NULLIF(EXCLUDED.avatar, ''), kols.avatar),
+                  color    = COALESCE(NULLIF(EXCLUDED.color,  ''), kols.color),
+                  rss_url  = COALESCE(NULLIF(EXCLUDED.rss_url,''), kols.rss_url)
                 """,
-                (kol_id, kol_name, rss_url),
+                (
+                    kol_id,
+                    kol_name,
+                    kol_meta.get("host", ""),
+                    kol_meta.get("avatar", "🎙️"),
+                    kol_meta.get("color", "#6366f1"),
+                    kol_meta.get("rss_url", ""),
+                ),
             )
         conn.commit()
     return kol_id
