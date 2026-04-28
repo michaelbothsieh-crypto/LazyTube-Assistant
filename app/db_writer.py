@@ -651,3 +651,20 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
     except Exception as exc:
         print(f"  [WARN] compute_and_write_consensus failed: {exc}")
         return False
+
+
+def episode_exists(kol_id: str, guid: str) -> bool:
+    """Return True when an analyzed episode is already stored in the SSOT."""
+    if not DATABASE_URL:
+        return False
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM episodes WHERE kol_id = %s AND guid = %s LIMIT 1",
+                    (kol_id, guid),
+                )
+                return cur.fetchone() is not None
+    except Exception as exc:
+        print(f"  [WARN] episode_exists failed: {exc}")
+        return False

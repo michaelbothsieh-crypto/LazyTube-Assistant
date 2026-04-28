@@ -31,6 +31,7 @@ from app.auth import AuthManager
 from app.config import Config
 from app.db_writer import (
     compute_and_write_consensus,
+    episode_exists,
     ensure_analytics_schema,
     ensure_kol,
     finish_job_item,
@@ -49,6 +50,7 @@ from app.podcast_state import get_subscriptions, init_empty, is_processed, mark_
 from api.utils.prompt_manager import get_nlm_prompt
 
 MAX_EPISODES_PER_RUN = 2
+MAX_DAILY_FEED_ITEMS = int(os.environ.get("PODCAST_MAX_DAILY_FEED_ITEMS", "12"))
 DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
@@ -296,7 +298,11 @@ def fetch_new_episodes(
     feed_author = feed.feed.get("author", feed.feed.get("itunes_author", "")).strip()
 
     episodes = []
-    for entry in feed.entries:
+    entries = list(feed.entries)
+    if mode == "daily" and MAX_DAILY_FEED_ITEMS > 0:
+        entries = entries[:MAX_DAILY_FEED_ITEMS]
+
+    for entry in entries:
         guid = entry.get("id") or entry.get("link", "")
         if not guid:
             continue
@@ -707,6 +713,12 @@ def main() -> None:
             print(f"📻 {ep['title']}  [{ep['published']}]")
             mp3_path = None
             try:
+                kol_id = kol_meta.get("kol_id", "")
+                if mode == "daily" and kol_id and episode_exists(kol_id, ep["guid"]):
+                    print("  [SKIP] Episode already exists in DB; marking processed state.")
+                    mark_processed(rss_url, ep["guid"], chat_id=on_demand_chat)
+                    continue
+
                 cached_analysis = get_cached_analysis(rss_url, ep["guid"], prompt_key)
                 if cached_analysis:
                     print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
