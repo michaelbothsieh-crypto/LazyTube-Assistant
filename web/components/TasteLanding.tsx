@@ -26,9 +26,9 @@ const copy = {
     navEpisodes: '節目',
     navAction: '更新節奏',
     heroKicker: 'Podcast intelligence for public markets',
-    heroTitleA: '把每日 Podcast 轉成',
-    heroTitleB: '可執行的市場共識',
-    heroBody: '網站每天讀取新的節目分析、股票提及與情緒分布，整理成一個能快速掃描台股與美股討論熱度的工作台。',
+    heroTitleA: '每日 Podcast',
+    heroTitleB: '市場研究報告',
+    heroBody: '彙整最新節目分析、股票提及、情緒分布與自動化狀態，形成一份可追蹤的台股與美股研究儀表板。',
     primaryCta: '查看今日共識',
     secondaryCta: '瀏覽 KOL 訊號',
     score: '共識分數',
@@ -40,8 +40,8 @@ const copy = {
     automation: '自動化完整度',
     thesis: '今日主軸',
     keywords: '討論向量',
-    pulseTitle: '訊號不是單一觀點，而是多個主持人重複提到的重疊區域。',
-    pulseBody: '當相同標的、相同題材與相近情緒在不同節目中反覆出現，這個頁面把它折疊成較容易決策的市場表面。',
+    pulseTitle: '訊號來自多個來源的重疊，而不是單一主持人的一句話。',
+    pulseBody: '同一個 ticker、題材與方向重複出現時，系統會把它整理成 daily_signals，並保留來源數、集數與信心分數。',
     episodeTitle: '最新節目訊號',
     all: '全部',
     bullish: '偏多',
@@ -57,9 +57,9 @@ const copy = {
     navEpisodes: 'Episodes',
     navAction: 'Cadence',
     heroKicker: 'Podcast intelligence for public markets',
-    heroTitleA: 'Turn daily podcasts into',
-    heroTitleB: 'an executable market consensus',
-    heroBody: 'The site ingests episode analysis, ticker mentions, and sentiment distribution into one operating surface for Taiwan and US equities.',
+    heroTitleA: 'Daily podcast',
+    heroTitleB: 'market research report',
+    heroBody: 'A compact research dashboard built from episode analysis, ticker mentions, sentiment distribution, signal confidence, and automation health.',
     primaryCta: 'Read consensus',
     secondaryCta: 'Scan KOL signals',
     score: 'Consensus score',
@@ -216,14 +216,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
       <section className="hero-editorial">
         <div className="hero-copy">
           <p className="eyebrow">{t.heroKicker}</p>
-          <h1>
-            {t.heroTitleA}
-            <span
-              className="inline-market-image"
-              style={{ backgroundImage: `url(${stockImageSeed(heroStock?.ticker ?? 'consensus')})` }}
-            />
-            {t.heroTitleB}
-          </h1>
+          <h1>{t.heroTitleA}<br />{t.heroTitleB}</h1>
           <p className="hero-body">{t.heroBody}</p>
           <div className="hero-actions">
             <a className="btn btn-primary" href="#consensus">{t.primaryCta}</a>
