@@ -29,7 +29,16 @@ if str(project_root) not in sys.path:
 
 from app.auth import AuthManager
 from app.config import Config
-from app.db_writer import compute_and_write_consensus, ensure_kol, write_episode
+from app.db_writer import (
+    compute_and_write_consensus,
+    ensure_analytics_schema,
+    ensure_kol,
+    finish_job_item,
+    finish_job_run,
+    start_job_item,
+    start_job_run,
+    write_episode,
+)
 from app.notebook.notebook_session import NotebookSession
 from app.notebook.parsing import parse_query_output
 from app.notebook.runner import NotebookRunner
@@ -193,6 +202,7 @@ def _apple_episode_hint(url: str) -> dict:
     slug = ""
     for seg in path.split("/"):
         if not seg:
+            finish_job_item(item_id, "skipped", item_found, item_written, error_msg)
             continue
         if re.match(r"id\d+$", seg):
             continue
@@ -582,12 +592,12 @@ def _build_kol_meta(rss_url: str, label: str, registry: dict[str, dict]) -> dict
     }
 
 
-def _write_episode_to_db(kol_meta: dict, ep: dict, analysis: str) -> None:
+def _write_episode_to_db(kol_meta: dict, ep: dict, analysis: str) -> bool:
     """Ensure KOL exists, parse analysis, write episode. Always called on success."""
     ep_summary, ep_stocks, ep_sentiment = _parse_nlm_analysis(analysis)
     print(f"  [DB] sentiment={ep_sentiment} stocks={ep_stocks[:5]}")
     kol_id = ensure_kol(kol_meta)
-    write_episode(
+    return write_episode(
         kol_id=kol_id,
         guid=ep["guid"],
         title=ep["title"],
@@ -611,6 +621,7 @@ def main() -> None:
         sys.exit(1)
 
     init_empty()
+    ensure_analytics_schema()
 
     mode = os.environ.get("PODCAST_MODE", "daily")
     on_demand_chat = os.environ.get("PODCAST_CHAT_ID", "")
@@ -664,14 +675,21 @@ def main() -> None:
     send_reports = _should_send_podcast_report(mode, on_demand_chat)
     if not send_reports:
         print("Telegram daily reports disabled; updating DB/website only.")
+    run_id = start_job_run("podcast_scanner", mode, len(rss_sources))
+    run_error = ""
 
     for rss_url in rss_sources:
         kol_meta = _build_kol_meta(rss_url, "", kol_registry)
         label = kol_meta.get("label", "")
+        item_id = start_job_item(run_id, rss_url, label or rss_url[:60])
+        item_found = 0
+        item_written = 0
+        item_error = ""
 
         episodes = fetch_new_episodes(
             rss_url, mode=mode, chat_id=on_demand_chat, episode_number=episode_number
         )
+        item_found = len(episodes)
         if not episodes:
             print(f"🔚 [{label or rss_url[:40]}] 無新集數")
             if on_demand_chat and mode == "latest":
@@ -694,6 +712,8 @@ def main() -> None:
                     print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
                     # 快取命中也要寫 DB，確保網站資訊完整
                     _write_episode_to_db(kol_meta, ep, cached_analysis)
+                    if _write_episode_to_db(kol_meta, ep, cached_analysis):
+                        item_written += 1
                     if send_reports:
                         send_podcast_report(
                             title=ep["title"],
@@ -713,6 +733,7 @@ def main() -> None:
                 mp3_path = download_audio(ep["audio_url"], ep["title"])
                 if not mp3_path:
                     error_msg = f"❌ 音檔下載失敗：{ep['title'][:60]}"
+                    item_error = error_msg
                     print(f"  {error_msg}")
                     continue
 
@@ -727,7 +748,8 @@ def main() -> None:
                     print(f"  💾 已寫入 Podcast 分析快取（TTL {Config.REDIS_PODCAST_TTL}s）")
 
                 # 無論 daily 或 on-demand，分析成功就寫 DB
-                _write_episode_to_db(kol_meta, ep, analysis)
+                if _write_episode_to_db(kol_meta, ep, analysis):
+                    item_written += 1
 
                 if send_reports:
                     send_podcast_report(
@@ -755,6 +777,14 @@ def main() -> None:
             if ep != to_process[-1]:
                 time.sleep(30)
 
+        finish_job_item(
+            item_id,
+            "success" if item_written > 0 else "failed",
+            item_found,
+            item_written,
+            item_error,
+        )
+
     print(f"\n{'=' * 55}")
     print(f"✨ 完成：成功 {total_success} 集")
     print("=" * 55)
@@ -763,6 +793,8 @@ def main() -> None:
     if mode == "daily" and total_success > 0:
         print("\n📊 更新 Neon DB 共識指標...")
         compute_and_write_consensus()
+
+    finish_job_run(run_id, error_message=run_error)
 
     # 安全網：確保 on-demand 用戶一定收到回應
     if on_demand_chat and on_demand_msg:

@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 import { unstable_cache } from 'next/cache'
-import type { ConsensusData, ConsensusHistory, Episode, Stock } from '@/types'
+import type { ConsensusData, ConsensusHistory, DailySignal, Episode, JobRun, Stock } from '@/types'
 
 function sql() {
   const url = process.env.DATABASE_URL
@@ -29,7 +29,7 @@ async function _getLatestData(): Promise<ConsensusData> {
       ? consensus.date.toISOString().slice(0, 10)
       : String(consensus.date)
 
-    const [stocks, episodes, history] = await Promise.all([
+    const [stocks, episodes, history, signals, runs] = await Promise.all([
       db`
         SELECT ticker, name, market, mentions, sentiment, kols
         FROM stock_mentions
@@ -50,6 +50,24 @@ async function _getLatestData(): Promise<ConsensusData> {
         FROM consensus_daily
         ORDER BY date DESC
         LIMIT 30
+      `,
+      db`
+        SELECT signal_date, ticker, name, market, direction, confidence_score,
+               source_count, episode_count, source_kols, catalysts, horizon,
+               thesis, price_at_signal, return_1d, return_5d, return_20d
+        FROM daily_signals
+        WHERE signal_date = ${latestDate}
+        ORDER BY confidence_score DESC, source_count DESC
+        LIMIT 12
+      `,
+      db`
+        SELECT run_id, job_type, mode, status, started_at, finished_at,
+               sources_total, sources_success, sources_failed,
+               episodes_found, episodes_written
+        FROM job_runs
+        WHERE job_type = 'podcast_scanner'
+        ORDER BY started_at DESC
+        LIMIT 1
       `,
     ])
 
@@ -79,6 +97,8 @@ async function _getLatestData(): Promise<ConsensusData> {
       },
       episodes: episodes.map(mapEpisodeRow),
       consensus_history: [...history].reverse().map(mapHistoryRow),
+      signals: signals.map(mapSignalRow),
+      automation: automationFromRun(runs[0]),
     }
   } catch {
     return emptyConsensusData()
@@ -194,6 +214,49 @@ function mapHistoryRow(row: Record<string, unknown>): ConsensusHistory {
   }
 }
 
+function mapSignalRow(row: Record<string, unknown>): DailySignal {
+  return {
+    signal_date: row.signal_date instanceof Date ? row.signal_date.toISOString().slice(0, 10) : String(row.signal_date ?? ''),
+    ticker: String(row.ticker ?? ''),
+    name: String(row.name ?? ''),
+    market: row.market as 'TW' | 'US',
+    direction: row.direction as 'bullish' | 'bearish' | 'neutral',
+    confidence_score: Number(row.confidence_score ?? 0),
+    source_count: Number(row.source_count ?? 0),
+    episode_count: Number(row.episode_count ?? 0),
+    source_kols: Array.isArray(row.source_kols) ? row.source_kols as string[] : [],
+    catalysts: Array.isArray(row.catalysts) ? row.catalysts as string[] : [],
+    horizon: String(row.horizon ?? ''),
+    thesis: String(row.thesis ?? ''),
+    price_at_signal: row.price_at_signal == null ? null : Number(row.price_at_signal),
+    return_1d: row.return_1d == null ? null : Number(row.return_1d),
+    return_5d: row.return_5d == null ? null : Number(row.return_5d),
+    return_20d: row.return_20d == null ? null : Number(row.return_20d),
+  }
+}
+
+function automationFromRun(row: Record<string, unknown> | undefined): ConsensusData['automation'] {
+  if (!row) return { latest_run: null, completeness_pct: 0 }
+  const total = Number(row.sources_total ?? 0)
+  const success = Number(row.sources_success ?? 0)
+  return {
+    latest_run: {
+      run_id: String(row.run_id ?? ''),
+      job_type: String(row.job_type ?? ''),
+      mode: String(row.mode ?? ''),
+      status: row.status as JobRun['status'],
+      started_at: row.started_at instanceof Date ? row.started_at.toISOString() : String(row.started_at ?? ''),
+      finished_at: row.finished_at instanceof Date ? row.finished_at.toISOString() : String(row.finished_at ?? ''),
+      sources_total: total,
+      sources_success: success,
+      sources_failed: Number(row.sources_failed ?? 0),
+      episodes_found: Number(row.episodes_found ?? 0),
+      episodes_written: Number(row.episodes_written ?? 0),
+    },
+    completeness_pct: total > 0 ? Math.round((success / total) * 100) : 0,
+  }
+}
+
 function emptyConsensusData(): ConsensusData {
   return {
     generated_at: new Date().toISOString(),
@@ -208,5 +271,7 @@ function emptyConsensusData(): ConsensusData {
     },
     episodes: [],
     consensus_history: [],
+    signals: [],
+    automation: { latest_run: null, completeness_pct: 0 },
   }
 }

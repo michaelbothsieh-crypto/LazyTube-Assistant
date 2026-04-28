@@ -36,6 +36,8 @@ const copy = {
     update: '網站資料更新',
     sentiment: '市場情緒',
     topNames: '高共識標的',
+    signals: '可追蹤訊號',
+    automation: '自動化完整度',
     thesis: '今日主軸',
     keywords: '討論向量',
     pulseTitle: '訊號不是單一觀點，而是多個主持人重複提到的重疊區域。',
@@ -65,6 +67,8 @@ const copy = {
     update: 'Website data refresh',
     sentiment: 'Market sentiment',
     topNames: 'Highest agreement names',
+    signals: 'Trackable signals',
+    automation: 'Automation completeness',
     thesis: 'Daily thesis',
     keywords: 'Conversation vectors',
     pulseTitle: 'A signal is not one opinion. It is the overlap across multiple hosts.',
@@ -316,6 +320,31 @@ export default function TasteLanding({ data }: TasteLandingProps) {
               {data.consensus.top_keywords.slice(0, 8).map((keyword) => (
                 <span key={keyword}>{keyword}</span>
               ))}
+            </div>
+          </article>
+
+          <article className="automation-card" data-stack-card>
+            <span className="card-label">{t.automation}</span>
+            <strong>{data.automation.completeness_pct}%</strong>
+            <p>
+              {data.automation.latest_run
+                ? `${data.automation.latest_run.sources_success}/${data.automation.latest_run.sources_total} sources, ${data.automation.latest_run.episodes_written} episodes written`
+                : 'No completed automation run yet'}
+            </p>
+          </article>
+
+          <article className="signal-card" data-stack-card>
+            <span className="card-label">{t.signals}</span>
+            <div className="signal-list">
+              {data.signals.slice(0, 6).map((signal) => (
+                <Link href="#episodes" key={signal.ticker} className="signal-row">
+                  <span>{signal.ticker}</span>
+                  <small>{signal.name}</small>
+                  <b>{signal.confidence_score}</b>
+                  <i>{signal.source_count} src</i>
+                </Link>
+              ))}
+              {!data.signals.length && <p>No signal rows yet. The next daily scan will populate daily_signals.</p>}
             </div>
           </article>
         </div>

@@ -7,6 +7,39 @@ export interface Stock {
   kols: string[]
 }
 
+export interface DailySignal {
+  signal_date: string
+  ticker: string
+  name: string
+  market: 'TW' | 'US'
+  direction: 'bullish' | 'bearish' | 'neutral'
+  confidence_score: number
+  source_count: number
+  episode_count: number
+  source_kols: string[]
+  catalysts: string[]
+  horizon: string
+  thesis: string
+  price_at_signal: number | null
+  return_1d: number | null
+  return_5d: number | null
+  return_20d: number | null
+}
+
+export interface JobRun {
+  run_id: string
+  job_type: string
+  mode: string
+  status: 'running' | 'success' | 'partial' | 'failed'
+  started_at: string
+  finished_at: string
+  sources_total: number
+  sources_success: number
+  sources_failed: number
+  episodes_found: number
+  episodes_written: number
+}
+
 export interface Episode {
   kol_id: string
   kol_name: string
@@ -41,4 +74,9 @@ export interface ConsensusData {
   }
   episodes: Episode[]
   consensus_history: ConsensusHistory[]
+  signals: DailySignal[]
+  automation: {
+    latest_run: JobRun | null
+    completeness_pct: number
+  }
 }

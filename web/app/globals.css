@@ -494,6 +494,72 @@ button {
   padding: 24px;
 }
 
+.automation-card {
+  grid-column: span 4;
+  min-height: 220px;
+  padding: 24px;
+}
+
+.automation-card strong {
+  display: block;
+  margin-top: 18px;
+  font-size: clamp(3rem, 6vw, 5.8rem);
+  line-height: 0.9;
+  color: var(--gain);
+}
+
+.automation-card p {
+  margin: 18px 0 0;
+  color: var(--soft);
+  line-height: 1.5;
+}
+
+.signal-card {
+  grid-column: span 8;
+  min-height: 220px;
+  padding: 24px;
+}
+
+.signal-list {
+  display: grid;
+  gap: 0;
+  margin-top: 14px;
+}
+
+.signal-row {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 54px 68px;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.signal-row span {
+  font-weight: 800;
+  color: var(--gain);
+}
+
+.signal-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--soft);
+}
+
+.signal-row b,
+.signal-row i {
+  font-style: normal;
+  color: var(--text);
+  text-align: right;
+}
+
+.signal-list p {
+  margin: 14px 0 0;
+  color: var(--soft);
+}
+
 .keyword-card div {
   display: flex;
   flex-wrap: wrap;
@@ -1016,6 +1082,8 @@ button {
   .metric-card,
   .wide-card,
   .stock-card,
+  .automation-card,
+  .signal-card,
   .detail-summary-card,
   .detail-side-card {
     grid-column: span 12;

@@ -10,12 +10,14 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
+import uuid
 from collections import Counter, defaultdict
 from datetime import date, datetime
 from typing import Optional
 
 import psycopg2
 import psycopg2.extras
+import requests
 
 DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
 
@@ -24,6 +26,263 @@ def _get_conn():
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL 未設定")
     return psycopg2.connect(DATABASE_URL)
+
+
+def ensure_analytics_schema() -> bool:
+    """Create the automation and signal tables used as the web SSOT."""
+    if not DATABASE_URL:
+        return False
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS kols (
+          kol_id VARCHAR(100) PRIMARY KEY,
+          kol_name VARCHAR(200) NOT NULL,
+          host VARCHAR(200) DEFAULT '',
+          avatar VARCHAR(50) DEFAULT '',
+          color VARCHAR(20) DEFAULT '#6366f1',
+          rss_url TEXT DEFAULT '',
+          added_at TIMESTAMPTZ DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS episodes (
+          id SERIAL PRIMARY KEY,
+          kol_id VARCHAR(100) NOT NULL REFERENCES kols(kol_id) ON DELETE CASCADE,
+          guid TEXT NOT NULL,
+          title TEXT NOT NULL DEFAULT '',
+          published DATE,
+          summary TEXT DEFAULT '',
+          sentiment VARCHAR(20) DEFAULT 'neutral'
+            CHECK (sentiment IN ('bullish', 'bearish', 'neutral')),
+          stocks_mentioned TEXT[] DEFAULT '{}',
+          report_url TEXT DEFAULT '',
+          analysis_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          analyzed_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE (kol_id, guid)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_episodes_date ON episodes(analysis_date DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS consensus_daily (
+          date DATE PRIMARY KEY,
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          episodes_analyzed INTEGER DEFAULT 0,
+          consensus_score INTEGER DEFAULT 0,
+          bullish_pct INTEGER DEFAULT 0,
+          neutral_pct INTEGER DEFAULT 0,
+          bearish_pct INTEGER DEFAULT 0,
+          top_keywords TEXT[] DEFAULT '{}',
+          weekly_theme TEXT DEFAULT ''
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS stock_mentions (
+          date DATE NOT NULL,
+          ticker VARCHAR(20) NOT NULL,
+          name VARCHAR(200) DEFAULT '',
+          market VARCHAR(10) DEFAULT 'US' CHECK (market IN ('TW', 'US')),
+          mentions INTEGER DEFAULT 0,
+          sentiment VARCHAR(20) DEFAULT 'neutral'
+            CHECK (sentiment IN ('bullish', 'bearish', 'neutral')),
+          kols TEXT[] DEFAULT '{}',
+          PRIMARY KEY (date, ticker)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_stock_mentions_date ON stock_mentions(date DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS job_runs (
+          run_id UUID PRIMARY KEY,
+          job_type VARCHAR(60) NOT NULL,
+          mode VARCHAR(30) NOT NULL DEFAULT 'daily',
+          status VARCHAR(20) NOT NULL DEFAULT 'running'
+            CHECK (status IN ('running', 'success', 'partial', 'failed')),
+          started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          finished_at TIMESTAMPTZ,
+          sources_total INTEGER NOT NULL DEFAULT 0,
+          sources_success INTEGER NOT NULL DEFAULT 0,
+          sources_failed INTEGER NOT NULL DEFAULT 0,
+          episodes_found INTEGER NOT NULL DEFAULT 0,
+          episodes_written INTEGER NOT NULL DEFAULT 0,
+          error_message TEXT DEFAULT ''
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_job_runs_started ON job_runs(started_at DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS job_items (
+          id BIGSERIAL PRIMARY KEY,
+          run_id UUID NOT NULL REFERENCES job_runs(run_id) ON DELETE CASCADE,
+          source_id TEXT NOT NULL,
+          source_label TEXT DEFAULT '',
+          status VARCHAR(20) NOT NULL DEFAULT 'running'
+            CHECK (status IN ('running', 'success', 'skipped', 'failed')),
+          episodes_found INTEGER NOT NULL DEFAULT 0,
+          episodes_written INTEGER NOT NULL DEFAULT 0,
+          error_message TEXT DEFAULT '',
+          started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          finished_at TIMESTAMPTZ
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_job_items_run ON job_items(run_id)",
+        """
+        CREATE TABLE IF NOT EXISTS daily_signals (
+          signal_date DATE NOT NULL,
+          ticker VARCHAR(20) NOT NULL,
+          name VARCHAR(200) DEFAULT '',
+          market VARCHAR(10) DEFAULT 'US' CHECK (market IN ('TW', 'US')),
+          direction VARCHAR(20) DEFAULT 'neutral'
+            CHECK (direction IN ('bullish', 'bearish', 'neutral')),
+          confidence_score INTEGER NOT NULL DEFAULT 0,
+          source_count INTEGER NOT NULL DEFAULT 0,
+          episode_count INTEGER NOT NULL DEFAULT 0,
+          source_kols TEXT[] DEFAULT '{}',
+          catalysts TEXT[] DEFAULT '{}',
+          horizon VARCHAR(30) DEFAULT 'watchlist',
+          thesis TEXT DEFAULT '',
+          price_at_signal NUMERIC(18, 4),
+          return_1d NUMERIC(8, 4),
+          return_5d NUMERIC(8, 4),
+          return_20d NUMERIC(8, 4),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (signal_date, ticker)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_daily_signals_date ON daily_signals(signal_date DESC, confidence_score DESC)",
+    ]
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                for statement in statements:
+                    cur.execute(statement)
+            conn.commit()
+        return True
+    except Exception as exc:
+        print(f"  [WARN] ensure_analytics_schema failed: {exc}")
+        return False
+
+
+def start_job_run(job_type: str, mode: str, sources_total: int = 0) -> str:
+    if not DATABASE_URL:
+        return ""
+    ensure_analytics_schema()
+    run_id = str(uuid.uuid4())
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO job_runs (run_id, job_type, mode, sources_total) VALUES (%s, %s, %s, %s)",
+                    (run_id, job_type, mode, sources_total),
+                )
+            conn.commit()
+        return run_id
+    except Exception as exc:
+        print(f"  [WARN] start_job_run failed: {exc}")
+        return ""
+
+
+def start_job_item(run_id: str, source_id: str, source_label: str = "") -> int | None:
+    if not DATABASE_URL or not run_id:
+        return None
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO job_items (run_id, source_id, source_label)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                    """,
+                    (run_id, source_id, source_label),
+                )
+                item_id = cur.fetchone()[0]
+            conn.commit()
+        return int(item_id)
+    except Exception as exc:
+        print(f"  [WARN] start_job_item failed: {exc}")
+        return None
+
+
+def finish_job_item(
+    item_id: int | None,
+    status: str,
+    episodes_found: int = 0,
+    episodes_written: int = 0,
+    error_message: str = "",
+) -> None:
+    if not DATABASE_URL or not item_id:
+        return
+    status = status if status in ("success", "skipped", "failed") else "failed"
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE job_items
+                    SET status = %s,
+                        episodes_found = %s,
+                        episodes_written = %s,
+                        error_message = %s,
+                        finished_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (status, episodes_found, episodes_written, error_message[:800], item_id),
+                )
+            conn.commit()
+    except Exception as exc:
+        print(f"  [WARN] finish_job_item failed: {exc}")
+
+
+def finish_job_run(run_id: str, status: str = "", error_message: str = "") -> None:
+    if not DATABASE_URL or not run_id:
+        return
+    try:
+        with _get_conn() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                      COUNT(*) AS total,
+                      COUNT(*) FILTER (WHERE status = 'success') AS success,
+                      COUNT(*) FILTER (WHERE status = 'failed') AS failed,
+                      COALESCE(SUM(episodes_found), 0) AS found,
+                      COALESCE(SUM(episodes_written), 0) AS written
+                    FROM job_items
+                    WHERE run_id = %s
+                    """,
+                    (run_id,),
+                )
+                stats = cur.fetchone() or {}
+                total = int(stats.get("total") or 0)
+                success = int(stats.get("success") or 0)
+                failed = int(stats.get("failed") or 0)
+                final_status = status or ("success" if failed == 0 else "partial" if success > 0 else "failed")
+                cur.execute(
+                    """
+                    UPDATE job_runs
+                    SET status = %s,
+                        finished_at = NOW(),
+                        sources_total = %s,
+                        sources_success = %s,
+                        sources_failed = %s,
+                        episodes_found = %s,
+                        episodes_written = %s,
+                        error_message = %s
+                    WHERE run_id = %s
+                    """,
+                    (
+                        final_status,
+                        total,
+                        success,
+                        failed,
+                        int(stats.get("found") or 0),
+                        int(stats.get("written") or 0),
+                        error_message[:1000],
+                        run_id,
+                    ),
+                )
+            conn.commit()
+    except Exception as exc:
+        print(f"  [WARN] finish_job_run failed: {exc}")
 
 
 # ── KOL / slug helpers ──────────────────────────────────────────────────────
@@ -151,6 +410,113 @@ def _stock_info(ticker: str) -> tuple[str, str]:
     return (ticker, market)
 
 
+def _price_symbol(ticker: str, market: str) -> str:
+    return f"{ticker}.tw" if market == "TW" else f"{ticker.lower()}.us"
+
+
+def _fetch_price_at_signal(ticker: str, market: str) -> float | None:
+    """Best-effort market snapshot from Stooq. Signal remains valid if this fails."""
+    try:
+        resp = requests.get(
+            "https://stooq.com/q/l/",
+            params={"s": _price_symbol(ticker, market), "f": "sd2t2ohlcv", "h": "", "e": "csv"},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        lines = [line.strip() for line in resp.text.splitlines() if line.strip()]
+        if len(lines) < 2:
+            return None
+        fields = lines[1].split(",")
+        close = fields[6] if len(fields) > 6 else ""
+        if close and close.upper() != "N/D":
+            return float(close)
+    except Exception:
+        return None
+    return None
+
+
+def _extract_catalysts(summaries: list[str], tickers: list[str]) -> list[str]:
+    keyword_map = {
+        "AI": ["AI", "人工智慧", "算力"],
+        "半導體": ["半導體", "晶片", "CoWoS", "先進製程"],
+        "財報": ["財報", "EPS", "營收", "毛利"],
+        "利率": ["Fed", "利率", "降息", "升息"],
+        "雲端": ["cloud", "雲端", "資料中心"],
+        "估值": ["估值", "本益比", "PER", "EV/EBITDA"],
+    }
+    text = "\n".join(summaries).lower()
+    catalysts = [label for label, words in keyword_map.items() if any(word.lower() in text for word in words)]
+    for ticker in tickers[:3]:
+        if ticker not in catalysts:
+            catalysts.append(ticker)
+    return catalysts[:6]
+
+
+def _infer_horizon(summaries: list[str]) -> str:
+    text = "\n".join(summaries).lower()
+    if any(word in text for word in ["長線", "long-term", "長期"]):
+        return "long-term"
+    if any(word in text for word in ["短線", "swing", "波段"]):
+        return "swing"
+    if any(word in text for word in ["財報", "earnings", "事件"]):
+        return "event-driven"
+    return "watchlist"
+
+
+def _write_daily_signals(cur, signal_date: date, rows: list[dict]) -> None:
+    cur.execute("DELETE FROM daily_signals WHERE signal_date = %s", (signal_date,))
+    for row in rows:
+        name, market = _stock_info(row["ticker"])
+        source_count = len(set(row["kols"]))
+        episode_count = row["mentions"]
+        confidence = min(100, round(source_count * 18 + episode_count * 8))
+        summaries = row.get("summaries", [])
+        catalysts = _extract_catalysts(summaries, [row["ticker"]])
+        horizon = _infer_horizon(summaries)
+        thesis = (
+            f"{row['ticker']} appeared across {source_count} source(s) and "
+            f"{episode_count} episode(s). Dominant direction: {row['sentiment']}."
+        )
+        price = _fetch_price_at_signal(row["ticker"], market)
+        cur.execute(
+            """
+            INSERT INTO daily_signals
+              (signal_date, ticker, name, market, direction, confidence_score,
+               source_count, episode_count, source_kols, catalysts, horizon,
+               thesis, price_at_signal, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (signal_date, ticker) DO UPDATE SET
+              name = EXCLUDED.name,
+              market = EXCLUDED.market,
+              direction = EXCLUDED.direction,
+              confidence_score = EXCLUDED.confidence_score,
+              source_count = EXCLUDED.source_count,
+              episode_count = EXCLUDED.episode_count,
+              source_kols = EXCLUDED.source_kols,
+              catalysts = EXCLUDED.catalysts,
+              horizon = EXCLUDED.horizon,
+              thesis = EXCLUDED.thesis,
+              price_at_signal = COALESCE(EXCLUDED.price_at_signal, daily_signals.price_at_signal),
+              updated_at = NOW()
+            """,
+            (
+                signal_date,
+                row["ticker"],
+                name,
+                market,
+                row["sentiment"],
+                confidence,
+                source_count,
+                episode_count,
+                row["kols"],
+                catalysts,
+                horizon,
+                thesis,
+                price,
+            ),
+        )
+
+
 def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
     """
     從 episodes 表讀取今日資料，計算共識指標並寫入：
@@ -161,13 +527,14 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
         return False
 
     today = analysis_date or date.today()
+    ensure_analytics_schema()
 
     try:
         with _get_conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     """
-                    SELECT e.kol_id, k.kol_name, e.sentiment, e.stocks_mentioned
+                    SELECT e.kol_id, k.kol_name, e.sentiment, e.stocks_mentioned, e.summary
                     FROM episodes e
                     JOIN kols k ON k.kol_id = e.kol_id
                     WHERE e.analysis_date = %s
@@ -190,10 +557,13 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
         # ── Stock aggregation ─────────────────────────────────────────────
         stock_kols: dict[str, list[str]] = defaultdict(list)
         stock_sent: dict[str, list[str]] = defaultdict(list)
+        stock_summaries: dict[str, list[str]] = defaultdict(list)
         for r in rows:
             for ticker in (r["stocks_mentioned"] or []):
                 stock_kols[ticker].append(r["kol_name"])
                 stock_sent[ticker].append(r["sentiment"])
+                if r.get("summary"):
+                    stock_summaries[ticker].append(r["summary"])
 
         # Dominant sentiment per stock
         def dominant(sents: list[str]) -> str:
@@ -206,6 +576,7 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
                 "mentions": len(kols),
                 "sentiment": dominant(stock_sent[ticker]),
                 "kols": kols,
+                "summaries": stock_summaries[ticker],
             }
             for ticker, kols in sorted(stock_kols.items(), key=lambda x: -len(x[1]))
         ]
@@ -269,6 +640,8 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
                         (today, s["ticker"], name, market,
                          s["mentions"], s["sentiment"], s["kols"]),
                     )
+
+                _write_daily_signals(cur, today, stock_rows)
             conn.commit()
 
         print(f"  [OK] Consensus updated: score={consensus_score} bullish={bullish_pct}%"

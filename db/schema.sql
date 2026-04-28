@@ -68,6 +68,68 @@ CREATE TABLE IF NOT EXISTS stock_mentions (
 
 CREATE INDEX IF NOT EXISTS idx_stock_mentions_date ON stock_mentions(date DESC);
 
+-- Automation run ledger. One row per scheduled/manual scanner run.
+CREATE TABLE IF NOT EXISTS job_runs (
+  run_id          UUID PRIMARY KEY,
+  job_type        VARCHAR(60) NOT NULL,
+  mode            VARCHAR(30) NOT NULL DEFAULT 'daily',
+  status          VARCHAR(20) NOT NULL DEFAULT 'running'
+                  CHECK (status IN ('running', 'success', 'partial', 'failed')),
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  finished_at     TIMESTAMPTZ,
+  sources_total   INTEGER NOT NULL DEFAULT 0,
+  sources_success INTEGER NOT NULL DEFAULT 0,
+  sources_failed  INTEGER NOT NULL DEFAULT 0,
+  episodes_found  INTEGER NOT NULL DEFAULT 0,
+  episodes_written INTEGER NOT NULL DEFAULT 0,
+  error_message   TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_runs_started ON job_runs(started_at DESC);
+
+-- Per-source observability for a job run.
+CREATE TABLE IF NOT EXISTS job_items (
+  id              BIGSERIAL PRIMARY KEY,
+  run_id          UUID NOT NULL REFERENCES job_runs(run_id) ON DELETE CASCADE,
+  source_id       TEXT NOT NULL,
+  source_label    TEXT DEFAULT '',
+  status          VARCHAR(20) NOT NULL DEFAULT 'running'
+                  CHECK (status IN ('running', 'success', 'skipped', 'failed')),
+  episodes_found  INTEGER NOT NULL DEFAULT 0,
+  episodes_written INTEGER NOT NULL DEFAULT 0,
+  error_message   TEXT DEFAULT '',
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  finished_at     TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_items_run ON job_items(run_id);
+
+-- Finance signal SSOT. Derived from episodes, consumed by the web UI.
+CREATE TABLE IF NOT EXISTS daily_signals (
+  signal_date      DATE NOT NULL,
+  ticker           VARCHAR(20) NOT NULL,
+  name             VARCHAR(200) DEFAULT '',
+  market           VARCHAR(10) DEFAULT 'US' CHECK (market IN ('TW', 'US')),
+  direction        VARCHAR(20) DEFAULT 'neutral'
+                   CHECK (direction IN ('bullish', 'bearish', 'neutral')),
+  confidence_score INTEGER NOT NULL DEFAULT 0,
+  source_count     INTEGER NOT NULL DEFAULT 0,
+  episode_count    INTEGER NOT NULL DEFAULT 0,
+  source_kols      TEXT[] DEFAULT '{}',
+  catalysts        TEXT[] DEFAULT '{}',
+  horizon          VARCHAR(30) DEFAULT 'watchlist',
+  thesis           TEXT DEFAULT '',
+  price_at_signal  NUMERIC(18, 4),
+  return_1d        NUMERIC(8, 4),
+  return_5d        NUMERIC(8, 4),
+  return_20d       NUMERIC(8, 4),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (signal_date, ticker)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_signals_date ON daily_signals(signal_date DESC, confidence_score DESC);
+
 -- ─────────────────────────────────────────────────────
 -- Seed: KOL registry from latest.json
 -- ─────────────────────────────────────────────────────
