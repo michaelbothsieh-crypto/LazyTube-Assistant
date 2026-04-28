@@ -44,6 +44,21 @@ DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_send_podcast_report(mode: str, chat_id: str) -> bool:
+    if chat_id:
+        return True
+    if mode == "daily":
+        return _env_flag("PODCAST_SEND_TELEGRAM_DAILY", False)
+    return True
+
+
 def _looks_like_rss_url(url: str) -> bool:
     """判斷 URL 是否已是 RSS feed（不需再解析）。"""
     markers = [".xml", "/rss", "/feed", "feeds.", "rss2", "podcast.xml"]
@@ -646,6 +661,9 @@ def main() -> None:
     runner = NotebookRunner()
     total_success = 0
     error_msg = ""
+    send_reports = _should_send_podcast_report(mode, on_demand_chat)
+    if not send_reports:
+        print("Telegram daily reports disabled; updating DB/website only.")
 
     for rss_url in rss_sources:
         kol_meta = _build_kol_meta(rss_url, "", kol_registry)
@@ -676,15 +694,16 @@ def main() -> None:
                     print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
                     # 快取命中也要寫 DB，確保網站資訊完整
                     _write_episode_to_db(kol_meta, ep, cached_analysis)
-                    send_podcast_report(
-                        title=ep["title"],
-                        analysis=cached_analysis,
-                        published=ep["published"],
-                        label=label or "Podcast",
-                        chat_id=on_demand_chat,
-                        message_id=on_demand_msg,
-                    )
-                    on_demand_msg = ""
+                    if send_reports:
+                        send_podcast_report(
+                            title=ep["title"],
+                            analysis=cached_analysis,
+                            published=ep["published"],
+                            label=label or "Podcast",
+                            chat_id=on_demand_chat,
+                            message_id=on_demand_msg,
+                        )
+                        on_demand_msg = ""
                     error_msg = ""
                     if mode == "daily":
                         mark_processed(rss_url, ep["guid"], chat_id=on_demand_chat)
@@ -710,15 +729,16 @@ def main() -> None:
                 # 無論 daily 或 on-demand，分析成功就寫 DB
                 _write_episode_to_db(kol_meta, ep, analysis)
 
-                send_podcast_report(
-                    title=ep["title"],
-                    analysis=analysis,
-                    published=ep["published"],
-                    label=label or "Podcast",
-                    chat_id=on_demand_chat,
-                    message_id=on_demand_msg,
-                )
-                on_demand_msg = ""
+                if send_reports:
+                    send_podcast_report(
+                        title=ep["title"],
+                        analysis=analysis,
+                        published=ep["published"],
+                        label=label or "Podcast",
+                        chat_id=on_demand_chat,
+                        message_id=on_demand_msg,
+                    )
+                    on_demand_msg = ""
                 error_msg = ""
 
                 if mode == "daily":

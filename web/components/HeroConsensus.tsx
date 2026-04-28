@@ -17,7 +17,6 @@ export default function HeroConsensus({ score, theme, date, sentiment, episodesC
   const scoreBorder = score >= 75 ? 'var(--bullish-border)' : score >= 50 ? '#fde68a' : 'var(--bearish-border)'
 
   const SentIcon  = sentiment.bullish >= 50 ? TrendUp : sentiment.bearish >= 50 ? TrendDown : Minus
-  const sentColor = sentiment.bullish >= 50 ? 'var(--bullish)' : sentiment.bearish >= 50 ? 'var(--bearish)' : 'var(--neutral)'
   const sentLabel = sentiment.bullish >= 50 ? '多方主導' : sentiment.bearish >= 50 ? '空方主導' : '情緒中性'
 
   const stats = [

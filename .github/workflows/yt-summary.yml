@@ -1,8 +1,6 @@
 name: YouTube NotebookLM Summarizer
 
 on:
-  schedule:
-    - cron: '0 0,2,4,6,8,10,12,14,23 * * *'
   workflow_dispatch:
 
 env:

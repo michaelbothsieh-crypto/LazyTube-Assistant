@@ -61,6 +61,7 @@ jobs:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           CUSTOM_PROMPT: "podcast"
           PODCAST_EPISODE_NUMBER: ""
+          PODCAST_SEND_TELEGRAM_DAILY: "false"
           # 網站專屬 KOL 清單（與 TG /subpodcast 訂閱完全分開）
           WEBSITE_KOLS_FILE: data/website_kols.json
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
