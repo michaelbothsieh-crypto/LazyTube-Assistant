@@ -25,6 +25,7 @@ async function _getLatestData(): Promise<ConsensusData> {
 
     if (!consensus) return emptyConsensusData()
 
+    const latestDateValue = consensus.date instanceof Date ? consensus.date : new Date(String(consensus.date))
     const latestDate: string = consensus.date instanceof Date
       ? consensus.date.toISOString().slice(0, 10)
       : String(consensus.date)
@@ -33,17 +34,31 @@ async function _getLatestData(): Promise<ConsensusData> {
       db`
         SELECT ticker, name, market, mentions, sentiment, kols
         FROM stock_mentions
-        WHERE date = ${latestDate}
+        WHERE date = (
+          SELECT MAX(date)
+          FROM stock_mentions
+          WHERE date <= ${latestDateValue}
+        )
         ORDER BY mentions DESC
       `,
       db`
-        SELECT e.kol_id, k.kol_name, k.host, k.avatar, k.color,
-               e.title, e.published, e.summary, e.sentiment,
-               e.stocks_mentioned, e.report_url
-        FROM episodes e
-        JOIN kols k ON k.kol_id = e.kol_id
-        WHERE e.analysis_date = ${latestDate}
-        ORDER BY e.analyzed_at DESC
+        SELECT *
+        FROM (
+          SELECT DISTINCT ON (e.kol_id)
+                 e.kol_id, k.kol_name, k.host, k.avatar, k.color,
+                 e.title, e.published, e.summary, e.sentiment,
+                 e.stocks_mentioned, e.report_url, e.analyzed_at
+          FROM episodes e
+          JOIN kols k ON k.kol_id = e.kol_id
+          WHERE COALESCE(cardinality(e.stocks_mentioned), 0) > 0
+            AND e.analysis_date = (
+            SELECT MAX(analysis_date)
+            FROM episodes
+            WHERE analysis_date <= ${latestDateValue}
+          )
+          ORDER BY e.kol_id, e.analyzed_at DESC
+        ) latest_kol_episodes
+        ORDER BY analyzed_at DESC
       `,
       db`
         SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
@@ -56,7 +71,11 @@ async function _getLatestData(): Promise<ConsensusData> {
                source_count, episode_count, source_kols, catalysts, horizon,
                thesis, price_at_signal, return_1d, return_5d, return_20d
         FROM daily_signals
-        WHERE signal_date = ${latestDate}
+        WHERE signal_date = (
+          SELECT MAX(signal_date)
+          FROM daily_signals
+          WHERE signal_date <= ${latestDateValue}
+        )
         ORDER BY confidence_score DESC, source_count DESC
         LIMIT 12
       `,
@@ -117,6 +136,7 @@ export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> 
       FROM episodes e
       JOIN kols k ON k.kol_id = e.kol_id
       WHERE e.kol_id = ${kolId}
+        AND COALESCE(cardinality(e.stocks_mentioned), 0) > 0
       ORDER BY e.analyzed_at DESC
       LIMIT 1
     `
@@ -131,7 +151,12 @@ export async function getAllKolIds(): Promise<string[]> {
   if (!db) return []
 
   try {
-    const rows = await db`SELECT DISTINCT kol_id FROM episodes ORDER BY kol_id`
+    const rows = await db`
+      SELECT DISTINCT kol_id
+      FROM episodes
+      WHERE COALESCE(cardinality(stocks_mentioned), 0) > 0
+      ORDER BY kol_id
+    `
     return rows.map((row) => row.kol_id as string)
   } catch {
     return []

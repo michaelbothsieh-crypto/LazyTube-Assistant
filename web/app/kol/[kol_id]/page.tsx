@@ -18,7 +18,16 @@ const sentiment = {
 } as const
 
 function splitSummary(summary: string) {
-  return summary
+  const markers = ['【投資倒數小結】', '投資倒數小結', '投資小結', '市場重點']
+  const markerIndex = markers
+    .map((marker) => summary.indexOf(marker))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0]
+  const reordered = markerIndex == null
+    ? summary
+    : `${summary.slice(markerIndex)}\n\n${summary.slice(0, markerIndex)}`
+
+  return reordered
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
@@ -50,22 +59,23 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
     }
   ))
   const summaryLines = splitSummary(episode.summary)
-  const heroImage = `https://picsum.photos/seed/${encodeURIComponent(`detail-${episode.kol_id}`)}/1400/900`
 
   return (
     <main className="detail-shell overflow-x-hidden w-full max-w-full">
-      <nav className="site-nav detail-nav" aria-label="Detail navigation">
+      <nav className="research-nav detail-report-nav" aria-label="Detail navigation">
         <Link href="/" className="brand-mark detail-back">
           <ArrowLeft size={16} />
           回首頁
         </Link>
-        <span className="detail-nav-title">{episode.kol_name}</span>
-        <span className="nav-date">{episode.published}</span>
+        <div>
+          <span>{episode.kol_name}</span>
+          <span>{episode.published}</span>
+        </div>
       </nav>
 
-      <section className="detail-hero">
-        <div className="detail-hero-copy">
-          <p className="eyebrow">KOL episode signal</p>
+      <section className="detail-report-header">
+        <div className="detail-report-title">
+          <p className="eyebrow">KOL episode research note</p>
           <h1>{episode.title}</h1>
           <div className="detail-hero-meta">
             <span style={{ color: tone.color }}>
@@ -78,16 +88,35 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
           {episode.report_url && (
             <a className="btn btn-secondary detail-report" href={episode.report_url} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={16} />
-              開啟完整報告
+              完整報告
             </a>
           )}
         </div>
-        <div className="detail-hero-media">
-          <div style={{ backgroundImage: `url(${heroImage})` }} />
-        </div>
+
+        <aside className="detail-kol-card">
+          <span className="card-label">節目來源</span>
+          <div className="host-avatar" style={{ color: episode.color, borderColor: `${episode.color}55`, background: `${episode.color}18` }}>
+            {episode.avatar || episode.kol_name.slice(0, 1)}
+          </div>
+          <h2>{episode.kol_name}</h2>
+          <dl>
+            <div>
+              <dt>主持人</dt>
+              <dd>{episode.host || '-'}</dd>
+            </div>
+            <div>
+              <dt>發布日期</dt>
+              <dd>{episode.published}</dd>
+            </div>
+            <div>
+              <dt>情緒</dt>
+              <dd style={{ color: tone.color }}>{tone.label}</dd>
+            </div>
+          </dl>
+        </aside>
       </section>
 
-      <section className="detail-grid-section">
+      <section className="detail-grid-section compact-detail-grid">
         <div className="detail-bento">
           <article className="detail-summary-card">
             <span className="card-label">分析摘要</span>
@@ -97,28 +126,6 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
               ))}
             </div>
           </article>
-
-          <aside className="detail-side-card">
-            <span className="card-label">節目資訊</span>
-            <div className="host-avatar" style={{ color: episode.color, borderColor: `${episode.color}55`, background: `${episode.color}18` }}>
-              {episode.avatar || episode.kol_name.slice(0, 1)}
-            </div>
-            <h2>{episode.kol_name}</h2>
-            <dl>
-              <div>
-                <dt>主持人</dt>
-                <dd>{episode.host || '-'}</dd>
-              </div>
-              <div>
-                <dt>發布日期</dt>
-                <dd>{episode.published}</dd>
-              </div>
-              <div>
-                <dt>情緒</dt>
-                <dd style={{ color: tone.color }}>{tone.label}</dd>
-              </div>
-            </dl>
-          </aside>
 
           <article className="detail-stock-card">
             <div className="detail-card-head">
@@ -147,7 +154,7 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
           {history.length > 1 && (
             <article className="detail-chart-card">
               <div className="detail-card-head">
-                <span className="card-label">共識歷史</span>
+                <span className="card-label">市場方向趨勢</span>
                 <BarChart2 size={18} />
               </div>
               <ConsensusChart history={history} />
@@ -156,9 +163,9 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
         </div>
       </section>
 
-      <section className="detail-action">
-        <h2>回到每日市場共識</h2>
-        <p>這一頁展示單一節目的訊號，首頁則把所有節目折疊成每日網站資料。</p>
+      <section className="detail-action compact-detail-action">
+        <h2>回到每日市場研究報告</h2>
+        <p>首頁會把所有 KOL 節目整理成可追蹤訊號、提及排行與資料狀態。</p>
         <Link href="/" className="btn btn-primary">
           <ArrowLeft size={16} />
           查看總覽

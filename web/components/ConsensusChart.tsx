@@ -24,14 +24,14 @@ export default function ConsensusChart({ history }: { history: ConsensusHistory[
     <div className="chart-panel">
       <div className="chart-header">
         <div>
-          <span className="card-label">Consensus movement</span>
+          <span className="card-label">市場方向變化</span>
           <strong>{latest}</strong>
         </div>
         <small className={delta >= 0 ? 'chart-up' : 'chart-down'}>
           {delta >= 0 ? '+' : ''}{delta}
         </small>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Consensus history chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="市場方向歷史圖">
         <defs>
           <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#73f1ba" stopOpacity="0.22" />

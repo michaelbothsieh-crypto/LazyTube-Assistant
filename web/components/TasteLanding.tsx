@@ -1,14 +1,9 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useGSAP } from '@gsap/react'
-import gsap from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import type { ConsensusData, Episode } from '@/types'
-import { Activity, BarChart2, ChevronRight, Clock, Minus, TrendDown, TrendUp, Users } from '@/components/icons'
-
-gsap.registerPlugin(ScrollTrigger)
+import { Activity, ChevronRight, Minus, TrendDown, TrendUp, Users } from '@/components/icons'
 
 type TasteLandingProps = {
   data: ConsensusData
@@ -18,71 +13,6 @@ const sentimentTone = {
   bullish: { label: '偏多', color: 'var(--gain)', Icon: TrendUp },
   neutral: { label: '中性', color: 'var(--muted)', Icon: Minus },
   bearish: { label: '偏空', color: 'var(--risk)', Icon: TrendDown },
-} as const
-
-const copy = {
-  zh: {
-    navSignal: '共識',
-    navEpisodes: '節目',
-    navAction: '更新節奏',
-    heroKicker: 'Podcast intelligence for public markets',
-    heroTitleA: '每日 Podcast',
-    heroTitleB: '市場研究報告',
-    heroBody: '彙整最新節目分析、股票提及、情緒分布與自動化狀態，形成一份可追蹤的台股與美股研究儀表板。',
-    primaryCta: '查看今日共識',
-    secondaryCta: '瀏覽 KOL 訊號',
-    score: '共識分數',
-    episodes: '分析集數',
-    update: '網站資料更新',
-    sentiment: '市場情緒',
-    topNames: '高共識標的',
-    signals: '可追蹤訊號',
-    automation: '自動化完整度',
-    thesis: '今日主軸',
-    keywords: '討論向量',
-    pulseTitle: '訊號來自多個來源的重疊，而不是單一主持人的一句話。',
-    pulseBody: '同一個 ticker、題材與方向重複出現時，系統會把它整理成 daily_signals，並保留來源數、集數與信心分數。',
-    episodeTitle: '最新節目訊號',
-    all: '全部',
-    bullish: '偏多',
-    neutral: '中性',
-    bearish: '偏空',
-    actionTitle: '每日任務只更新網站資料',
-    actionBody: '排程 scanner 的責任是寫入 Neon DB、重算共識並讓前端取得新資料；Telegram 僅保留手動任務或明確開啟時的回覆。',
-    rerun: '回到共識',
-    detail: '查看詳情',
-  },
-  en: {
-    navSignal: 'Consensus',
-    navEpisodes: 'Episodes',
-    navAction: 'Cadence',
-    heroKicker: 'Podcast intelligence for public markets',
-    heroTitleA: 'Daily podcast',
-    heroTitleB: 'market research report',
-    heroBody: 'A compact research dashboard built from episode analysis, ticker mentions, sentiment distribution, signal confidence, and automation health.',
-    primaryCta: 'Read consensus',
-    secondaryCta: 'Scan KOL signals',
-    score: 'Consensus score',
-    episodes: 'Episodes analyzed',
-    update: 'Website data refresh',
-    sentiment: 'Market sentiment',
-    topNames: 'Highest agreement names',
-    signals: 'Trackable signals',
-    automation: 'Automation completeness',
-    thesis: 'Daily thesis',
-    keywords: 'Conversation vectors',
-    pulseTitle: 'A signal is not one opinion. It is the overlap across multiple hosts.',
-    pulseBody: 'When the same ticker, theme, and sentiment repeat across shows, this surface compresses the noise into something closer to a decision layer.',
-    episodeTitle: 'Latest episode signals',
-    all: 'All',
-    bullish: 'Bullish',
-    neutral: 'Neutral',
-    bearish: 'Bearish',
-    actionTitle: 'Daily jobs update the website data',
-    actionBody: 'Scheduled scanners write Neon rows, recompute consensus, and refresh the web surface. Telegram stays reserved for manual tasks or explicit opt-in reporting.',
-    rerun: 'Back to consensus',
-    detail: 'Open detail',
-  },
 } as const
 
 function formatDateTime(value: string) {
@@ -96,330 +26,212 @@ function formatDateTime(value: string) {
   }).format(date)
 }
 
-function stockImageSeed(ticker: string) {
-  return `https://picsum.photos/seed/${encodeURIComponent(`market-${ticker}`)}/900/640`
+function dominantSentiment(data: ConsensusData) {
+  const { bullish, bearish, neutral } = data.consensus.market_sentiment
+  if (bullish >= bearish && bullish >= neutral) return 'bullish'
+  if (bearish >= bullish && bearish >= neutral) return 'bearish'
+  return 'neutral'
+}
+
+function financePreview(summary: string) {
+  const markers = ['【投資倒數小結】', '投資倒數小結', '投資小結', '市場重點']
+  const markerIndex = markers
+    .map((marker) => summary.indexOf(marker))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0]
+  const source = markerIndex == null ? summary : summary.slice(markerIndex)
+  return source.replace(/\s+/g, ' ').trim()
 }
 
 export default function TasteLanding({ data }: TasteLandingProps) {
-  const rootRef = useRef<HTMLElement | null>(null)
-  const revealRef = useRef<HTMLParagraphElement | null>(null)
-  const [locale, setLocale] = useState<'zh' | 'en'>('zh')
   const [filter, setFilter] = useState<'all' | 'bullish' | 'neutral' | 'bearish'>('all')
-  const t = copy[locale]
-
-  useGSAP(
-    () => {
-      const revealWords = revealRef.current?.querySelectorAll('span') ?? []
-      if (revealWords.length) {
-        gsap.set(revealWords, { opacity: 0.12, y: 10 })
-        gsap.to(revealWords, {
-          opacity: 1,
-          y: 0,
-          stagger: 0.08,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: revealRef.current,
-            start: 'top 78%',
-            end: 'bottom 35%',
-            scrub: true,
-          },
-        })
-      }
-
-      gsap.utils.toArray<HTMLElement>('[data-stack-card]').forEach((card, index) => {
-        gsap.fromTo(
-          card,
-          { y: 90, scale: 0.92, opacity: 0.35 },
-          {
-            y: index * -10,
-            scale: 1,
-            opacity: 1,
-            ease: 'power2.out',
-            scrollTrigger: {
-              trigger: card,
-              start: 'top 90%',
-              end: 'top 42%',
-              scrub: true,
-            },
-          },
-        )
-      })
-
-      gsap.utils.toArray<HTMLElement>('[data-image-rise]').forEach((el) => {
-        gsap.fromTo(
-          el,
-          { scale: 0.82, opacity: 0.35, filter: 'grayscale(90%) contrast(90%)' },
-          {
-            scale: 1,
-            opacity: 1,
-            filter: 'grayscale(20%) contrast(125%)',
-            ease: 'none',
-            scrollTrigger: {
-              trigger: el,
-              start: 'top 82%',
-              end: 'bottom 18%',
-              scrub: true,
-            },
-          },
-        )
-      })
-
-      gsap.utils.toArray<HTMLElement>('[data-marquee-track]').forEach((track) => {
-        const width = track.scrollWidth / 2
-        gsap.to(track, {
-          x: -width,
-          duration: 30,
-          repeat: -1,
-          ease: 'none',
-        })
-      })
-    },
-    { scope: rootRef },
-  )
-
-  const topStocks = data.consensus.stocks.slice(0, 6)
-  const heroStock = topStocks[0]
-  const episodes = data.episodes.slice(0, 12)
+  const topStocks = data.consensus.stocks.slice(0, 8)
+  const signals = data.signals.slice(0, 8)
+  const episodes = data.episodes.slice(0, 16)
   const filteredEpisodes = filter === 'all' ? episodes : episodes.filter((episode) => episode.sentiment === filter)
-  const marqueeItems = topStocks.length ? [...topStocks, ...topStocks] : []
+  const direction = dominantSentiment(data)
+  const directionTone = sentimentTone[direction]
+  const DirectionIcon = directionTone.Icon
+  const latestRun = data.automation.latest_run
 
-  const sentimentRows = useMemo(() => {
-    const total = data.consensus.market_sentiment
-    return [
-      { key: 'bullish' as const, label: t.bullish, value: total.bullish },
-      { key: 'neutral' as const, label: t.neutral, value: total.neutral },
-      { key: 'bearish' as const, label: t.bearish, value: total.bearish },
-    ]
-  }, [data.consensus.market_sentiment, t])
-
-  const revealWords = `${t.pulseTitle} ${t.pulseBody}`.split(' ')
+  const coverageText = useMemo(() => {
+    if (!latestRun) return '尚未取得最新自動化執行紀錄'
+    return `${latestRun.sources_success}/${latestRun.sources_total} 個來源完成，寫入 ${latestRun.episodes_written} 集`
+  }, [latestRun])
 
   return (
-    <main ref={rootRef} className="site-shell overflow-x-hidden w-full max-w-full">
-      <nav className="site-nav" aria-label="Primary navigation">
+    <main className="research-shell">
+      <nav className="research-nav" aria-label="Primary navigation">
         <Link href="/" className="brand-mark">PodConsensus</Link>
-        <div className="nav-links">
-          <a href="#consensus">{t.navSignal}</a>
-          <a href="#episodes">{t.navEpisodes}</a>
-          <a href="#cadence">{t.navAction}</a>
-        </div>
-        <div className="nav-actions">
-          <button type="button" className={locale === 'zh' ? 'is-active' : ''} onClick={() => setLocale('zh')}>
-            繁中
-          </button>
-          <button type="button" className={locale === 'en' ? 'is-active' : ''} onClick={() => setLocale('en')}>
-            EN
-          </button>
+        <div>
+          <a href="#signals">訊號</a>
+          <a href="#kols">KOL</a>
+          <a href="#automation">資料狀態</a>
         </div>
       </nav>
 
-      <section className="hero-editorial">
-        <div className="hero-copy">
-          <p className="eyebrow">{t.heroKicker}</p>
-          <h1>{t.heroTitleA}<br />{t.heroTitleB}</h1>
-          <p className="hero-body">{t.heroBody}</p>
-          <div className="hero-actions">
-            <a className="btn btn-primary" href="#consensus">{t.primaryCta}</a>
-            <a className="btn btn-secondary" href="#episodes">{t.secondaryCta}</a>
-          </div>
+      <section className="research-header">
+        <div>
+          <p className="eyebrow">Daily podcast market brief</p>
+          <h1>每日 Podcast 市場研究報告</h1>
+          <p>
+            將 Podcast scanner 蒐集到的 KOL 節目整理成市場方向、提及標的、可追蹤訊號與資料更新狀態。
+            這裡呈現網站資料庫的最新結果，不會每日主動推送 Telegram。
+          </p>
         </div>
-        <div className="hero-panel" data-image-rise>
-          <div className="hero-panel-image" style={{ backgroundImage: `url(${stockImageSeed(heroStock?.ticker ?? 'dashboard')})` }} />
-          <div className="hero-panel-content">
-            <span>{data.date}</span>
-            <strong>{heroStock ? `${heroStock.ticker} ${heroStock.name}` : t.topNames}</strong>
-            <p>{data.consensus.weekly_theme || t.thesis}</p>
-          </div>
+        <aside className="run-card" id="automation">
+          <span>資料狀態</span>
+          <strong>{data.automation.completeness_pct}%</strong>
+          <p>{coverageText}</p>
+          <small>網頁快取約 5 分鐘更新一次；手動執行 Actions 後會在下一次重建時反映。</small>
+        </aside>
+      </section>
+
+      <section className="summary-strip" aria-label="Daily summary">
+        <div>
+          <span>報告日期</span>
+          <strong>{data.date}</strong>
+          <small>更新 {formatDateTime(data.generated_at)}</small>
+        </div>
+        <div>
+          <span>市場方向</span>
+          <strong style={{ color: directionTone.color }}>
+            <DirectionIcon size={18} />
+            {directionTone.label}
+          </strong>
+          <small>
+            多 {data.consensus.market_sentiment.bullish}% / 中 {data.consensus.market_sentiment.neutral}% / 空 {data.consensus.market_sentiment.bearish}%
+          </small>
+        </div>
+        <div>
+          <span>研究樣本</span>
+          <strong>
+            <Users size={18} />
+            {data.episodes_analyzed} 集
+          </strong>
+          <small>來自目前啟用的 KOL RSS</small>
+        </div>
+        <div>
+          <span>訊號分數</span>
+          <strong>
+            <Activity size={18} />
+            {data.consensus.consensus_score}
+          </strong>
+          <small>{data.consensus.weekly_theme || '等待更多資料形成主題'}</small>
         </div>
       </section>
 
-      {marqueeItems.length > 0 && (
-        <div className="signal-marquee" aria-hidden="true">
-          <div className="marquee-track" data-marquee-track>
-            {marqueeItems.map((stock, index) => (
-              <span key={`${stock.ticker}-${index}`}>
-                {stock.ticker} {stock.name} {stock.mentions}x
-              </span>
-            ))}
+      <section className="research-grid" id="signals">
+        <article className="panel panel-large">
+          <div className="panel-head">
+            <div>
+              <span>今日可追蹤訊號</span>
+              <h2>以來源數、集數與信心分數排序</h2>
+            </div>
+            <small>{signals.length || 0} signals</small>
           </div>
-        </div>
-      )}
-
-      <section id="consensus" className="chapter-section">
-        <div className="section-heading">
-          <p className="eyebrow">{t.update} {formatDateTime(data.generated_at)}</p>
-          <h2>{t.thesis}</h2>
-        </div>
-        <div className="data-bento">
-          <article className="metric-card metric-score" data-stack-card>
-            <div className="metric-icon"><Activity size={20} /></div>
-            <span>{t.score}</span>
-            <strong>{data.consensus.consensus_score}</strong>
-            <p>{data.consensus.weekly_theme || '等待新的共識資料'}</p>
-          </article>
-
-          <article className="metric-card" data-stack-card>
-            <div className="metric-icon"><Users size={20} /></div>
-            <span>{t.episodes}</span>
-            <strong>{data.episodes_analyzed}</strong>
-            <p>{data.date}</p>
-          </article>
-
-          <article className="metric-card" data-stack-card>
-            <div className="metric-icon"><Clock size={20} /></div>
-            <span>{t.update}</span>
-            <strong>300s</strong>
-            <p>ISR revalidate window</p>
-          </article>
-
-          <article className="wide-card sentiment-card" data-stack-card>
-            <div>
-              <span className="card-label">{t.sentiment}</span>
-              <h3>{data.consensus.market_sentiment.bullish >= 50 ? t.bullish : data.consensus.market_sentiment.bearish >= 50 ? t.bearish : t.neutral}</h3>
+          <div className="signal-table">
+            <div className="signal-table-head">
+              <span>Ticker</span>
+              <span>Name</span>
+              <span>Direction</span>
+              <span>Confidence</span>
+              <span>Sources</span>
             </div>
-            <div className="sentiment-bars">
-              {sentimentRows.map((row) => (
-                <div key={row.key}>
-                  <span>{row.label}</span>
-                  <div className="bar-rail">
-                    <i style={{ width: `${row.value}%`, background: sentimentTone[row.key].color }} />
-                  </div>
-                  <strong>{row.value}%</strong>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="stock-card" data-stack-card>
-            <span className="card-label">{t.topNames}</span>
-            <div className="stock-list">
-              {topStocks.map((stock, index) => {
-                const tone = sentimentTone[stock.sentiment]
-                return (
-                  <Link href="#episodes" key={stock.ticker} className="stock-row">
-                    <b>{String(index + 1).padStart(2, '0')}</b>
-                    <span>{stock.ticker}</span>
-                    <small>{stock.name}</small>
-                    <strong style={{ color: tone.color }}>{stock.mentions}x</strong>
-                  </Link>
-                )
-              })}
-            </div>
-          </article>
-
-          <article className="keyword-card" data-stack-card>
-            <span className="card-label">{t.keywords}</span>
-            <div>
-              {data.consensus.top_keywords.slice(0, 8).map((keyword) => (
-                <span key={keyword}>{keyword}</span>
-              ))}
-            </div>
-          </article>
-
-          <article className="automation-card" data-stack-card>
-            <span className="card-label">{t.automation}</span>
-            <strong>{data.automation.completeness_pct}%</strong>
-            <p>
-              {data.automation.latest_run
-                ? `${data.automation.latest_run.sources_success}/${data.automation.latest_run.sources_total} sources, ${data.automation.latest_run.episodes_written} episodes written`
-                : 'No completed automation run yet'}
-            </p>
-          </article>
-
-          <article className="signal-card" data-stack-card>
-            <span className="card-label">{t.signals}</span>
-            <div className="signal-list">
-              {data.signals.slice(0, 6).map((signal) => (
-                <Link href="#episodes" key={signal.ticker} className="signal-row">
-                  <span>{signal.ticker}</span>
-                  <small>{signal.name}</small>
-                  <b>{signal.confidence_score}</b>
-                  <i>{signal.source_count} src</i>
+            {signals.length ? signals.map((signal) => {
+              const tone = sentimentTone[signal.direction]
+              return (
+                <Link href="#kols" className="signal-table-row" key={signal.ticker}>
+                  <b>{signal.ticker}</b>
+                  <span>{signal.name}</span>
+                  <i style={{ color: tone.color }}>{tone.label}</i>
+                  <strong>{signal.confidence_score}</strong>
+                  <small>{signal.source_count}</small>
                 </Link>
-              ))}
-              {!data.signals.length && <p>No signal rows yet. The next daily scan will populate daily_signals.</p>}
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="narrative-section">
-        <p ref={revealRef} className="reveal-copy">
-          {revealWords.map((word, index) => (
-            <span key={`${word}-${index}`}>{word} </span>
-          ))}
-        </p>
-      </section>
-
-      <section id="episodes" className="chapter-section episode-section">
-        <div className="section-heading section-heading-row">
-          <div>
-            <p className="eyebrow">KOL signal board</p>
-            <h2>{t.episodeTitle}</h2>
+              )
+            }) : (
+              <p className="empty-note">尚無今日訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
+            )}
           </div>
-          <div className="filter-tabs">
+        </article>
+
+        <aside className="panel">
+          <div className="panel-head">
+            <div>
+              <span>高頻標的</span>
+              <h2>今日提及排行</h2>
+            </div>
+          </div>
+          <div className="rank-list">
+            {topStocks.map((stock, index) => {
+              const tone = sentimentTone[stock.sentiment]
+              return (
+                <div className="rank-row" key={stock.ticker}>
+                  <b>{index + 1}</b>
+                  <span>{stock.ticker}</span>
+                  <small>{stock.name}</small>
+                  <strong style={{ color: tone.color }}>{stock.mentions}x</strong>
+                </div>
+              )
+            })}
+          </div>
+        </aside>
+      </section>
+
+      <section className="panel" id="kols">
+        <div className="panel-head">
+          <div>
+            <span>KOL 研究樣本</span>
+            <h2>點進去會看到同一集節目的詳細筆記</h2>
+          </div>
+          <div className="filter-tabs compact-tabs">
             {(['all', 'bullish', 'neutral', 'bearish'] as const).map((item) => (
               <button key={item} type="button" className={filter === item ? 'is-active' : ''} onClick={() => setFilter(item)}>
-                {item === 'all' ? t.all : t[item]}
+                {item === 'all' ? '全部' : sentimentTone[item].label}
               </button>
             ))}
           </div>
         </div>
-
-        <div className="episode-accordion">
+        <div className="kol-report-grid">
           {filteredEpisodes.map((episode, index) => (
-            <EpisodeSlice key={`${episode.kol_id}-${index}`} episode={episode} index={index} detailLabel={t.detail} />
+            <EpisodeCard key={`${episode.kol_id}-${episode.title}-${index}`} episode={episode} />
           ))}
         </div>
-      </section>
-
-      <section id="cadence" className="action-band">
-        <div>
-          <BarChart2 size={28} />
-          <h2>{t.actionTitle}</h2>
-          <p>{t.actionBody}</p>
-          <a className="btn btn-primary" href="#consensus">{t.rerun}</a>
-        </div>
-        <footer>
-          <span>PodConsensus</span>
-          <span>{data.date}</span>
-          <span>{data.episodes_analyzed} {t.episodes}</span>
-        </footer>
       </section>
     </main>
   )
 }
 
-function EpisodeSlice({ episode, index, detailLabel }: { episode: Episode; index: number; detailLabel: string }) {
+function EpisodeCard({ episode }: { episode: Episode }) {
   const tone = sentimentTone[episode.sentiment]
   const Icon = tone.Icon
-  const image = `https://picsum.photos/seed/${encodeURIComponent(`kol-${episode.kol_id}-${index}`)}/900/700`
+  const fallbackAvatar = episode.kol_name.slice(0, 1) || '?'
 
   return (
-    <Link href={`/kol/${episode.kol_id}`} className="episode-slice group">
-      <div className="episode-art" data-image-rise>
-        <div style={{ backgroundImage: `url(${image})` }} />
+    <Link href={`/kol/${episode.kol_id}`} className="kol-report-card">
+      <div className="kol-report-top">
+        <div className="kol-avatar" style={{ color: episode.color, borderColor: `${episode.color}66`, background: `${episode.color}18` }}>
+          {episode.avatar || fallbackAvatar}
+        </div>
+        <div>
+          <strong>{episode.kol_name}</strong>
+          <small>{episode.host || 'Podcast'} | {episode.published}</small>
+        </div>
+        <span style={{ color: tone.color }}>
+          <Icon size={14} />
+          {tone.label}
+        </span>
       </div>
-      <div className="episode-body">
-        <div className="episode-topline">
-          <span>{episode.kol_name}</span>
-          <small>{episode.published}</small>
-        </div>
-        <h3>{episode.title}</h3>
-        <p>{episode.summary}</p>
-        <div className="episode-meta">
-          <span style={{ color: tone.color }}>
-            <Icon size={14} />
-            {tone.label}
-          </span>
-          {episode.stocks_mentioned.slice(0, 4).map((ticker) => (
-            <b key={ticker}>{ticker}</b>
-          ))}
-          <i>
-            {detailLabel}
-            <ChevronRight size={14} />
-          </i>
-        </div>
+      <h3>{episode.title}</h3>
+      <p>{financePreview(episode.summary) || '尚無摘要內容'}</p>
+      <div className="ticker-row">
+        {episode.stocks_mentioned.slice(0, 5).map((ticker) => (
+          <b key={ticker}>{ticker}</b>
+        ))}
+        <i>
+          查看筆記
+          <ChevronRight size={14} />
+        </i>
       </div>
     </Link>
   )
