@@ -5,19 +5,21 @@
 @tailwind utilities;
 
 :root {
-  --bg: #07090d;
-  --panel: #10141b;
-  --panel-2: #171b24;
-  --line: rgba(219, 230, 255, 0.14);
-  --line-strong: rgba(219, 230, 255, 0.28);
-  --text: #f4f7fb;
-  --soft: #b8c1d0;
-  --muted: #7f8a9b;
-  --gain: #73f1ba;
-  --risk: #ff7d7d;
-  --amber: #f2c56b;
-  --violet: #b39bff;
-  --cyan: #7ed7ff;
+  --bg: #08090f;
+  --panel: #10131d;
+  --panel-2: #181c28;
+  --line: rgba(224, 238, 255, 0.16);
+  --line-strong: rgba(224, 238, 255, 0.34);
+  --text: #fbfcff;
+  --soft: #c5cedd;
+  --muted: #8792a6;
+  --gain: #8df5a8;
+  --risk: #ff6f8e;
+  --amber: #ffd166;
+  --violet: #d0a8ff;
+  --cyan: #62ddff;
+  --coral: #ff9f68;
+  --lime: #c9f45c;
 }
 
 * {
@@ -33,9 +35,10 @@ body {
   min-height: 100%;
   margin: 0;
   background:
-    radial-gradient(80rem 42rem at 82% -10%, rgba(126, 215, 255, 0.18), transparent 62%),
-    radial-gradient(58rem 38rem at 8% 8%, rgba(242, 197, 107, 0.13), transparent 58%),
-    linear-gradient(180deg, #0d1118 0%, #07090d 48%, #050608 100%);
+    radial-gradient(76rem 42rem at 82% -10%, rgba(98, 221, 255, 0.24), transparent 60%),
+    radial-gradient(48rem 34rem at 6% 12%, rgba(255, 159, 104, 0.18), transparent 58%),
+    radial-gradient(46rem 28rem at 88% 54%, rgba(201, 244, 92, 0.11), transparent 58%),
+    linear-gradient(180deg, #10131d 0%, #08090f 48%, #06070b 100%);
   color: var(--text);
   font-family: 'Cabinet Grotesk', 'Outfit', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -78,7 +81,9 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 14px;
-  background: rgba(9, 12, 17, 0.82);
+  background:
+    linear-gradient(90deg, rgba(255, 159, 104, 0.08), rgba(98, 221, 255, 0.06)),
+    rgba(9, 12, 17, 0.84);
 }
 
 .research-nav > div {
@@ -102,7 +107,9 @@ a {
 .summary-strip > div {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(13, 17, 24, 0.86);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
+    rgba(13, 17, 24, 0.86);
 }
 
 .research-header > div {
@@ -160,11 +167,11 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(115, 241, 186, 0.28);
+  border: 1px solid rgba(141, 245, 168, 0.34);
   border-radius: 999px;
   padding: 5px 9px;
   color: var(--gain);
-  background: rgba(115, 241, 186, 0.07);
+  background: linear-gradient(135deg, rgba(141, 245, 168, 0.12), rgba(98, 221, 255, 0.07));
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.82rem;
 }
@@ -185,7 +192,9 @@ a {
 .kol-marquee-window {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(13, 17, 24, 0.86);
+  background:
+    linear-gradient(135deg, rgba(255, 209, 102, 0.09), rgba(98, 221, 255, 0.055)),
+    rgba(13, 17, 24, 0.88);
 }
 
 .kol-marquee-label {
@@ -257,7 +266,7 @@ a {
   border-radius: 8px;
   padding: 10px 12px;
   background:
-    linear-gradient(135deg, rgba(126, 215, 255, 0.09), rgba(115, 241, 186, 0.045)),
+    linear-gradient(135deg, rgba(98, 221, 255, 0.11), rgba(255, 159, 104, 0.07) 54%, rgba(141, 245, 168, 0.055)),
     rgba(255, 255, 255, 0.025);
 }
 

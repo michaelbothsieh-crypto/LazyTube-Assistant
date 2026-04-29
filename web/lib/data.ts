@@ -3,6 +3,25 @@ import { unstable_cache } from 'next/cache'
 import fallbackLatest from '@/data/latest.json'
 import type { ConsensusData, ConsensusHistory, DailySignal, Episode, JobRun, Stock } from '@/types'
 
+const configuredKolFallbacks: Record<string, Pick<Episode, 'kol_name' | 'host' | 'avatar' | 'color'>> = {
+  gooaye: { kol_name: '股癌 Podcast', host: '謝孟恭', avatar: '', color: '#4f8cff' },
+  yutin: { kol_name: '游庭皓的財經皓角', host: '游庭皓', avatar: '', color: '#3ddc97' },
+  macromicro: { kol_name: 'MacroMicro 財經M平方', host: 'Rachel', avatar: '', color: '#a78bfa' },
+  billkitchen: { kol_name: '比爾的財經廚房', host: '比爾', avatar: '', color: '#f8b84e' },
+  zhaohualink: { kol_name: '兆華與股惑仔', host: '李兆華', avatar: '', color: '#ff6b6b' },
+  caalaw: { kol_name: '財報狗', host: 'Jeff & Sky', avatar: '', color: '#2dd4bf' },
+  morales: { kol_name: '呱吉的股市觀察', host: '邱威傑', avatar: '', color: '#7ddc6f' },
+  shenghong: { kol_name: '升鴻投資', host: '升鴻', avatar: '', color: '#42c6ff' },
+  richie: { kol_name: '瑞奇的投資觀點', host: 'Richie', avatar: '', color: '#ffd166' },
+  stockfeel: { kol_name: '股感知識庫', host: '股感團隊', avatar: '', color: '#63d297' },
+  technews: { kol_name: '科技新報', host: 'TechNews', avatar: '', color: '#38bdf8' },
+  inside: { kol_name: 'INSIDE', host: 'INSIDE 編輯部', avatar: '', color: '#c084fc' },
+  meet: { kol_name: '創業小聚', host: 'Meet 創業小聚', avatar: '', color: '#fb923c' },
+  ithome: { kol_name: 'iThome', host: 'iThome', avatar: '', color: '#94a3b8' },
+  techorange: { kol_name: 'TechOrange 科技報橘', host: 'TechOrange', avatar: '', color: '#ff9f43' },
+  managertoday: { kol_name: '經理人', host: '經理人月刊', avatar: '', color: '#6ee7b7' },
+}
+
 function sql() {
   const url = process.env.DATABASE_URL
   if (!url) return null
@@ -422,5 +441,23 @@ function fallbackConsensusData(): ConsensusData {
 }
 
 function fallbackEpisodeByKolId(kolId: string): Episode | null {
-  return fallbackConsensusData().episodes.find((episode) => episode.kol_id === kolId) ?? null
+  const fallbackEpisode = fallbackConsensusData().episodes.find((episode) => episode.kol_id === kolId)
+  if (fallbackEpisode) return fallbackEpisode
+
+  const kol = configuredKolFallbacks[kolId]
+  if (!kol) return null
+
+  const summary = '這個 KOL 已在網站來源清單中，但目前 production 環境尚未取得對應的最新分析內容。請回首頁查看其他已同步來源，或等待下一輪 scanner 寫入資料。'
+  return {
+    kol_id: kolId,
+    ...kol,
+    title: `${kol.kol_name} 最新分析待同步`,
+    published: new Date().toISOString().slice(0, 10),
+    summary,
+    sentiment: 'neutral',
+    stocks_mentioned: [],
+    report_url: '',
+    unique_insight: summary,
+    site_strength: `${kol.kol_name} 已納入來源監控，等待最新可分析內容同步。`,
+  }
 }
