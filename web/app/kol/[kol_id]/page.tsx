@@ -1,11 +1,16 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getConsensusHistory, getEpisodeByKolId, getLatestStocks } from '@/lib/data'
+import { getAllKolIds, getConsensusHistory, getEpisodeByKolId, getLatestStocks } from '@/lib/data'
 import ConsensusChart from '@/components/ConsensusChart'
 import { ArrowLeft, BarChart2, ExternalLink, Minus, TrendDown, TrendUp } from '@/components/icons'
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+export const dynamicParams = true
+export const revalidate = 300
+
+export async function generateStaticParams() {
+  const ids = await getAllKolIds()
+  return ids.map((kol_id) => ({ kol_id }))
+}
 
 const sentiment = {
   bullish: { label: '偏多', color: 'var(--gain)', Icon: TrendUp },

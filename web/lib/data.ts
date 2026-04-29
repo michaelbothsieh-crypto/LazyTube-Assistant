@@ -22,6 +22,10 @@ const configuredKolFallbacks: Record<string, Pick<Episode, 'kol_name' | 'host' |
   managertoday: { kol_name: '經理人', host: '經理人月刊', avatar: '', color: '#6ee7b7' },
 }
 
+export function getConfiguredKolIds(): string[] {
+  return Object.keys(configuredKolFallbacks)
+}
+
 function sql() {
   const url = process.env.DATABASE_URL
   if (!url) return null
@@ -204,7 +208,7 @@ export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> 
 
 export async function getAllKolIds(): Promise<string[]> {
   const db = sql()
-  if (!db) return fallbackConsensusData().episodes.map((episode) => episode.kol_id)
+  if (!db) return getFallbackKolIds()
 
   try {
     const rows = await db`
@@ -231,7 +235,7 @@ export async function getAllKolIds(): Promise<string[]> {
     `
     return rows.map((row) => row.kol_id as string)
   } catch {
-    return fallbackConsensusData().episodes.map((episode) => episode.kol_id)
+    return getFallbackKolIds()
   }
 }
 
@@ -460,4 +464,11 @@ function fallbackEpisodeByKolId(kolId: string): Episode | null {
     unique_insight: summary,
     site_strength: `${kol.kol_name} 已納入來源監控，等待最新可分析內容同步。`,
   }
+}
+
+function getFallbackKolIds(): string[] {
+  return Array.from(new Set([
+    ...fallbackConsensusData().episodes.map((episode) => episode.kol_id),
+    ...getConfiguredKolIds(),
+  ])).sort()
 }
