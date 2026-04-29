@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 import { unstable_cache } from 'next/cache'
+import fallbackLatest from '@/data/latest.json'
 import type { ConsensusData, ConsensusHistory, DailySignal, Episode, JobRun, Stock } from '@/types'
 
 function sql() {
@@ -12,7 +13,7 @@ export const getLatestData = _getLatestData
 
 async function _getLatestData(): Promise<ConsensusData> {
   const db = sql()
-  if (!db) return emptyConsensusData()
+  if (!db) return fallbackConsensusData()
 
   try {
     const [consensus] = await db`
@@ -62,7 +63,9 @@ async function _getLatestData(): Promise<ConsensusData> {
                  kol_id, kol_name, host, avatar, color
           FROM kols
           WHERE POSITION('://' IN kol_name) = 0
-          ORDER BY COALESCE(NULLIF(rss_url, ''), kol_id), added_at ASC
+          ORDER BY COALESCE(NULLIF(rss_url, ''), kol_id),
+                   CASE WHEN kol_id ~ '^[0-9a-f]{10}$' THEN 1 ELSE 0 END,
+                   added_at ASC
         )
         SELECT k.kol_id, k.kol_name, k.host, k.avatar, k.color,
                e.title, e.published, e.summary, e.sentiment,
@@ -131,13 +134,13 @@ async function _getLatestData(): Promise<ConsensusData> {
       automation: automationFromRun(runs[0]),
     }
   } catch {
-    return emptyConsensusData()
+    return fallbackConsensusData()
   }
 }
 
 export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> {
   const db = sql()
-  if (!db) return null
+  if (!db) return fallbackEpisodeByKolId(kolId)
 
   try {
     const rows = await db`
@@ -154,7 +157,9 @@ export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> 
         FROM kols k
         JOIN target t ON t.source_key = COALESCE(NULLIF(k.rss_url, ''), k.kol_id)
         WHERE POSITION('://' IN k.kol_name) = 0
-        ORDER BY COALESCE(NULLIF(k.rss_url, ''), k.kol_id), k.added_at ASC
+        ORDER BY COALESCE(NULLIF(k.rss_url, ''), k.kol_id),
+                 CASE WHEN k.kol_id ~ '^[0-9a-f]{10}$' THEN 1 ELSE 0 END,
+                 k.added_at ASC
       ),
       latest_episode AS (
         SELECT e.title, e.published, e.summary, e.sentiment,
@@ -172,15 +177,15 @@ export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> 
       CROSS JOIN canonical_kol k
       LIMIT 1
     `
-    return rows.length ? mapEpisodeRow(rows[0]) : null
+    return rows.length ? mapEpisodeRow(rows[0]) : fallbackEpisodeByKolId(kolId)
   } catch {
-    return null
+    return fallbackEpisodeByKolId(kolId)
   }
 }
 
 export async function getAllKolIds(): Promise<string[]> {
   const db = sql()
-  if (!db) return []
+  if (!db) return fallbackConsensusData().episodes.map((episode) => episode.kol_id)
 
   try {
     const rows = await db`
@@ -190,7 +195,9 @@ export async function getAllKolIds(): Promise<string[]> {
                kol_id
         FROM kols
         WHERE POSITION('://' IN kol_name) = 0
-        ORDER BY COALESCE(NULLIF(rss_url, ''), kol_id), added_at ASC
+        ORDER BY COALESCE(NULLIF(rss_url, ''), kol_id),
+                 CASE WHEN kol_id ~ '^[0-9a-f]{10}$' THEN 1 ELSE 0 END,
+                 added_at ASC
       )
       SELECT ck.kol_id
       FROM canonical_kols ck
@@ -205,14 +212,14 @@ export async function getAllKolIds(): Promise<string[]> {
     `
     return rows.map((row) => row.kol_id as string)
   } catch {
-    return []
+    return fallbackConsensusData().episodes.map((episode) => episode.kol_id)
   }
 }
 
 export const getLatestStocks = unstable_cache(
   async (): Promise<Stock[]> => {
     const db = sql()
-    if (!db) return []
+    if (!db) return fallbackConsensusData().consensus.stocks
 
     try {
       const rows = await db`
@@ -234,7 +241,7 @@ export const getLatestStocks = unstable_cache(
         kols: stock.kols ?? [],
       }))
     } catch {
-      return []
+      return fallbackConsensusData().consensus.stocks
     }
   },
   ['latest-stocks'],
@@ -244,7 +251,7 @@ export const getLatestStocks = unstable_cache(
 export const getConsensusHistory = unstable_cache(
   async (): Promise<ConsensusHistory[]> => {
     const db = sql()
-    if (!db) return []
+    if (!db) return fallbackConsensusData().consensus_history
 
     try {
       const rows = await db`
@@ -255,7 +262,7 @@ export const getConsensusHistory = unstable_cache(
       `
       return rows.map(mapHistoryRow)
     } catch {
-      return []
+      return fallbackConsensusData().consensus_history
     }
   },
   ['consensus-history'],
@@ -392,4 +399,28 @@ function emptyConsensusData(): ConsensusData {
     signals: [],
     automation: { latest_run: null, completeness_pct: 0 },
   }
+}
+
+function fallbackConsensusData(): ConsensusData {
+  const data = fallbackLatest as unknown as ConsensusData
+  return {
+    ...emptyConsensusData(),
+    ...data,
+    consensus: {
+      ...emptyConsensusData().consensus,
+      ...data.consensus,
+    },
+    episodes: (data.episodes ?? []).map((episode) => ({
+      ...episode,
+      unique_insight: episode.unique_insight || deriveUniqueInsight(episode.summary || '', episode.stocks_mentioned || []),
+      site_strength: episode.site_strength || deriveSiteStrength(episode as unknown as Record<string, unknown>, episode.stocks_mentioned || [], episode.sentiment || 'neutral'),
+    })),
+    consensus_history: data.consensus_history ?? [],
+    signals: data.signals ?? [],
+    automation: data.automation ?? { latest_run: null, completeness_pct: 0 },
+  }
+}
+
+function fallbackEpisodeByKolId(kolId: string): Episode | null {
+  return fallbackConsensusData().episodes.find((episode) => episode.kol_id === kolId) ?? null
 }

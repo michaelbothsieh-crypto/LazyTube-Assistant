@@ -359,7 +359,6 @@ def migrate_legacy_kol_aliases(kols: list[dict]) -> int:
                           NULLIF(l.rss_url, '') = %s
                           OR l.kol_name = %s
                         )
-                        AND POSITION('://' IN l.kol_name) > 0
                     ),
                     removed_duplicates AS (
                       DELETE FROM episodes e
@@ -621,6 +620,7 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
                     FROM episodes e
                     JOIN kols k ON k.kol_id = e.kol_id
                     WHERE e.analysis_date = %s
+                      AND POSITION('://' IN k.kol_name) = 0
                     """,
                     (today,),
                 )

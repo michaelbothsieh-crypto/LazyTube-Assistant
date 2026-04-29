@@ -58,6 +58,20 @@ function readableTicker(ticker: string) {
   return ticker === 'None' ? '尚無' : ticker
 }
 
+function compactInsight(episode: Episode, maxLength = 96) {
+  const text = (episode.unique_insight || episode.site_strength || episode.summary || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!text) return '尚未萃取到明確觀點，等待下一輪掃描補齊。'
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text
+}
+
+function formatOutlook(episode: Episode) {
+  const tickers = episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).slice(0, 3)
+  if (!tickers.length) return '觀察敘事是否擴散到更多來源。'
+  return `留意 ${tickers.join(' / ')} 的催化、估值與供應鏈驗證。`
+}
+
 export default function TasteLanding({ data }: TasteLandingProps) {
   const [filter, setFilter] = useState<'all' | 'bullish' | 'neutral' | 'bearish'>('all')
   const topStocks = data.consensus.stocks.filter((stock) => !ignoredTickers.has(stock.ticker)).slice(0, 8)
@@ -68,6 +82,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const featuredInsights = episodes
     .filter((episode) => episode.unique_insight)
     .slice(0, 3)
+  const marqueeEpisodes = (featuredInsights.length ? featuredInsights : episodes).slice(0, 10)
   const direction = dominantSentiment(data)
   const directionTone = sentimentTone[direction]
   const DirectionIcon = directionTone.Icon
@@ -120,6 +135,26 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <small>每日台北 10:30 掃描；首頁只顯示最近兩天內的有效資料。</small>
         </aside>
       </section>
+
+      {marqueeEpisodes.length > 0 && (
+        <section className="kol-marquee" aria-label="KOL precision viewpoints">
+          <div className="kol-marquee-label">
+            <span>Live KOL tape</span>
+            <strong>精準觀點</strong>
+          </div>
+          <div className="kol-marquee-window">
+            <div className="kol-marquee-track">
+              {[...marqueeEpisodes, ...marqueeEpisodes].map((episode, index) => (
+                <Link href={`/kol/${episode.kol_id}`} className="kol-marquee-item" key={`${episode.kol_id}-${index}`}>
+                  <b>{episode.kol_name}</b>
+                  <span>{compactInsight(episode, 88)}</span>
+                  <i>{formatOutlook(episode)}</i>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="decision-board" id="signals" aria-label="Daily market decision board">
         <article className="panel panel-large">
@@ -333,7 +368,7 @@ function EpisodeCard({ episode }: { episode: Episode }) {
     <Link href={`/kol/${episode.kol_id}`} className="kol-report-card">
       <div className="kol-report-top">
         <div className="kol-avatar" style={{ color: episode.color, borderColor: `${episode.color}66`, background: `${episode.color}18` }}>
-          {episode.avatar || fallbackAvatar}
+          {fallbackAvatar}
         </div>
         <div>
           <strong>{episode.kol_name}</strong>
@@ -345,8 +380,12 @@ function EpisodeCard({ episode }: { episode: Episode }) {
         </span>
       </div>
       <h3>{episode.title}</h3>
-      <div className="insight-pill">核心觀點</div>
-      <p>{episode.summary.replace(/\s+/g, ' ').trim() || '尚無摘要內容'}</p>
+      <div className="insight-pill">獨到見解</div>
+      <p>{compactInsight(episode)}</p>
+      <div className="outlook-line">
+        <span>技術瞻望</span>
+        <strong>{formatOutlook(episode)}</strong>
+      </div>
       <div className="ticker-row">
         {episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).length ? episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).slice(0, 5).map((ticker) => (
           <b key={ticker}>{ticker}</b>

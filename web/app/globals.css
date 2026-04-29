@@ -107,6 +107,24 @@ a {
 
 .research-header > div {
   padding: 22px;
+  position: relative;
+  overflow: hidden;
+}
+
+.research-header > div::after {
+  content: '';
+  position: absolute;
+  inset: auto 22px 18px auto;
+  width: 138px;
+  height: 138px;
+  border: 1px solid rgba(115, 241, 186, 0.26);
+  border-radius: 999px;
+  opacity: 0.68;
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(115, 241, 186, 0.28) 49%, transparent 51%),
+    linear-gradient(0deg, transparent 48%, rgba(126, 215, 255, 0.22) 49%, transparent 51%);
+  animation: radar-sweep 11s linear infinite;
+  pointer-events: none;
 }
 
 .research-header h1 {
@@ -154,6 +172,118 @@ a {
 .market-pulse small {
   color: var(--soft);
   font-size: 0.72rem;
+}
+
+.kol-marquee {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.kol-marquee-label,
+.kol-marquee-window {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(13, 17, 24, 0.86);
+}
+
+.kol-marquee-label {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 92px;
+  padding: 14px;
+}
+
+.kol-marquee-label span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.kol-marquee-label strong {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.kol-marquee-window {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 92px;
+}
+
+.kol-marquee-window::before,
+.kol-marquee-window::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 84px;
+  pointer-events: none;
+}
+
+.kol-marquee-window::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(13, 17, 24, 0.98), transparent);
+}
+
+.kol-marquee-window::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(13, 17, 24, 0.98), transparent);
+}
+
+.kol-marquee-track {
+  display: flex;
+  width: max-content;
+  gap: 10px;
+  padding: 10px;
+  will-change: transform;
+  animation: kol-tape 42s linear infinite;
+}
+
+.kol-marquee-window:hover .kol-marquee-track {
+  animation-play-state: paused;
+}
+
+.kol-marquee-item {
+  width: min(440px, 72vw);
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(126, 215, 255, 0.18);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background:
+    linear-gradient(135deg, rgba(126, 215, 255, 0.09), rgba(115, 241, 186, 0.045)),
+    rgba(255, 255, 255, 0.025);
+}
+
+.kol-marquee-item b,
+.kol-marquee-item i {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kol-marquee-item b {
+  color: var(--cyan);
+  font-size: 0.82rem;
+}
+
+.kol-marquee-item span {
+  display: block;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.kol-marquee-item i {
+  color: var(--amber);
+  font-style: normal;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .run-card {
@@ -552,7 +682,7 @@ a {
 }
 
 .kol-report-card {
-  min-height: 220px;
+  min-height: 268px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -566,7 +696,9 @@ a {
 
 .kol-report-card:hover {
   border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.045);
+  background:
+    linear-gradient(160deg, rgba(126, 215, 255, 0.055), transparent 46%),
+    rgba(255, 255, 255, 0.045);
   transform: translateY(-2px);
 }
 
@@ -633,6 +765,30 @@ a {
   font-size: 0.9rem;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.outlook-line {
+  display: grid;
+  gap: 5px;
+  border-left: 2px solid rgba(115, 241, 186, 0.45);
+  padding-left: 10px;
+}
+
+.outlook-line span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.outlook-line strong {
+  display: -webkit-box;
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.34;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -770,6 +926,7 @@ a {
   .research-grid,
   .decision-board,
   .research-header,
+  .kol-marquee,
   .detail-report-header {
     grid-template-columns: 1fr;
   }
@@ -821,6 +978,40 @@ a {
   .signal-table-row small,
   .signal-table-row em {
     display: none;
+  }
+
+  .kol-marquee-label {
+    min-height: auto;
+  }
+
+  .kol-marquee-window::before,
+  .kol-marquee-window::after {
+    width: 36px;
+  }
+}
+
+@keyframes kol-tape {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kol-marquee-track,
+  .research-header > div::after {
+    animation: none;
   }
 }
 
