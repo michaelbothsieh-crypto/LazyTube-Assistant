@@ -545,9 +545,14 @@ def _write_daily_signals(cur, signal_date: date, rows: list[dict]) -> None:
         summaries = row.get("summaries", [])
         catalysts = _extract_catalysts(summaries, [row["ticker"]])
         horizon = _infer_horizon(summaries)
+        direction_label = {
+            "bullish": "偏多",
+            "bearish": "偏空",
+            "neutral": "中性",
+        }.get(row["sentiment"], "中性")
         thesis = (
-            f"{row['ticker']} appeared across {source_count} source(s) and "
-            f"{episode_count} episode(s). Dominant direction: {row['sentiment']}."
+            f"{row['ticker']} 在 {source_count} 個來源、{episode_count} 則內容中被提及，"
+            f"目前主導方向為{direction_label}。"
         )
         price = _fetch_price_at_signal(row["ticker"], market)
         cur.execute(

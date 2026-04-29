@@ -8,11 +8,7 @@ function sql() {
   return neon(url)
 }
 
-export const getLatestData = unstable_cache(
-  _getLatestData,
-  ['latest-consensus-data'],
-  { revalidate: 300, tags: ['consensus'] },
-)
+export const getLatestData = _getLatestData
 
 async function _getLatestData(): Promise<ConsensusData> {
   const db = sql()
