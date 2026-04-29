@@ -233,7 +233,7 @@ export async function getAllKolIds(): Promise<string[]> {
       )
       ORDER BY ck.kol_id
     `
-    return rows.map((row) => row.kol_id as string)
+    return mergeKolIds(rows.map((row) => row.kol_id as string))
   } catch {
     return getFallbackKolIds()
   }
@@ -467,7 +467,12 @@ function fallbackEpisodeByKolId(kolId: string): Episode | null {
 }
 
 function getFallbackKolIds(): string[] {
+  return mergeKolIds(fallbackConsensusData().episodes.map((episode) => episode.kol_id))
+}
+
+function mergeKolIds(ids: string[]): string[] {
   return Array.from(new Set([
+    ...ids,
     ...fallbackConsensusData().episodes.map((episode) => episode.kol_id),
     ...getConfiguredKolIds(),
   ])).sort()
