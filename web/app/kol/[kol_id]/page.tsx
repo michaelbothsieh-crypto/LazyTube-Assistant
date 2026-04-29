@@ -111,20 +111,6 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
       <section className="detail-grid-section compact-detail-grid">
         <div className="detail-bento">
           <article className="detail-summary-card">
-            <span className="card-label">獨到見解</span>
-            <div className="summary-flow">
-              <p>{episode.unique_insight}</p>
-            </div>
-          </article>
-
-          <article className="detail-summary-card">
-            <span className="card-label">可提煉成網站強項</span>
-            <div className="summary-flow">
-              <p>{episode.site_strength}</p>
-            </div>
-          </article>
-
-          <article className="detail-summary-card">
             <span className="card-label">完整摘要</span>
             <div className="summary-flow">
               {(summaryLines.length ? summaryLines : [episode.summary || '尚無摘要內容']).map((line, index) => (

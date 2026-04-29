@@ -172,7 +172,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         <div className="panel-head">
           <div>
             <span>KOL 研究樣本</span>
-            <h2>每個 KOL 的獨到見解與可產品化語句</h2>
+          <h2>點進去會看到同一集節目的詳細筆記</h2>
           </div>
           <div className="filter-tabs compact-tabs">
             {(['all', 'bullish', 'neutral', 'bearish'] as const).map((item) => (
@@ -213,14 +213,7 @@ function EpisodeCard({ episode }: { episode: Episode }) {
         </span>
       </div>
       <h3>{episode.title}</h3>
-      <div className="kol-insight-block">
-        <span>獨到見解</span>
-        <p>{episode.unique_insight}</p>
-      </div>
-      <div className="kol-insight-block site-strength">
-        <span>網站強項</span>
-        <p>{episode.site_strength}</p>
-      </div>
+      <p>{episode.summary.replace(/\s+/g, ' ').trim() || '尚無摘要內容'}</p>
       <div className="ticker-row">
         {episode.stocks_mentioned.slice(0, 5).map((ticker) => (
           <b key={ticker}>{ticker}</b>
