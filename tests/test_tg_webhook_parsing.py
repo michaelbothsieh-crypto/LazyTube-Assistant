@@ -5,6 +5,7 @@ from api.handlers.tg_webhook.parsing import (
     parse_subscription_request,
 )
 from api.handlers.tg_webhook.validation import normalize_command_text, validate_url
+from app.notebook.parsing import parse_query_output
 
 
 def test_normalize_command_text_removes_bot_suffix():
@@ -41,3 +42,11 @@ def test_parse_subscription_request_extracts_time():
     assert url == "https://youtube.com/@demo"
     assert "custom prompt" in prompt
     assert preferred_time == "12:00"
+
+
+def test_parse_query_output_strips_numeric_citations():
+    output = parse_query_output("營收成長 [1]，資料中心需求增加 [2, 3]，燃料電池受惠 [4-6]。")
+    assert "[1]" not in output
+    assert "[2, 3]" not in output
+    assert "[4-6]" not in output
+    assert output == "營收成長，資料中心需求增加，燃料電池受惠。"

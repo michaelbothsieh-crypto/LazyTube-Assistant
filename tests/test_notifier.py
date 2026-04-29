@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from app.notifier import Notifier
+from app.notifier.reporting import generate_html_report
 from app.notifier.telegram_client import TelegramClient
 
 
@@ -88,3 +89,14 @@ def test_send_report_link_strips_numeric_citations_from_mobile_preview():
         assert "[2, 3]" not in sent_text
         assert "EP1084" in sent_text
         assert "今天大漲，但風險仍在。" in sent_text
+
+
+def test_generate_html_report_strips_numeric_citations():
+    html = generate_html_report(
+        "Bloom Energy",
+        "核心結論 [1]\n\nBloom Energy 財報優於預期 [2-4]，AI 資料中心需求增加 [5, 6]。",
+    )
+    assert "[1]" not in html
+    assert "[2-4]" not in html
+    assert "[5, 6]" not in html
+    assert "Bloom Energy 財報優於預期" in html

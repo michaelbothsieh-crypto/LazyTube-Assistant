@@ -6,10 +6,13 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
+from app.notebook.parsing import strip_numeric_citations
+
 
 def generate_html_report(title: str, markdown_content: str) -> str:
     import markdown
 
+    markdown_content = strip_numeric_citations(markdown_content)
     html_body = markdown.markdown(markdown_content, extensions=["extra", "toc", "tables"])
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -598,5 +601,4 @@ def generate_podcast_html_report(
 
 </body>
 </html>"""
-
 

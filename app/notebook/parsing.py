@@ -18,6 +18,13 @@ def clean_content(text: str) -> str:
     return text.strip()
 
 
+def strip_numeric_citations(text: str) -> str:
+    if not text:
+        return ""
+    text = re.sub(r"\s*\[\d+(?:\s*(?:[,，\-–]\s*)\d+)*\]", "", text)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
+
+
 def parse_query_output(raw: str) -> str:
     output = (raw or "").strip()
     try:
@@ -27,12 +34,13 @@ def parse_query_output(raw: str) -> str:
     except Exception:
         pass
 
-    return re.sub(
+    output = re.sub(
         r"\*\*(Thinking|Thought|Summarizing|Analysis|Defining|Finalizing).*?\*\*[\s\n]*",
         "",
         output,
         flags=re.IGNORECASE,
     ).strip()
+    return strip_numeric_citations(output)
 
 
 def extract_existing_path(raw: str) -> str:
