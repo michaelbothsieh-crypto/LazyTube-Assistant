@@ -98,7 +98,7 @@ async def handle_research(chat_id: str, text: str) -> None:
     )
     message_id = extract_message_id(pending)
     if not await dispatch_research_workflow(topic=topic, mode=mode, chat_id=chat_id, message_id=message_id):
-        await send_telegram_message(chat_id, "研究任務派送失敗，請稍後再試。")
+        await send_telegram_message(chat_id, "研究任務派送狀態暫時無法確認；若幾分鐘內沒有收到結果，請稍後再試。")
 
 
 async def _handle_artifact(chat_id: str, text: str, command_name: str, artifact_type: str) -> None:
@@ -121,5 +121,4 @@ async def _handle_artifact(chat_id: str, text: str, command_name: str, artifact_
         artifact_type=artifact_type,
     ):
         await send_telegram_message(chat_id, "任務派送失敗，請稍後再試。")
-
 
