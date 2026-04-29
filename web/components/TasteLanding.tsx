@@ -16,10 +16,19 @@ const sentimentTone = {
 } as const
 
 const extractionSteps = [
-  { label: '語句收集', value: 'RSS + episode', detail: '每日 10:30 掃描近期 KOL 節目，保留來源與集數脈絡。' },
+  { label: '語句收集', value: 'RSS + episode', detail: '每日 10:30 掃描近期 KOL 與科技商業 RSS，保留來源與集數脈絡。' },
   { label: '觀點萃取', value: 'thesis', detail: '把敘事拆成標的、方向、理由、風險與催化條件。' },
-  { label: '共識建模', value: 'signal graph', detail: '用跨 KOL 重複度與信心分數呈現語言力量的擴散。' },
+  { label: '共識建模', value: 'signal graph', detail: '用跨來源重複度與信心分數呈現語言力量的擴散。' },
 ] as const
+
+const horizonLabel: Record<string, string> = {
+  'long-term': '長線',
+  swing: '波段',
+  'event-driven': '事件',
+  watchlist: '觀察',
+}
+
+const ignoredTickers = new Set(['GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC'])
 
 function formatDateTime(value: string) {
   const date = new Date(value)
@@ -39,10 +48,20 @@ function dominantSentiment(data: ConsensusData) {
   return 'neutral'
 }
 
+function formatSignalThesis(signal: ConsensusData['signals'][number]) {
+  const existing = signal.thesis.trim()
+  if (existing && !existing.includes('appeared across')) return existing
+  return `${signal.ticker} 在 ${signal.source_count} 個來源、${signal.episode_count} 則內容中被提及，主導方向為${sentimentTone[signal.direction].label}。`
+}
+
+function readableTicker(ticker: string) {
+  return ticker === 'None' ? '尚無' : ticker
+}
+
 export default function TasteLanding({ data }: TasteLandingProps) {
   const [filter, setFilter] = useState<'all' | 'bullish' | 'neutral' | 'bearish'>('all')
-  const topStocks = data.consensus.stocks.slice(0, 8)
-  const signals = data.signals.slice(0, 8)
+  const topStocks = data.consensus.stocks.filter((stock) => !ignoredTickers.has(stock.ticker)).slice(0, 8)
+  const signals = data.signals.filter((signal) => !ignoredTickers.has(signal.ticker)).slice(0, 8)
   const topDecisionSignals = signals.slice(0, 3)
   const episodes = data.episodes.slice(0, 16)
   const filteredEpisodes = filter === 'all' ? episodes : episodes.filter((episode) => episode.sentiment === filter)
@@ -57,7 +76,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const bearishSignal = signals.find((signal) => signal.direction === 'bearish')
   const crowdedStock = topStocks[0]
   const marketCallText = strongestSignal
-    ? `${strongestSignal.ticker} / ${strongestSignal.name} 是今日最高信心訊號，${strongestSignal.source_count} 位 KOL 共同指向${sentimentTone[strongestSignal.direction].label}。`
+    ? `${strongestSignal.ticker} / ${strongestSignal.name} 是今日最高信心訊號，${strongestSignal.source_count} 個來源共同指向${sentimentTone[strongestSignal.direction].label}。`
     : data.consensus.weekly_theme || '等待今日 KOL 語言訊號寫入。'
 
   const coverageText = useMemo(() => {
@@ -84,6 +103,12 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <p>
             {marketCallText}
           </p>
+          <div className="market-pulse" aria-label="Market pulse">
+            <span>今日脈搏</span>
+            {topStocks.slice(0, 5).map((stock) => (
+              <b key={stock.ticker}>{stock.ticker}<small>{stock.mentions}x</small></b>
+            ))}
+          </div>
         </div>
         <aside className="run-card" id="automation">
           <span>Market call</span>
@@ -114,11 +139,11 @@ export default function TasteLanding({ data }: TasteLandingProps) {
                   <div>
                     <span>{signal.ticker}</span>
                     <strong>{signal.name}</strong>
-                    <p>{signal.thesis || signal.catalysts.slice(0, 2).join(' / ') || '等待 thesis 寫入。'}</p>
+                    <p>{formatSignalThesis(signal)}</p>
                   </div>
                   <i style={{ color: tone.color }}>{tone.label}</i>
                   <em>{signal.confidence_score}</em>
-                  <small>{signal.source_count} KOL</small>
+                  <small>{signal.source_count} 來源</small>
                 </Link>
               )
             }) : (
@@ -137,12 +162,12 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <div className="risk-list">
             <div>
               <span>反向訊號</span>
-              <strong>{bearishSignal ? bearishSignal.ticker : 'None'}</strong>
-              <p>{bearishSignal ? bearishSignal.thesis || `${bearishSignal.source_count} 位 KOL 偏空。` : '目前未偵測到高信心偏空訊號。'}</p>
+              <strong>{bearishSignal ? readableTicker(bearishSignal.ticker) : '尚無'}</strong>
+              <p>{bearishSignal ? formatSignalThesis(bearishSignal) : '目前未偵測到高信心偏空訊號。'}</p>
             </div>
             <div>
               <span>擁擠標的</span>
-              <strong>{crowdedStock ? crowdedStock.ticker : 'None'}</strong>
+              <strong>{crowdedStock ? crowdedStock.ticker : '尚無'}</strong>
               <p>{crowdedStock ? `${crowdedStock.mentions} 次提及，方向為 ${sentimentTone[crowdedStock.sentiment].label}。` : '尚無標的熱度資料。'}</p>
             </div>
             <div>
@@ -227,11 +252,12 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           </div>
           <div className="signal-table">
             <div className="signal-table-head">
-              <span>Ticker</span>
-              <span>Name</span>
-              <span>Direction</span>
-              <span>Confidence</span>
-              <span>Sources</span>
+              <span>代號</span>
+              <span>名稱</span>
+              <span>方向</span>
+              <span>信心</span>
+              <span>來源</span>
+              <span>節奏</span>
             </div>
             {signals.length ? signals.map((signal) => {
               const tone = sentimentTone[signal.direction]
@@ -242,6 +268,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
                   <i style={{ color: tone.color }}>{tone.label}</i>
                   <strong>{signal.confidence_score}</strong>
                   <small>{signal.source_count}</small>
+                  <em>{horizonLabel[signal.horizon] ?? '觀察'}</em>
                 </Link>
               )
             }) : (
@@ -321,9 +348,9 @@ function EpisodeCard({ episode }: { episode: Episode }) {
       <div className="insight-pill">核心觀點</div>
       <p>{episode.summary.replace(/\s+/g, ' ').trim() || '尚無摘要內容'}</p>
       <div className="ticker-row">
-        {episode.stocks_mentioned.slice(0, 5).map((ticker) => (
+        {episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).length ? episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).slice(0, 5).map((ticker) => (
           <b key={ticker}>{ticker}</b>
-        ))}
+        )) : <b>主題</b>}
         <i>
           詳細研究
           <ChevronRight size={14} />

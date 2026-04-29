@@ -1,21 +1,19 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getAllKolIds, getConsensusHistory, getEpisodeByKolId, getLatestStocks } from '@/lib/data'
+import { getConsensusHistory, getEpisodeByKolId, getLatestStocks } from '@/lib/data'
 import ConsensusChart from '@/components/ConsensusChart'
 import { ArrowLeft, BarChart2, ExternalLink, Minus, TrendDown, TrendUp } from '@/components/icons'
 
-export const revalidate = 300
-
-export async function generateStaticParams() {
-  const ids = await getAllKolIds()
-  return ids.map((kol_id) => ({ kol_id }))
-}
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const sentiment = {
   bullish: { label: '偏多', color: 'var(--gain)', Icon: TrendUp },
   bearish: { label: '偏空', color: 'var(--risk)', Icon: TrendDown },
   neutral: { label: '中性', color: 'var(--muted)', Icon: Minus },
 } as const
+
+const ignoredTickers = new Set(['GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC'])
 
 function splitSummary(summary: string) {
   return summary
@@ -40,7 +38,7 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
   const tone = sentiment[episode.sentiment]
   const ToneIcon = tone.Icon
   const stockMap = new Map(latestStocks.map((stock) => [stock.ticker, stock]))
-  const stockDetails = episode.stocks_mentioned.map((ticker) => (
+  const stockDetails = episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).map((ticker) => (
     stockMap.get(ticker) ?? {
       ticker,
       name: ticker,
@@ -75,7 +73,7 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
               {tone.label}
             </span>
             <span>{episode.host || 'Podcast host'}</span>
-            <span>{episode.stocks_mentioned.length} tickers</span>
+            <span>{stockDetails.length || '主題型'} 標的</span>
           </div>
           {episode.report_url && (
             <a className="btn btn-secondary detail-report" href={episode.report_url} target="_blank" rel="noopener noreferrer">

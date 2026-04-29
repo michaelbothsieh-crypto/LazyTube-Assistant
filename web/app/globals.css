@@ -123,6 +123,39 @@ a {
   line-height: 1.62;
 }
 
+.market-pulse {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.market-pulse span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.market-pulse b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(115, 241, 186, 0.28);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--gain);
+  background: rgba(115, 241, 186, 0.07);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.82rem;
+}
+
+.market-pulse small {
+  color: var(--soft);
+  font-size: 0.72rem;
+}
+
 .run-card {
   padding: 18px;
 }
@@ -209,12 +242,14 @@ a {
   border-radius: 8px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.025);
-  transition: border-color 180ms ease, background 180ms ease;
+  box-shadow: inset 3px 0 0 rgba(115, 241, 186, 0.16);
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
 .priority-signal:hover {
   border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.045);
+  transform: translateY(-1px);
 }
 
 .priority-signal b {
@@ -361,6 +396,13 @@ a {
   border-radius: 8px;
   padding: 14px;
   background: rgba(126, 215, 255, 0.055);
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.insight-card:hover {
+  border-color: rgba(126, 215, 255, 0.36);
+  background: rgba(126, 215, 255, 0.085);
+  transform: translateY(-1px);
 }
 
 .insight-card span {
@@ -420,7 +462,7 @@ a {
 .signal-table-head,
 .signal-table-row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 92px 90px 70px;
+  grid-template-columns: 92px minmax(0, 1fr) 92px 90px 70px 70px;
   gap: 10px;
   align-items: center;
 }
@@ -443,7 +485,8 @@ a {
 
 .signal-table-row span,
 .signal-table-row i,
-.signal-table-row small {
+.signal-table-row small,
+.signal-table-row em {
   min-width: 0;
   overflow: hidden;
   color: var(--soft);
@@ -454,6 +497,14 @@ a {
 
 .signal-table-row strong {
   text-align: right;
+}
+
+.signal-table-row em {
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 0.72rem;
 }
 
 .empty-note {
@@ -509,12 +560,14 @@ a {
   border-radius: 8px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.025);
-  transition: border-color 180ms ease, background 180ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
 .kol-report-card:hover {
   border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.045);
+  transform: translateY(-2px);
 }
 
 .kol-report-top {
@@ -765,7 +818,8 @@ a {
   }
 
   .signal-table-row i,
-  .signal-table-row small {
+  .signal-table-row small,
+  .signal-table-row em {
     display: none;
   }
 }

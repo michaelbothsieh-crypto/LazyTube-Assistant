@@ -147,6 +147,7 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
         'AI', 'IT', 'US', 'TW', 'Q1', 'Q2', 'Q3', 'Q4',
         'EPS', 'ETF', 'PE', 'PB', 'EV', 'IPO', 'RSI', 'MA',
         'CEO', 'CFO', 'GDP', 'CPI', 'PCE', 'FED', 'ECB',
+        'GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC',
     }
 
     stocks: list[str] = []
