@@ -52,6 +52,8 @@ export interface Episode {
   sentiment: 'bullish' | 'bearish' | 'neutral'
   stocks_mentioned: string[]
   report_url: string
+  unique_insight: string
+  site_strength: string
 }
 
 export interface ConsensusHistory {

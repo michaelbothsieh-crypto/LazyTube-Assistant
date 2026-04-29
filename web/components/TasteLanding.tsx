@@ -33,16 +33,6 @@ function dominantSentiment(data: ConsensusData) {
   return 'neutral'
 }
 
-function financePreview(summary: string) {
-  const markers = ['【投資倒數小結】', '投資倒數小結', '投資小結', '市場重點']
-  const markerIndex = markers
-    .map((marker) => summary.indexOf(marker))
-    .filter((index) => index >= 0)
-    .sort((a, b) => a - b)[0]
-  const source = markerIndex == null ? summary : summary.slice(markerIndex)
-  return source.replace(/\s+/g, ' ').trim()
-}
-
 export default function TasteLanding({ data }: TasteLandingProps) {
   const [filter, setFilter] = useState<'all' | 'bullish' | 'neutral' | 'bearish'>('all')
   const topStocks = data.consensus.stocks.slice(0, 8)
@@ -66,7 +56,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         <div>
           <a href="#signals">訊號</a>
           <a href="#kols">KOL</a>
-          <a href="#automation">資料狀態</a>
+          <a href="#automation">自動化</a>
         </div>
       </nav>
 
@@ -75,15 +65,15 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <p className="eyebrow">Daily podcast market brief</p>
           <h1>每日 Podcast 市場研究報告</h1>
           <p>
-            將 Podcast scanner 蒐集到的 KOL 節目整理成市場方向、提及標的、可追蹤訊號與資料更新狀態。
-            這裡呈現網站資料庫的最新結果，不會每日主動推送 Telegram。
+            將最近兩天內的 KOL 節目整理成市場方向、提及標的、獨到見解與可追蹤訊號。
+            每張卡片都把原始語句提煉成網站可比較、可累積、可回測的研究資料。
           </p>
         </div>
         <aside className="run-card" id="automation">
-          <span>資料狀態</span>
+          <span>自動化覆蓋率</span>
           <strong>{data.automation.completeness_pct}%</strong>
           <p>{coverageText}</p>
-          <small>網頁快取約 5 分鐘更新一次；手動執行 Actions 後會在下一次重建時反映。</small>
+          <small>首頁只呈現最近兩天內的資料；若 scanner 沒有寫入新集，這裡會明確變少而不是回填舊內容。</small>
         </aside>
       </section>
 
@@ -104,20 +94,20 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           </small>
         </div>
         <div>
-          <span>研究樣本</span>
+          <span>KOL 樣本</span>
           <strong>
             <Users size={18} />
             {data.episodes_analyzed} 集
           </strong>
-          <small>來自目前啟用的 KOL RSS</small>
+          <small>來自目前啟用的 RSS 來源</small>
         </div>
         <div>
-          <span>訊號分數</span>
+          <span>共識分數</span>
           <strong>
             <Activity size={18} />
             {data.consensus.consensus_score}
           </strong>
-          <small>{data.consensus.weekly_theme || '等待更多資料形成主題'}</small>
+          <small>{data.consensus.weekly_theme || '等待最新 podcast scanner 寫入資料'}</small>
         </div>
       </section>
 
@@ -126,7 +116,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <div className="panel-head">
             <div>
               <span>今日可追蹤訊號</span>
-              <h2>以來源數、集數與信心分數排序</h2>
+              <h2>把多位 KOL 的語句收斂成可比較的投資線索</h2>
             </div>
             <small>{signals.length || 0} signals</small>
           </div>
@@ -150,7 +140,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
                 </Link>
               )
             }) : (
-              <p className="empty-note">尚無今日訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
+              <p className="empty-note">尚無最近兩天內的訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
             )}
           </div>
         </article>
@@ -158,8 +148,8 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         <aside className="panel">
           <div className="panel-head">
             <div>
-              <span>高頻標的</span>
-              <h2>今日提及排行</h2>
+              <span>提及熱度</span>
+              <h2>標的排行</h2>
             </div>
           </div>
           <div className="rank-list">
@@ -182,7 +172,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         <div className="panel-head">
           <div>
             <span>KOL 研究樣本</span>
-            <h2>點進去會看到同一集節目的詳細筆記</h2>
+            <h2>每個 KOL 的獨到見解與可產品化語句</h2>
           </div>
           <div className="filter-tabs compact-tabs">
             {(['all', 'bullish', 'neutral', 'bearish'] as const).map((item) => (
@@ -223,13 +213,20 @@ function EpisodeCard({ episode }: { episode: Episode }) {
         </span>
       </div>
       <h3>{episode.title}</h3>
-      <p>{financePreview(episode.summary) || '尚無摘要內容'}</p>
+      <div className="kol-insight-block">
+        <span>獨到見解</span>
+        <p>{episode.unique_insight}</p>
+      </div>
+      <div className="kol-insight-block site-strength">
+        <span>網站強項</span>
+        <p>{episode.site_strength}</p>
+      </div>
       <div className="ticker-row">
         {episode.stocks_mentioned.slice(0, 5).map((ticker) => (
           <b key={ticker}>{ticker}</b>
         ))}
         <i>
-          查看筆記
+          詳細研究
           <ChevronRight size={14} />
         </i>
       </div>

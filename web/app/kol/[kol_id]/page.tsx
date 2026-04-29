@@ -18,16 +18,8 @@ const sentiment = {
 } as const
 
 function splitSummary(summary: string) {
-  const markers = ['【投資倒數小結】', '投資倒數小結', '投資小結', '市場重點']
-  const markerIndex = markers
-    .map((marker) => summary.indexOf(marker))
-    .filter((index) => index >= 0)
-    .sort((a, b) => a - b)[0]
-  const reordered = markerIndex == null
-    ? summary
-    : `${summary.slice(markerIndex)}\n\n${summary.slice(0, markerIndex)}`
-
-  return reordered
+  return summary
+    .replace(/\r/g, '\n')
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
@@ -88,13 +80,13 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
           {episode.report_url && (
             <a className="btn btn-secondary detail-report" href={episode.report_url} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={16} />
-              完整報告
+              開啟報告
             </a>
           )}
         </div>
 
         <aside className="detail-kol-card">
-          <span className="card-label">節目來源</span>
+          <span className="card-label">KOL profile</span>
           <div className="host-avatar" style={{ color: episode.color, borderColor: `${episode.color}55`, background: `${episode.color}18` }}>
             {episode.avatar || episode.kol_name.slice(0, 1)}
           </div>
@@ -109,7 +101,7 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
               <dd>{episode.published}</dd>
             </div>
             <div>
-              <dt>情緒</dt>
+              <dt>方向</dt>
               <dd style={{ color: tone.color }}>{tone.label}</dd>
             </div>
           </dl>
@@ -119,7 +111,21 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
       <section className="detail-grid-section compact-detail-grid">
         <div className="detail-bento">
           <article className="detail-summary-card">
-            <span className="card-label">分析摘要</span>
+            <span className="card-label">獨到見解</span>
+            <div className="summary-flow">
+              <p>{episode.unique_insight}</p>
+            </div>
+          </article>
+
+          <article className="detail-summary-card">
+            <span className="card-label">可提煉成網站強項</span>
+            <div className="summary-flow">
+              <p>{episode.site_strength}</p>
+            </div>
+          </article>
+
+          <article className="detail-summary-card">
+            <span className="card-label">完整摘要</span>
             <div className="summary-flow">
               {(summaryLines.length ? summaryLines : [episode.summary || '尚無摘要內容']).map((line, index) => (
                 <p key={`${line}-${index}`}>{line}</p>
@@ -154,7 +160,7 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
           {history.length > 1 && (
             <article className="detail-chart-card">
               <div className="detail-card-head">
-                <span className="card-label">市場方向趨勢</span>
+                <span className="card-label">共識分數走勢</span>
                 <BarChart2 size={18} />
               </div>
               <ConsensusChart history={history} />
@@ -165,10 +171,10 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
 
       <section className="detail-action compact-detail-action">
         <h2>回到每日市場研究報告</h2>
-        <p>首頁會把所有 KOL 節目整理成可追蹤訊號、提及排行與資料狀態。</p>
+        <p>首頁會把所有 KOL 節目整理成可追蹤訊號、提及排行與資料更新狀態。</p>
         <Link href="/" className="btn btn-primary">
           <ArrowLeft size={16} />
-          查看總覽
+          回到首頁
         </Link>
       </section>
     </main>

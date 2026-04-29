@@ -242,7 +242,7 @@ def finish_job_run(run_id: str, status: str = "", error_message: str = "") -> No
                     """
                     SELECT
                       COUNT(*) AS total,
-                      COUNT(*) FILTER (WHERE status = 'success') AS success,
+                      COUNT(*) FILTER (WHERE status IN ('success', 'skipped')) AS success,
                       COUNT(*) FILTER (WHERE status = 'failed') AS failed,
                       COALESCE(SUM(episodes_found), 0) AS found,
                       COALESCE(SUM(episodes_written), 0) AS written

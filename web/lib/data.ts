@@ -20,7 +20,11 @@ async function _getLatestData(): Promise<ConsensusData> {
 
   try {
     const [consensus] = await db`
-      SELECT * FROM consensus_daily ORDER BY date DESC LIMIT 1
+      SELECT *
+      FROM consensus_daily
+      WHERE date >= CURRENT_DATE - INTERVAL '2 days'
+      ORDER BY date DESC
+      LIMIT 1
     `
 
     if (!consensus) return emptyConsensusData()
@@ -50,15 +54,10 @@ async function _getLatestData(): Promise<ConsensusData> {
                  e.stocks_mentioned, e.report_url, e.analyzed_at
           FROM episodes e
           JOIN kols k ON k.kol_id = e.kol_id
-          WHERE COALESCE(cardinality(e.stocks_mentioned), 0) > 0
-            AND e.analysis_date = (
-            SELECT MAX(analysis_date)
-            FROM episodes
-            WHERE analysis_date <= ${latestDateValue}
-          )
-          ORDER BY e.kol_id, e.analyzed_at DESC
+          WHERE e.published >= CURRENT_DATE - INTERVAL '2 days'
+          ORDER BY e.kol_id, e.published DESC NULLS LAST, e.analyzed_at DESC
         ) latest_kol_episodes
-        ORDER BY analyzed_at DESC
+        ORDER BY published DESC NULLS LAST, analyzed_at DESC
       `,
       db`
         SELECT date, consensus_score, top_keywords[1] AS top_stock, bullish_pct
@@ -136,8 +135,7 @@ export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> 
       FROM episodes e
       JOIN kols k ON k.kol_id = e.kol_id
       WHERE e.kol_id = ${kolId}
-        AND COALESCE(cardinality(e.stocks_mentioned), 0) > 0
-      ORDER BY e.analyzed_at DESC
+      ORDER BY e.published DESC NULLS LAST, e.analyzed_at DESC
       LIMIT 1
     `
     return rows.length ? mapEpisodeRow(rows[0]) : null
@@ -172,7 +170,11 @@ export const getLatestStocks = unstable_cache(
       const rows = await db`
         SELECT sm.ticker, sm.name, sm.market, sm.mentions, sm.sentiment, sm.kols
         FROM stock_mentions sm
-        WHERE sm.date = (SELECT MAX(date) FROM consensus_daily)
+        WHERE sm.date = (
+          SELECT MAX(date)
+          FROM consensus_daily
+          WHERE date >= CURRENT_DATE - INTERVAL '2 days'
+        )
         ORDER BY sm.mentions DESC
       `
       return rows.map((stock): Stock => ({
@@ -213,6 +215,10 @@ export const getConsensusHistory = unstable_cache(
 )
 
 function mapEpisodeRow(row: Record<string, unknown>): Episode {
+  const summary = String(row.summary ?? '')
+  const stocks = Array.isArray(row.stocks_mentioned) ? row.stocks_mentioned as string[] : []
+  const sentiment = row.sentiment as 'bullish' | 'bearish' | 'neutral'
+
   return {
     kol_id: String(row.kol_id ?? ''),
     kol_name: String(row.kol_name ?? ''),
@@ -223,11 +229,41 @@ function mapEpisodeRow(row: Record<string, unknown>): Episode {
     published: row.published instanceof Date
       ? row.published.toISOString().slice(0, 10)
       : String(row.published ?? ''),
-    summary: String(row.summary ?? ''),
-    sentiment: row.sentiment as 'bullish' | 'bearish' | 'neutral',
-    stocks_mentioned: Array.isArray(row.stocks_mentioned) ? row.stocks_mentioned as string[] : [],
+    summary,
+    sentiment,
+    stocks_mentioned: stocks,
     report_url: String(row.report_url ?? ''),
+    unique_insight: deriveUniqueInsight(summary, stocks),
+    site_strength: deriveSiteStrength(row, stocks, sentiment),
   }
+}
+
+function summaryLines(summary: string): string[] {
+  return summary
+    .replace(/\r/g, '\n')
+    .split(/\n|。|；|;|\.\s+/)
+    .map((line) => line.replace(/^[\s\-*#\d.、:：]+/, '').trim())
+    .filter((line) => line.length >= 12)
+}
+
+function deriveUniqueInsight(summary: string, stocks: string[]): string {
+  const lines = summaryLines(summary)
+  const signalWords = ['風險', '機會', '催化', '估值', '需求', '庫存', '利率', '財報', '供應鏈', '現金流', 'AI', '政策']
+  const picked = lines.find((line) => signalWords.some((word) => line.includes(word))) ?? lines[0]
+  if (picked) return picked.slice(0, 120)
+  if (stocks.length) return `本集焦點集中在 ${stocks.slice(0, 3).join(' / ')}，適合追蹤後續共識是否擴散到其他 KOL。`
+  return '本集提供市場脈絡與敘事變化，可作為後續訊號交叉驗證的背景資料。'
+}
+
+function deriveSiteStrength(
+  row: Record<string, unknown>,
+  stocks: string[],
+  sentiment: 'bullish' | 'bearish' | 'neutral',
+): string {
+  const kolName = String(row.kol_name ?? '此 KOL')
+  const direction = sentiment === 'bullish' ? '偏多' : sentiment === 'bearish' ? '偏空' : '中性'
+  const stockText = stocks.length ? stocks.slice(0, 3).join(' / ') : '市場主題'
+  return `把 ${kolName} 對 ${stockText} 的${direction}語句拆成標的、方向、理由與可回測訊號，形成網站可比較的研究資料。`
 }
 
 function mapHistoryRow(row: Record<string, unknown>): ConsensusHistory {

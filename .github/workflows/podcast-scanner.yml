@@ -63,6 +63,7 @@ jobs:
           PODCAST_EPISODE_NUMBER: ""
           PODCAST_SEND_TELEGRAM_DAILY: "false"
           PODCAST_MAX_DAILY_FEED_ITEMS: "12"
+          PODCAST_DAILY_FRESHNESS_DAYS: "2"
           # 網站專屬 KOL 清單（與 TG /subpodcast 訂閱完全分開）
           WEBSITE_KOLS_FILE: data/website_kols.json
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

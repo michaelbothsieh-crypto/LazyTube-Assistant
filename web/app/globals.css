@@ -305,7 +305,7 @@ a {
 }
 
 .kol-report-card {
-  min-height: 220px;
+  min-height: 330px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -375,6 +375,22 @@ a {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.kol-insight-block {
+  display: grid;
+  gap: 5px;
+}
+
+.kol-insight-block span {
+  color: var(--amber);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.kol-insight-block.site-strength span {
+  color: var(--gain);
 }
 
 .ticker-row {

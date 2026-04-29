@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 import feedparser
@@ -51,6 +52,7 @@ from api.utils.prompt_manager import get_nlm_prompt
 
 MAX_EPISODES_PER_RUN = 2
 MAX_DAILY_FEED_ITEMS = int(os.environ.get("PODCAST_MAX_DAILY_FEED_ITEMS", "12"))
+DAILY_FRESHNESS_DAYS = int(os.environ.get("PODCAST_DAILY_FRESHNESS_DAYS", "2"))
 DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
@@ -254,6 +256,26 @@ def format_rss_date(raw: str) -> str:
     return raw[:10]
 
 
+def _episode_published_date(ep: dict) -> date | None:
+    published = format_rss_date(ep.get("published", ""))
+    if not published:
+        return None
+    try:
+        return date.fromisoformat(published[:10])
+    except ValueError:
+        return None
+
+
+def _is_recent_daily_episode(ep: dict) -> bool:
+    if DAILY_FRESHNESS_DAYS <= 0:
+        return True
+    published = _episode_published_date(ep)
+    if not published:
+        return False
+    cutoff = date.today() - timedelta(days=DAILY_FRESHNESS_DAYS)
+    return published >= cutoff
+
+
 # ── RSS 掃描 ──────────────────────────────────────────────────────────────
 
 def fetch_new_episodes(
@@ -359,9 +381,11 @@ def fetch_new_episodes(
 
         return [episodes[0]]
 
-    # daily：以 (rss_url, chat_id) 為複合 key 去重
-    new = [ep for ep in episodes if not is_processed(rss_url, ep["guid"], chat_id)]
-    print(f"  ✅ 新集數：{len(new)} / {len(episodes)}")
+    # Daily mode should stay fresh. If processed state is missing, do not backfill
+    # older feed items into the website as if they were today's research.
+    recent = [ep for ep in episodes if _is_recent_daily_episode(ep)]
+    new = [ep for ep in recent if not is_processed(rss_url, ep["guid"], chat_id)]
+    print(f"  New recent episodes: {len(new)} / {len(recent)} fresh / {len(episodes)} fetched")
     return new
 
 
@@ -690,6 +714,7 @@ def main() -> None:
         item_id = start_job_item(run_id, rss_url, label or rss_url[:60])
         item_found = 0
         item_written = 0
+        item_skipped = False
         item_error = ""
 
         episodes = fetch_new_episodes(
@@ -704,6 +729,7 @@ def main() -> None:
                     if episode_number
                     else "⚠️ 此 Podcast 目前沒有可分析的新集數。"
                 )
+            finish_job_item(item_id, "skipped", item_found, item_written, item_error)
             continue
 
         to_process = episodes[:1] if mode == "latest" else episodes[:MAX_EPISODES_PER_RUN]
@@ -717,13 +743,13 @@ def main() -> None:
                 if mode == "daily" and kol_id and episode_exists(kol_id, ep["guid"]):
                     print("  [SKIP] Episode already exists in DB; marking processed state.")
                     mark_processed(rss_url, ep["guid"], chat_id=on_demand_chat)
+                    item_skipped = True
                     continue
 
                 cached_analysis = get_cached_analysis(rss_url, ep["guid"], prompt_key)
                 if cached_analysis:
                     print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
                     # 快取命中也要寫 DB，確保網站資訊完整
-                    _write_episode_to_db(kol_meta, ep, cached_analysis)
                     if _write_episode_to_db(kol_meta, ep, cached_analysis):
                         item_written += 1
                     if send_reports:
@@ -791,7 +817,7 @@ def main() -> None:
 
         finish_job_item(
             item_id,
-            "success" if item_written > 0 else "failed",
+            "success" if item_written > 0 else "skipped" if item_skipped else "failed",
             item_found,
             item_written,
             item_error,
