@@ -81,7 +81,7 @@ async def handle_subpodcast(chat_id: str, text: str) -> None:
         f"✅ <b>Podcast 訂閱成功！</b>\n\n"
         f"📻 頻道：<b>{label}</b>\n"
         f"🔗 RSS：<code>{rss_url}</code>\n\n"
-        f"每天台北 09:00 自動分析最新集數並推送到此。",
+        f"每天台北 10:30 自動分析最新集數並推送到此。",
     )
 
 
@@ -284,5 +284,4 @@ async def handle_podcast(chat_id: str, text: str) -> None:
     if not success:
         logger.error("podcast-on-demand dispatch failed for chat_id=%s", chat_id)
         await send_telegram_message(chat_id, "❌ 任務派送失敗，請稍後再試。")
-
 

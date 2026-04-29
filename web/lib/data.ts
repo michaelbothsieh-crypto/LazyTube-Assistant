@@ -46,17 +46,33 @@ async function _getLatestData(): Promise<ConsensusData> {
         ORDER BY mentions DESC
       `,
       db`
-        SELECT *
-        FROM (
-          SELECT DISTINCT ON (e.kol_id)
-                 e.kol_id, k.kol_name, k.host, k.avatar, k.color,
+        WITH recent_episodes AS (
+          SELECT e.kol_id AS episode_kol_id,
+                 COALESCE(NULLIF(k.rss_url, ''), e.kol_id) AS source_key,
                  e.title, e.published, e.summary, e.sentiment,
                  e.stocks_mentioned, e.report_url, e.analyzed_at
           FROM episodes e
           JOIN kols k ON k.kol_id = e.kol_id
           WHERE e.published >= CURRENT_DATE - INTERVAL '2 days'
-          ORDER BY e.kol_id, e.published DESC NULLS LAST, e.analyzed_at DESC
-        ) latest_kol_episodes
+        ),
+        latest_episodes AS (
+          SELECT DISTINCT ON (source_key) *
+          FROM recent_episodes
+          ORDER BY source_key, published DESC NULLS LAST, analyzed_at DESC
+        ),
+        canonical_kols AS (
+          SELECT DISTINCT ON (COALESCE(NULLIF(rss_url, ''), kol_id))
+                 COALESCE(NULLIF(rss_url, ''), kol_id) AS source_key,
+                 kol_id, kol_name, host, avatar, color
+          FROM kols
+          WHERE POSITION('://' IN kol_name) = 0
+          ORDER BY COALESCE(NULLIF(rss_url, ''), kol_id), added_at ASC
+        )
+        SELECT k.kol_id, k.kol_name, k.host, k.avatar, k.color,
+               e.title, e.published, e.summary, e.sentiment,
+               e.stocks_mentioned, e.report_url, e.analyzed_at
+        FROM latest_episodes e
+        JOIN canonical_kols k ON k.source_key = e.source_key
         ORDER BY published DESC NULLS LAST, analyzed_at DESC
       `,
       db`
@@ -129,13 +145,35 @@ export async function getEpisodeByKolId(kolId: string): Promise<Episode | null> 
 
   try {
     const rows = await db`
-      SELECT e.kol_id, k.kol_name, k.host, k.avatar, k.color,
+      WITH target AS (
+        SELECT COALESCE(NULLIF(rss_url, ''), kol_id) AS source_key
+        FROM kols
+        WHERE kol_id = ${kolId}
+        LIMIT 1
+      ),
+      canonical_kol AS (
+        SELECT DISTINCT ON (COALESCE(NULLIF(k.rss_url, ''), k.kol_id))
+               COALESCE(NULLIF(k.rss_url, ''), k.kol_id) AS source_key,
+               k.kol_id, k.kol_name, k.host, k.avatar, k.color
+        FROM kols k
+        JOIN target t ON t.source_key = COALESCE(NULLIF(k.rss_url, ''), k.kol_id)
+        WHERE POSITION('://' IN k.kol_name) = 0
+        ORDER BY COALESCE(NULLIF(k.rss_url, ''), k.kol_id), k.added_at ASC
+      ),
+      latest_episode AS (
+        SELECT e.title, e.published, e.summary, e.sentiment,
+               e.stocks_mentioned, e.report_url, e.analyzed_at
+        FROM episodes e
+        JOIN kols k ON k.kol_id = e.kol_id
+        JOIN target t ON t.source_key = COALESCE(NULLIF(k.rss_url, ''), k.kol_id)
+        ORDER BY e.published DESC NULLS LAST, e.analyzed_at DESC
+        LIMIT 1
+      )
+      SELECT k.kol_id, k.kol_name, k.host, k.avatar, k.color,
              e.title, e.published, e.summary, e.sentiment,
              e.stocks_mentioned, e.report_url
-      FROM episodes e
-      JOIN kols k ON k.kol_id = e.kol_id
-      WHERE e.kol_id = ${kolId}
-      ORDER BY e.published DESC NULLS LAST, e.analyzed_at DESC
+      FROM latest_episode e
+      CROSS JOIN canonical_kol k
       LIMIT 1
     `
     return rows.length ? mapEpisodeRow(rows[0]) : null
@@ -150,10 +188,24 @@ export async function getAllKolIds(): Promise<string[]> {
 
   try {
     const rows = await db`
-      SELECT DISTINCT kol_id
-      FROM episodes
-      WHERE COALESCE(cardinality(stocks_mentioned), 0) > 0
-      ORDER BY kol_id
+      WITH canonical_kols AS (
+        SELECT DISTINCT ON (COALESCE(NULLIF(rss_url, ''), kol_id))
+               COALESCE(NULLIF(rss_url, ''), kol_id) AS source_key,
+               kol_id
+        FROM kols
+        WHERE POSITION('://' IN kol_name) = 0
+        ORDER BY COALESCE(NULLIF(rss_url, ''), kol_id), added_at ASC
+      )
+      SELECT ck.kol_id
+      FROM canonical_kols ck
+      WHERE EXISTS (
+        SELECT 1
+        FROM episodes e
+        JOIN kols k ON k.kol_id = e.kol_id
+        WHERE COALESCE(NULLIF(k.rss_url, ''), k.kol_id) = ck.source_key
+          AND COALESCE(cardinality(e.stocks_mentioned), 0) > 0
+      )
+      ORDER BY ck.kol_id
     `
     return rows.map((row) => row.kol_id as string)
   } catch {
@@ -215,7 +267,7 @@ export const getConsensusHistory = unstable_cache(
 )
 
 function mapEpisodeRow(row: Record<string, unknown>): Episode {
-  const summary = String(row.summary ?? '')
+  const summary = stripNotebookCitations(String(row.summary ?? ''))
   const stocks = Array.isArray(row.stocks_mentioned) ? row.stocks_mentioned as string[] : []
   const sentiment = row.sentiment as 'bullish' | 'bearish' | 'neutral'
 
@@ -225,7 +277,7 @@ function mapEpisodeRow(row: Record<string, unknown>): Episode {
     host: String(row.host ?? ''),
     avatar: String(row.avatar ?? ''),
     color: String(row.color ?? '#73f1ba'),
-    title: String(row.title ?? ''),
+    title: stripNotebookCitations(String(row.title ?? '')),
     published: row.published instanceof Date
       ? row.published.toISOString().slice(0, 10)
       : String(row.published ?? ''),
@@ -236,6 +288,15 @@ function mapEpisodeRow(row: Record<string, unknown>): Episode {
     unique_insight: deriveUniqueInsight(summary, stocks),
     site_strength: deriveSiteStrength(row, stocks, sentiment),
   }
+}
+
+function stripNotebookCitations(text: string): string {
+  return text
+    .replace(/[〖【]\s*(文字紀錄|投資倒數小結|完整摘要)\s*[〗】]/g, '')
+    .replace(/\s*\[\d+(?:[,，\s\-–]+\d+)*\]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function summaryLines(summary: string): string[] {

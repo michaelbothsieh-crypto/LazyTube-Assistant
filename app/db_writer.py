@@ -329,6 +329,78 @@ def ensure_kol(kol_meta: dict) -> str:
     return kol_id
 
 
+def migrate_legacy_kol_aliases(kols: list[dict]) -> int:
+    """
+    Move episodes written under old fallback URL-name KOL rows back to the
+    canonical website_kols.json KOL ids.
+    """
+    if not DATABASE_URL:
+        return 0
+
+    canonical = [
+        (k.get("kol_id", ""), k.get("rss_url", ""))
+        for k in kols
+        if k.get("kol_id") and k.get("rss_url")
+    ]
+    if not canonical:
+        return 0
+
+    migrated = 0
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            for canonical_id, rss_url in canonical:
+                cur.execute(
+                    """
+                    WITH legacy AS (
+                      SELECT l.kol_id AS legacy_id, %s AS canonical_id
+                      FROM kols l
+                      WHERE l.kol_id <> %s
+                        AND (
+                          NULLIF(l.rss_url, '') = %s
+                          OR l.kol_name = %s
+                        )
+                        AND POSITION('://' IN l.kol_name) > 0
+                    ),
+                    removed_duplicates AS (
+                      DELETE FROM episodes e
+                      USING legacy l
+                      WHERE e.kol_id = l.legacy_id
+                        AND EXISTS (
+                          SELECT 1
+                          FROM episodes existing
+                          WHERE existing.kol_id = l.canonical_id
+                            AND existing.guid = e.guid
+                        )
+                      RETURNING 1
+                    ),
+                    moved AS (
+                      UPDATE episodes e
+                      SET kol_id = l.canonical_id
+                      FROM legacy l
+                      WHERE e.kol_id = l.legacy_id
+                      RETURNING 1
+                    ),
+                    removed_empty_kols AS (
+                      DELETE FROM kols k
+                      USING legacy l
+                      WHERE k.kol_id = l.legacy_id
+                        AND NOT EXISTS (
+                          SELECT 1 FROM episodes e WHERE e.kol_id = k.kol_id
+                        )
+                      RETURNING 1
+                    )
+                    SELECT
+                      (SELECT COUNT(*) FROM removed_duplicates) +
+                      (SELECT COUNT(*) FROM moved) AS affected
+                    """,
+                    (canonical_id, canonical_id, rss_url, rss_url),
+                )
+                row = cur.fetchone()
+                migrated += int(row[0] or 0)
+        conn.commit()
+    return migrated
+
+
 # ── Episode write ────────────────────────────────────────────────────────────
 
 def write_episode(

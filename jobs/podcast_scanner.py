@@ -39,11 +39,13 @@ from app.db_writer import (
     finish_job_run,
     start_job_item,
     start_job_run,
+    migrate_legacy_kol_aliases,
     write_episode,
 )
 from app.notebook.notebook_session import NotebookSession
 from app.notebook.parsing import parse_query_output
 from app.notebook.runner import NotebookRunner
+from app.notebook.source_loader import SourceLoader
 from app.notifier.reporting import generate_podcast_html_report
 from app.notifier.service import Notifier
 from app.podcast_cache import get_cached_analysis, set_cached_analysis
@@ -102,6 +104,33 @@ def _build_episode_prompt(base_prompt: str, ep: dict) -> str:
 
     context = "【本集背景資訊（請以此修正音訊中的人名與節目專有名詞）】\n" + "\n".join(lines)
     return f"{context}\n\n{base_prompt}"
+
+
+def _build_article_prompt(ep: dict) -> str:
+    lines = []
+    if ep.get("feed_title"):
+        lines.append(f"來源名稱：{ep['feed_title']}")
+    if ep.get("feed_author"):
+        lines.append(f"作者/媒體：{ep['feed_author']}")
+    if ep.get("title"):
+        lines.append(f"文章標題：{ep['title']}")
+    if ep.get("content_url"):
+        lines.append(f"文章 URL：{ep['content_url']}")
+
+    context = "【來源背景資訊】\n" + "\n".join(lines)
+    task = (
+        "你是一位專業的台灣科技、商業與財經研究助理。"
+        "請把此來源整理成可供投研首頁使用的語言訊號，全程使用台灣繁體中文。\n\n"
+        "【文字紀錄】\n"
+        "請用 3-6 段整理文章核心內容，保留原文觀點、產業語氣與重要脈絡；"
+        "不要寫成逐字稿，不要加入沒有來源支持的推論。\n\n"
+        "【投資倒數小結】\n"
+        "1. 台美股焦點標的：列出文中提到的台股、美股代號或公司名，一行一個，附上文章觀點。"
+        "若沒有明確上市標的，列出相關產業或主題。\n"
+        "2. 本集結論：用 2-3 句話總結此來源對科技、商業或市場趨勢的核心訊號。\n\n"
+        "【重要規範：直接輸出兩個段落，嚴禁包含思考過程。嚴禁使用 Markdown 加粗（** 或 __）。】"
+    )
+    return f"{context}\n\n{task}"
 
 
 def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
@@ -283,6 +312,7 @@ def fetch_new_episodes(
     mode: str = "daily",
     chat_id: str = "",
     episode_number: str = "",
+    allow_text: bool = False,
 ) -> list[dict]:
     """
     掃描單一 RSS，回傳待處理的集數。
@@ -307,7 +337,7 @@ def fetch_new_episodes(
             print(f"  [FAIL] 無法解析 URL 為 RSS：{rss_url}")
             return []
 
-    print(f"📡 揉描 RSS：{rss_url}")
+    print(f"📡 掃描 RSS：{rss_url}")
 
     try:
         feed = feedparser.parse(rss_url)
@@ -330,6 +360,18 @@ def fetch_new_episodes(
             continue
         audio_url = _extract_audio_url(entry)
         if not audio_url:
+            if not allow_text or not entry.get("link"):
+                continue
+            episodes.append({
+                "guid": guid,
+                "title": entry.get("title", "未知文章"),
+                "content_url": entry.get("link", ""),
+                "published": entry.get("published", entry.get("updated", "")),
+                "rss_url": rss_url,
+                "feed_title": feed_title,
+                "feed_author": feed_author,
+                "source_kind": "article",
+            })
             continue
         episodes.append({
             "guid": guid,
@@ -339,6 +381,7 @@ def fetch_new_episodes(
             "rss_url": rss_url,
             "feed_title": feed_title,
             "feed_author": feed_author,
+            "source_kind": "podcast",
         })
 
     if not episodes:
@@ -408,7 +451,6 @@ def compress_audio(src_path: str) -> str:
     若 ffmpeg 不存在，直接回傳原路徑。
     """
     if not shutil.which("ffmpeg"):
-        print("  ℹ️  ffmpeg 未安裝，跳過壓縮步驟")
         return src_path
 
     compressed = src_path.replace(".mp3", "_c.mp3").replace(".m4a", "_c.mp3")
@@ -491,6 +533,27 @@ def analyze_with_nlm(runner: NotebookRunner, mp3_path: str, prompt: str) -> str 
             print(f"  ❌ 上傳失敗：{result.stderr}")
             return None
         print(f"  ✅ 轉錄完成 [{time.time()-t0:.0f}s]，開始 query...")
+        t1 = time.time()
+        qr = runner.run("query", "notebook", session.notebook_id, prompt)
+        if qr.returncode != 0:
+            print(f"  ❌ query 失敗：{qr.stderr}")
+            return None
+        print(f"  ✅ Query 完成 [{time.time()-t1:.0f}s]")
+        return parse_query_output(qr.stdout)
+
+
+def analyze_source_url_with_nlm(runner: NotebookRunner, url: str, prompt: str) -> str | None:
+    with NotebookSession(runner, "WEB") as session:
+        if not session.ready():
+            print("  ❌ 無法建立 NotebookLM notebook")
+            return None
+        loader = SourceLoader(runner)
+        print("  ⏳ 載入文章來源...")
+        t0 = time.time()
+        if not loader.add_source(session.notebook_id, url, wait=True):
+            print("  ❌ 文章來源載入失敗")
+            return None
+        print(f"  ✅ 來源載入完成 [{time.time()-t0:.0f}s]，開始 query...")
         t1 = time.time()
         qr = runner.run("query", "notebook", session.notebook_id, prompt)
         if qr.returncode != 0:
@@ -603,7 +666,9 @@ def _register_all_kols(website_kols_file: str) -> None:
         for k in kols:
             if k.get("kol_id"):
                 ensure_kol(k)
-        print(f"  ✅ 已注冊 {len(kols)} 個 KOL metadata")
+        migrated = migrate_legacy_kol_aliases(kols)
+        if migrated:
+            print(f"  [DB] migrated {migrated} legacy URL-name KOL episode rows")
     except Exception as e:
         print(f"⚠️  KOL metadata 注冊失敗：{e}")
 
@@ -666,7 +731,6 @@ def main() -> None:
     # 啟動時先把所有 KOL metadata 寫進 DB（含無 RSS 的 KOL）
     # 這是 SSOT 同步的核心步驟，確保網站顯示永遠跟 website_kols.json 一致
     if website_kols_file:
-        print("\n📋 同步 KOL metadata...")
         _register_all_kols(website_kols_file)
 
     # 建立 rss_url → kol_meta 的查找表
@@ -682,7 +746,6 @@ def main() -> None:
         rss_sources = [rss_url.strip() for rss_url in rss_env.split(",") if rss_url.strip()]
     elif kol_registry:
         rss_sources = list(kol_registry.keys())
-        print(f"📋 網站 KOL RSS：{len(rss_sources)} 個頻道")
     else:
         rss_sources = []
 
@@ -717,8 +780,13 @@ def main() -> None:
         item_skipped = False
         item_error = ""
 
+        allow_text = kol_meta.get("source_type") == "article"
         episodes = fetch_new_episodes(
-            rss_url, mode=mode, chat_id=on_demand_chat, episode_number=episode_number
+            rss_url,
+            mode=mode,
+            chat_id=on_demand_chat,
+            episode_number=episode_number,
+            allow_text=allow_text,
         )
         item_found = len(episodes)
         if not episodes:
@@ -732,7 +800,8 @@ def main() -> None:
             finish_job_item(item_id, "skipped", item_found, item_written, item_error)
             continue
 
-        to_process = episodes[:1] if mode == "latest" else episodes[:MAX_EPISODES_PER_RUN]
+        source_limit = int(kol_meta.get("max_episodes_per_run", MAX_EPISODES_PER_RUN))
+        to_process = episodes[:1] if mode == "latest" else episodes[:source_limit]
 
         for ep in to_process:
             print(f"\n{'─' * 50}")
@@ -768,15 +837,18 @@ def main() -> None:
                     total_success += 1
                     continue
 
-                mp3_path = download_audio(ep["audio_url"], ep["title"])
-                if not mp3_path:
-                    error_msg = f"❌ 音檔下載失敗：{ep['title'][:60]}"
-                    item_error = error_msg
-                    print(f"  {error_msg}")
-                    continue
-
-                ep_prompt = _build_episode_prompt(prompt, ep)
-                analysis = analyze_with_nlm(runner, mp3_path, ep_prompt)
+                if ep.get("source_kind") == "article":
+                    ep_prompt = _build_article_prompt(ep)
+                    analysis = analyze_source_url_with_nlm(runner, ep["content_url"], ep_prompt)
+                else:
+                    ep_prompt = _build_episode_prompt(prompt, ep)
+                    mp3_path = download_audio(ep["audio_url"], ep["title"])
+                    if not mp3_path:
+                        error_msg = f"❌ 音檔下載失敗：{ep['title'][:60]}"
+                        item_error = error_msg
+                        print(f"  {error_msg}")
+                        continue
+                    analysis = analyze_with_nlm(runner, mp3_path, ep_prompt)
                 if not analysis:
                     error_msg = f"❌ AI 分析失敗（NLM 無回應），請稍後再試。\n集數：{ep['title'][:60]}"
                     print("  ❌ NLM 分析失敗")

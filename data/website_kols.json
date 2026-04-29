@@ -61,39 +61,7 @@
     "host": "升鴻",
     "avatar": "🚀",
     "color": "#06b6d4",
-    "rss_url": ""
-  },
-  {
-    "kol_id": "investlab",
-    "label": "阿福の台美股研究室",
-    "host": "阿福",
-    "avatar": "🔬",
-    "color": "#6366f1",
-    "rss_url": ""
-  },
-  {
-    "kol_id": "activeinv",
-    "label": "主動式投資人",
-    "host": "James Ko",
-    "avatar": "⚡",
-    "color": "#f97316",
-    "rss_url": ""
-  },
-  {
-    "kol_id": "engstock",
-    "label": "工程師投資記",
-    "host": "陳峻誌",
-    "avatar": "💻",
-    "color": "#a78bfa",
-    "rss_url": ""
-  },
-  {
-    "kol_id": "twsenior",
-    "label": "台股老司機",
-    "host": "老司機",
-    "avatar": "🚗",
-    "color": "#fb7185",
-    "rss_url": ""
+    "rss_url": "https://feeds.soundon.fm/podcasts/5558f392-2ce3-4f31-afe3-8eb780f509ab.xml"
   },
   {
     "kol_id": "richie",
@@ -101,7 +69,9 @@
     "host": "Richie",
     "avatar": "💰",
     "color": "#fbbf24",
-    "rss_url": ""
+    "rss_url": "https://blog.17rich.com/feed/",
+    "source_type": "article",
+    "max_episodes_per_run": 1
   },
   {
     "kol_id": "stockfeel",
@@ -109,14 +79,68 @@
     "host": "股感團隊",
     "avatar": "📚",
     "color": "#34d399",
-    "rss_url": ""
+    "rss_url": "https://www.stockfeel.com.tw/author/stockfeel/feed/",
+    "source_type": "article",
+    "max_episodes_per_run": 1
   },
   {
-    "kol_id": "afterwork",
-    "label": "下班後的投資啟蒙",
-    "host": "Brian",
-    "avatar": "🌙",
-    "color": "#818cf8",
-    "rss_url": ""
+    "kol_id": "technews",
+    "label": "科技新報",
+    "host": "TechNews",
+    "avatar": "🧬",
+    "color": "#0ea5e9",
+    "rss_url": "https://technews.tw/feed/",
+    "source_type": "article",
+    "max_episodes_per_run": 1
+  },
+  {
+    "kol_id": "inside",
+    "label": "INSIDE",
+    "host": "INSIDE 編輯部",
+    "avatar": "🧠",
+    "color": "#8b5cf6",
+    "rss_url": "https://www.inside.com.tw/feed/rss",
+    "source_type": "article",
+    "max_episodes_per_run": 1
+  },
+  {
+    "kol_id": "meet",
+    "label": "創業小聚",
+    "host": "Meet 創業小聚",
+    "avatar": "🧩",
+    "color": "#f97316",
+    "rss_url": "https://meet.bnext.com.tw/rss",
+    "source_type": "article",
+    "max_episodes_per_run": 1
+  },
+  {
+    "kol_id": "ithome",
+    "label": "iThome",
+    "host": "iThome",
+    "avatar": "🛡️",
+    "color": "#64748b",
+    "rss_url": "https://www.ithome.com.tw/rss",
+    "source_type": "article",
+    "max_episodes_per_run": 1
+  },
+  {
+    "kol_id": "techorange",
+    "label": "TechOrange 科技報橘",
+    "host": "TechOrange",
+    "avatar": "🍊",
+    "color": "#fb923c",
+    "rss_url": "https://buzzorange.com/techorange/feed/",
+    "source_type": "article",
+    "max_episodes_per_run": 1
+  },
+  {
+    "kol_id": "managertoday",
+    "label": "經理人",
+    "host": "經理人月刊",
+    "avatar": "📈",
+    "color": "#22c55e",
+    "rss_url": "https://www.managertoday.com.tw/rss",
+    "source_type": "article",
+    "max_episodes_per_run": 1
   }
 ]

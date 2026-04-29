@@ -15,6 +15,12 @@ const sentimentTone = {
   bearish: { label: '偏空', color: 'var(--risk)', Icon: TrendDown },
 } as const
 
+const extractionSteps = [
+  { label: '語句收集', value: 'RSS + episode', detail: '每日 10:30 掃描近期 KOL 節目，保留來源與集數脈絡。' },
+  { label: '觀點萃取', value: 'thesis', detail: '把敘事拆成標的、方向、理由、風險與催化條件。' },
+  { label: '共識建模', value: 'signal graph', detail: '用跨 KOL 重複度與信心分數呈現語言力量的擴散。' },
+] as const
+
 function formatDateTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -37,12 +43,22 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const [filter, setFilter] = useState<'all' | 'bullish' | 'neutral' | 'bearish'>('all')
   const topStocks = data.consensus.stocks.slice(0, 8)
   const signals = data.signals.slice(0, 8)
+  const topDecisionSignals = signals.slice(0, 3)
   const episodes = data.episodes.slice(0, 16)
   const filteredEpisodes = filter === 'all' ? episodes : episodes.filter((episode) => episode.sentiment === filter)
+  const featuredInsights = episodes
+    .filter((episode) => episode.unique_insight)
+    .slice(0, 3)
   const direction = dominantSentiment(data)
   const directionTone = sentimentTone[direction]
   const DirectionIcon = directionTone.Icon
   const latestRun = data.automation.latest_run
+  const strongestSignal = topDecisionSignals[0]
+  const bearishSignal = signals.find((signal) => signal.direction === 'bearish')
+  const crowdedStock = topStocks[0]
+  const marketCallText = strongestSignal
+    ? `${strongestSignal.ticker} / ${strongestSignal.name} 是今日最高信心訊號，${strongestSignal.source_count} 位 KOL 共同指向${sentimentTone[strongestSignal.direction].label}。`
+    : data.consensus.weekly_theme || '等待今日 KOL 語言訊號寫入。'
 
   const coverageText = useMemo(() => {
     if (!latestRun) return '尚未取得最新自動化執行紀錄'
@@ -52,8 +68,9 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   return (
     <main className="research-shell">
       <nav className="research-nav" aria-label="Primary navigation">
-        <Link href="/" className="brand-mark">PodConsensus</Link>
+        <Link href="/" className="brand-mark">KOL Signal Lab</Link>
         <div>
+          <a href="#extraction">架構</a>
           <a href="#signals">訊號</a>
           <a href="#kols">KOL</a>
           <a href="#automation">自動化</a>
@@ -62,18 +79,78 @@ export default function TasteLanding({ data }: TasteLandingProps) {
 
       <section className="research-header">
         <div>
-          <p className="eyebrow">Daily podcast market brief</p>
-          <h1>每日 Podcast 市場研究報告</h1>
+          <p className="eyebrow">Daily decision brief</p>
+          <h1>今日 KOL 語言共識：{directionTone.label}</h1>
           <p>
-            將最近兩天內的 KOL 節目整理成市場方向、提及標的、獨到見解與可追蹤訊號。
-            每張卡片都把原始語句提煉成網站可比較、可累積、可回測的研究資料。
+            {marketCallText}
           </p>
         </div>
         <aside className="run-card" id="automation">
-          <span>自動化覆蓋率</span>
-          <strong>{data.automation.completeness_pct}%</strong>
-          <p>{coverageText}</p>
-          <small>首頁只呈現最近兩天內的資料；若 scanner 沒有寫入新集，這裡會明確變少而不是回填舊內容。</small>
+          <span>Market call</span>
+          <strong style={{ color: directionTone.color }}>
+            <DirectionIcon size={26} />
+            {data.consensus.consensus_score}
+          </strong>
+          <p>共識分數 / {data.episodes_analyzed} 集有效樣本</p>
+          <small>每日台北 10:30 掃描；首頁只顯示最近兩天內的有效資料。</small>
+        </aside>
+      </section>
+
+      <section className="decision-board" id="signals" aria-label="Daily market decision board">
+        <article className="panel panel-large">
+          <div className="panel-head">
+            <div>
+              <span>今日必看訊號</span>
+              <h2>先看最高信心標的，再決定是否下鑽證據</h2>
+            </div>
+            <small>{topDecisionSignals.length} priority signals</small>
+          </div>
+          <div className="priority-signal-list">
+            {topDecisionSignals.length ? topDecisionSignals.map((signal, index) => {
+              const tone = sentimentTone[signal.direction]
+              return (
+                <Link href="#kols" className="priority-signal" key={signal.ticker}>
+                  <b>{String(index + 1).padStart(2, '0')}</b>
+                  <div>
+                    <span>{signal.ticker}</span>
+                    <strong>{signal.name}</strong>
+                    <p>{signal.thesis || signal.catalysts.slice(0, 2).join(' / ') || '等待 thesis 寫入。'}</p>
+                  </div>
+                  <i style={{ color: tone.color }}>{tone.label}</i>
+                  <em>{signal.confidence_score}</em>
+                  <small>{signal.source_count} KOL</small>
+                </Link>
+              )
+            }) : (
+              <p className="empty-note">尚無最近兩天內的訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
+            )}
+          </div>
+        </article>
+
+        <aside className="panel risk-panel">
+          <div className="panel-head">
+            <div>
+              <span>風險雷達</span>
+              <h2>今日要先排除的盲點</h2>
+            </div>
+          </div>
+          <div className="risk-list">
+            <div>
+              <span>反向訊號</span>
+              <strong>{bearishSignal ? bearishSignal.ticker : 'None'}</strong>
+              <p>{bearishSignal ? bearishSignal.thesis || `${bearishSignal.source_count} 位 KOL 偏空。` : '目前未偵測到高信心偏空訊號。'}</p>
+            </div>
+            <div>
+              <span>擁擠標的</span>
+              <strong>{crowdedStock ? crowdedStock.ticker : 'None'}</strong>
+              <p>{crowdedStock ? `${crowdedStock.mentions} 次提及，方向為 ${sentimentTone[crowdedStock.sentiment].label}。` : '尚無標的熱度資料。'}</p>
+            </div>
+            <div>
+              <span>資料覆蓋</span>
+              <strong>{data.automation.completeness_pct}%</strong>
+              <p>{coverageText}</p>
+            </div>
+          </div>
         </aside>
       </section>
 
@@ -102,21 +179,49 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <small>來自目前啟用的 RSS 來源</small>
         </div>
         <div>
-          <span>共識分數</span>
+          <span>自動化</span>
           <strong>
             <Activity size={18} />
-            {data.consensus.consensus_score}
+            {data.automation.completeness_pct}%
           </strong>
-          <small>{data.consensus.weekly_theme || '等待最新 podcast scanner 寫入資料'}</small>
+          <small>{coverageText}</small>
         </div>
       </section>
 
-      <section className="research-grid" id="signals">
+      <section className="language-lab" id="extraction" aria-label="KOL language extraction architecture">
+        <div className="panel-head">
+          <div>
+            <span>萃取架構</span>
+            <h2>從一句話到可追蹤訊號</h2>
+          </div>
+          <small>scan 10:30 TPE</small>
+        </div>
+        <div className="pipeline-grid">
+          {extractionSteps.map((step, index) => (
+            <div className="pipeline-step" key={step.label}>
+              <b>{String(index + 1).padStart(2, '0')}</b>
+              <span>{step.label}</span>
+              <strong>{step.value}</strong>
+              <p>{step.detail}</p>
+            </div>
+          ))}
+        </div>
+        <div className="insight-grid">
+          {(featuredInsights.length ? featuredInsights : episodes.slice(0, 3)).map((episode, index) => (
+            <Link href={`/kol/${episode.kol_id}`} className="insight-card" key={`${episode.kol_id}-${index}`}>
+              <span>{episode.kol_name}</span>
+              <p>{episode.unique_insight || episode.summary.replace(/\s+/g, ' ').trim() || '等待最新節目寫入可萃取觀點。'}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="research-grid">
         <article className="panel panel-large">
           <div className="panel-head">
             <div>
-              <span>今日可追蹤訊號</span>
-              <h2>把多位 KOL 的語句收斂成可比較的投資線索</h2>
+              <span>完整訊號表</span>
+              <h2>用同一套欄位比較每日投資線索</h2>
             </div>
             <small>{signals.length || 0} signals</small>
           </div>
@@ -171,8 +276,8 @@ export default function TasteLanding({ data }: TasteLandingProps) {
       <section className="panel" id="kols">
         <div className="panel-head">
           <div>
-            <span>KOL 研究樣本</span>
-          <h2>點進去會看到同一集節目的詳細筆記</h2>
+            <span>Evidence stream</span>
+            <h2>支撐今日判斷的 KOL 語言證據</h2>
           </div>
           <div className="filter-tabs compact-tabs">
             {(['all', 'bullish', 'neutral', 'bearish'] as const).map((item) => (
@@ -213,6 +318,7 @@ function EpisodeCard({ episode }: { episode: Episode }) {
         </span>
       </div>
       <h3>{episode.title}</h3>
+      <div className="insight-pill">核心觀點</div>
       <p>{episode.summary.replace(/\s+/g, ' ').trim() || '尚無摘要內容'}</p>
       <div className="ticker-row">
         {episode.stocks_mentioned.slice(0, 5).map((ticker) => (
