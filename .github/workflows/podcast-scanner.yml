@@ -2,8 +2,8 @@ name: Podcast 財經分析掃描器
 
 on:
   schedule:
-    # 每天台北時間 09:00 執行（UTC 01:00）
-    - cron: '0 1 * * *'
+    # 每天台北時間 10:30 執行（UTC 02:30）
+    - cron: '30 2 * * *'
   workflow_dispatch:  # 支援手動觸發
 
 env:
@@ -48,6 +48,31 @@ jobs:
           GH_REPO_NAME: ${{ secrets.GH_REPO_NAME }}
         run: |
           python jobs/podcast_sync_helper.py restore
+
+      - name: Resolve website KOL feeds
+        run: |
+          python jobs/resolve_website_kols.py --write
+
+      - name: Commit resolved website KOL feeds
+        run: |
+          if git diff --quiet -- data/website_kols.json; then
+            echo "No KOL feed updates."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/website_kols.json
+          git commit -m "Keep website KOL feeds complete
+
+          Resolve missing source feeds before the daily scanner runs so the
+          website receives newly discoverable KOL sources automatically.
+
+          Constraint: Only validated feeds are written
+          Confidence: medium
+          Scope-risk: narrow
+          Tested: python jobs/resolve_website_kols.py --write
+          Not-tested: Future platform search result quality"
+          git push
 
       - name: Run podcast scanner
         env:
