@@ -58,6 +58,22 @@ DAILY_FRESHNESS_DAYS = int(os.environ.get("PODCAST_DAILY_FRESHNESS_DAYS", "2"))
 DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
+ARTICLE_INCLUDE_KEYWORDS = {
+    "ai", "人工智慧", "生成式", "agent", "代理", "openai", "chatgpt",
+    "google", "alphabet", "gemini", "microsoft", "微軟", "amazon", "aws",
+    "meta", "apple", "tesla", "oracle", "甲骨文", "nvidia", "輝達",
+    "amd", "tsmc", "台積電", "半導體", "晶片", "gpu", "hbm", "dram",
+    "nand", "記憶體", "伺服器", "資料中心", "雲端", "資安", "機器人",
+    "電動車", "供應鏈", "財報", "營收", "獲利", "股價", "ipo", "併購",
+    "資本市場", "投資", "市場", "產業", "商機", "新創", "venture",
+}
+
+ARTICLE_EXCLUDE_KEYWORDS = {
+    "mbti", "星座", "職涯", "職場", "履歷", "面試", "加薪", "升官",
+    "主管", "總經理", "管理術", "心理測驗", "旅遊", "美食", "影劇",
+    "巴爾幹", "波士尼亞", "能源協議", "軍事", "戰爭", "國防協議",
+}
+
 
 def _env_flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
@@ -126,11 +142,26 @@ def _build_article_prompt(ep: dict) -> str:
         "不要寫成逐字稿，不要加入沒有來源支持的推論。\n\n"
         "【投資倒數小結】\n"
         "1. 台美股焦點標的：列出文中提到的台股、美股代號或公司名，一行一個，附上文章觀點。"
-        "若沒有明確上市標的，列出相關產業或主題。\n"
+        "若沒有明確上市標的，請寫「無明確上市標的」；不要把 GEO、RFID、CNC、MBTI 等概念、技術或人格縮寫當成股票代號。\n"
         "2. 本集結論：用 2-3 句話總結此來源對科技、商業或市場趨勢的核心訊號。\n\n"
         "【重要規範：直接輸出兩個段落，嚴禁包含思考過程。嚴禁使用 Markdown 加粗（** 或 __）。】"
     )
     return f"{context}\n\n{task}"
+
+
+def _fallback_article_analysis(ep: dict) -> str:
+    title = str(ep.get("title") or "未命名文章")
+    source = str(ep.get("feed_title") or "RSS 來源")
+    excerpt = str(ep.get("entry_summary") or "").strip()
+    if not excerpt:
+        excerpt = "RSS 未提供足夠摘要，僅保留標題作為低信心待追蹤訊號。"
+    return (
+        "【文字紀錄】\n"
+        f"{source} 發布「{title}」。{excerpt}\n\n"
+        "【投資倒數小結】\n"
+        "1. 台美股焦點標的：無明確上市標的。\n"
+        f"2. 本集結論：此來源因 NotebookLM query timeout，先以 RSS 摘要保留為低信心觀察訊號；後續可由下一次掃描或人工詳讀補強。"
+    )
 
 
 def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
@@ -185,6 +216,8 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
         "ARM": "ARM", "台塑": "1301", "中鋼": "2002",
         "聯電": "2303", "日月光": "3711", "瑞昱": "2379",
         "緯創": "3231", "技嘉": "2376", "微星": "2377",
+        "AWS": "AMZN", "甲骨文": "ORCL", "甲骨文公司": "ORCL",
+        "Salesforce": "CRM", "Adobe": "ADBE",
     }
     for cn, ticker in cn_map.items():
         if cn in analysis and ticker not in stocks:
@@ -306,6 +339,36 @@ def _is_recent_daily_episode(ep: dict) -> bool:
     return published >= cutoff
 
 
+def _entry_text(entry) -> str:
+    fields = [
+        entry.get("title", ""),
+        entry.get("summary", ""),
+        entry.get("description", ""),
+    ]
+    tags = getattr(entry, "tags", []) or []
+    for tag in tags:
+        term = tag.get("term") if isinstance(tag, dict) else ""
+        if term:
+            fields.append(term)
+    return " ".join(str(field) for field in fields if field).lower()
+
+
+def _clean_entry_summary(entry) -> str:
+    raw = str(entry.get("summary", entry.get("description", "")) or "")
+    text = re.sub(r"<[^>]+>", " ", raw)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:500]
+
+
+def _is_research_article(entry, include_keywords: list[str] | None = None, exclude_keywords: list[str] | None = None) -> bool:
+    text = _entry_text(entry)
+    includes = {kw.lower() for kw in (include_keywords or [])} | ARTICLE_INCLUDE_KEYWORDS
+    excludes = {kw.lower() for kw in (exclude_keywords or [])} | ARTICLE_EXCLUDE_KEYWORDS
+    if any(kw and kw in text for kw in excludes):
+        return False
+    return any(kw and kw in text for kw in includes)
+
+
 # ── RSS 掃描 ──────────────────────────────────────────────────────────────
 
 def fetch_new_episodes(
@@ -314,6 +377,8 @@ def fetch_new_episodes(
     chat_id: str = "",
     episode_number: str = "",
     allow_text: bool = False,
+    article_include_keywords: list[str] | None = None,
+    article_exclude_keywords: list[str] | None = None,
 ) -> list[dict]:
     """
     掃描單一 RSS，回傳待處理的集數。
@@ -363,11 +428,14 @@ def fetch_new_episodes(
         if not audio_url:
             if not allow_text or not entry.get("link"):
                 continue
+            if mode == "daily" and not _is_research_article(entry, article_include_keywords, article_exclude_keywords):
+                continue
             episodes.append({
                 "guid": guid,
                 "title": entry.get("title", "未知文章"),
                 "content_url": entry.get("link", ""),
                 "published": entry.get("published", entry.get("updated", "")),
+                "entry_summary": _clean_entry_summary(entry),
                 "rss_url": rss_url,
                 "feed_title": feed_title,
                 "feed_author": feed_author,
@@ -788,6 +856,8 @@ def main() -> None:
             chat_id=on_demand_chat,
             episode_number=episode_number,
             allow_text=allow_text,
+            article_include_keywords=kol_meta.get("include_keywords"),
+            article_exclude_keywords=kol_meta.get("exclude_keywords"),
         )
         item_found = len(episodes)
         if not episodes:
@@ -841,6 +911,9 @@ def main() -> None:
                 if ep.get("source_kind") == "article":
                     ep_prompt = _build_article_prompt(ep)
                     analysis = analyze_source_url_with_nlm(runner, ep["content_url"], ep_prompt)
+                    if not analysis:
+                        print("  ⚠️  NLM timeout，改用 RSS 摘要保留低信心文章訊號")
+                        analysis = _fallback_article_analysis(ep)
                 else:
                     ep_prompt = _build_episode_prompt(prompt, ep)
                     mp3_path = download_audio(ep["audio_url"], ep["title"])

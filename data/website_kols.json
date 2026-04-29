@@ -91,7 +91,9 @@
     "color": "#0ea5e9",
     "rss_url": "https://technews.tw/feed/",
     "source_type": "article",
-    "max_episodes_per_run": 1
+    "max_episodes_per_run": 1,
+    "include_keywords": ["AI", "半導體", "晶片", "台積電", "輝達", "Nvidia", "OpenAI", "雲端", "記憶體", "資料中心", "電動車"],
+    "exclude_keywords": ["巴爾幹", "波士尼亞", "能源協議", "軍事"]
   },
   {
     "kol_id": "inside",
@@ -101,7 +103,9 @@
     "color": "#8b5cf6",
     "rss_url": "https://www.inside.com.tw/feed/rss",
     "source_type": "article",
-    "max_episodes_per_run": 1
+    "max_episodes_per_run": 1,
+    "include_keywords": ["AI", "OpenAI", "Google", "Meta", "Microsoft", "Amazon", "AWS", "新創", "資本市場", "IPO", "併購"],
+    "exclude_keywords": ["影劇", "生活", "職場"]
   },
   {
     "kol_id": "meet",
@@ -111,7 +115,9 @@
     "color": "#f97316",
     "rss_url": "https://meet.bnext.com.tw/rss",
     "source_type": "article",
-    "max_episodes_per_run": 1
+    "max_episodes_per_run": 1,
+    "include_keywords": ["AI", "新創", "募資", "資本", "IPO", "併購", "SaaS", "雲端", "半導體", "生成式"],
+    "exclude_keywords": ["活動花絮"]
   },
   {
     "kol_id": "ithome",
@@ -131,7 +137,9 @@
     "color": "#fb923c",
     "rss_url": "https://buzzorange.com/techorange/feed/",
     "source_type": "article",
-    "max_episodes_per_run": 1
+    "max_episodes_per_run": 1,
+    "include_keywords": ["AI", "Amazon", "AWS", "Google", "Microsoft", "OpenAI", "Oracle", "雲端", "半導體", "資安", "企業軟體"],
+    "exclude_keywords": ["職場", "生活"]
   },
   {
     "kol_id": "managertoday",
@@ -141,6 +149,8 @@
     "color": "#22c55e",
     "rss_url": "https://www.managertoday.com.tw/rss",
     "source_type": "article",
-    "max_episodes_per_run": 1
+    "max_episodes_per_run": 1,
+    "include_keywords": ["AI", "企業", "財報", "營收", "IPO", "併購", "雲端", "半導體", "資本市場", "商業模式"],
+    "exclude_keywords": ["MBTI", "職場", "履歷", "面試", "加薪", "升官", "主管", "心理測驗"]
   }
 ]

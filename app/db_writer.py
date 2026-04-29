@@ -474,6 +474,12 @@ _STOCK_NAMES: dict[str, tuple[str, str]] = {
     "2881": ("富邦金", "TW"),  "2882": ("國泰金", "TW"),
 }
 
+_INVALID_SIGNAL_TICKERS = {
+    "GEO", "CNC", "RFID", "HID", "ASSA", "ABLOY", "NFC",
+    "MBTI", "AI", "IT", "CEO", "CFO", "IPO", "ETF",
+}
+
+
 def _stock_info(ticker: str) -> tuple[str, str]:
     """回傳 (name, market)，未知 ticker 依開頭數字判斷市場。"""
     if ticker in _STOCK_NAMES:
@@ -637,6 +643,8 @@ def compute_and_write_consensus(analysis_date: Optional[date] = None) -> bool:
         stock_summaries: dict[str, list[str]] = defaultdict(list)
         for r in rows:
             for ticker in (r["stocks_mentioned"] or []):
+                if ticker in _INVALID_SIGNAL_TICKERS:
+                    continue
                 stock_kols[ticker].append(r["kol_name"])
                 stock_sent[ticker].append(r["sentiment"])
                 if r.get("summary"):
