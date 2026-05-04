@@ -24,33 +24,31 @@ class TelegramClient:
             return False
 
     def send_document(self, chat_id: str, file_path: str, *, caption: str | None = None) -> bool:
-        data = {"chat_id": chat_id}
-        if caption:
-            data["caption"] = caption
-        try:
-            with open(file_path, "rb") as file_handle:
-                import requests
-                response = requests.post(
-                    self._bot_url("sendDocument"),
-                    data=data,
-                    files={"document": (os.path.basename(file_path), file_handle)},
-                    timeout=60,
-                )
-            return response.status_code == 200
-        except Exception:
-            return False
+        return self._send_file("sendDocument", "document", chat_id, file_path, caption=caption)
 
     def send_photo(self, chat_id: str, file_path: str, *, caption: str | None = None) -> bool:
+        return self._send_file("sendPhoto", "photo", chat_id, file_path, caption=caption)
+
+    def _send_file(
+        self,
+        method: str,
+        field_name: str,
+        chat_id: str,
+        file_path: str,
+        *,
+        caption: str | None = None,
+    ) -> bool:
         data = {"chat_id": chat_id}
         if caption:
             data["caption"] = caption
         try:
             with open(file_path, "rb") as file_handle:
                 import requests
+
                 response = requests.post(
-                    self._bot_url("sendPhoto"),
+                    self._bot_url(method),
                     data=data,
-                    files={"photo": (os.path.basename(file_path), file_handle)},
+                    files={field_name: (os.path.basename(file_path), file_handle)},
                     timeout=60,
                 )
             return response.status_code == 200
