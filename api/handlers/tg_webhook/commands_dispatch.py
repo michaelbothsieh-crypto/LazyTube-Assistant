@@ -126,7 +126,9 @@ async def handle_threads(chat_id: str, text: str) -> None:
         message = analysis.format()
         if not analysis.post_lines:
             message = "無法解析 Threads 內容，可能是私密貼文、需要登入，或頁面暫時擋爬。"
-        if analysis.image_url:
+        if analysis.video_url:
+            await asyncio.to_thread(Notifier.send_video_url, chat_id, analysis.video_url)
+        elif analysis.image_url:
             await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
         await send_telegram_message(chat_id, message)
     finally:

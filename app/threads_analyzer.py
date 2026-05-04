@@ -22,6 +22,15 @@ METRIC_RE = re.compile(
     re.IGNORECASE,
 )
 TIME_RE = re.compile(r"^\d+\s*(?:s|m|h|d|w|秒|分鐘|小時|天|週|周)$", re.IGNORECASE)
+EMOJI_RE = re.compile(
+    "["
+    "\U0001F1E6-\U0001F1FF"
+    "\U0001F300-\U0001FAFF"
+    "\U00002700-\U000027BF"
+    "\U00002600-\U000026FF"
+    "]+",
+    re.UNICODE,
+)
 
 
 @dataclass(slots=True)
@@ -31,6 +40,7 @@ class ThreadsAnalysis:
     reply_lines: list[str]
     source: str
     image_url: str = ""
+    video_url: str = ""
 
     def format(self) -> str:
         post_text = "\n".join(self.post_lines).strip()
@@ -56,7 +66,7 @@ def is_threads_url(url: str) -> bool:
 
 def analyze_threads_url(url: str) -> ThreadsAnalysis:
     normalized_url = _normalize_threads_url(url)
-    image_url = _fetch_first_image_url(normalized_url)
+    media = _fetch_first_media(normalized_url)
     raw_text, source = _fetch_threads_text(normalized_url)
     lines = _content_lines(raw_text)
     post_lines, reply_lines = _split_post_and_replies(lines)
@@ -65,7 +75,8 @@ def analyze_threads_url(url: str) -> ThreadsAnalysis:
         post_lines=post_lines,
         reply_lines=reply_lines,
         source=source,
-        image_url=image_url,
+        image_url=media.image_url,
+        video_url=media.video_url,
     )
 
 
@@ -115,7 +126,13 @@ def _fetch_jina_text(encoded_url: str) -> str:
         return ""
 
 
-def _fetch_first_image_url(url: str) -> str:
+@dataclass(slots=True)
+class _ThreadsMedia:
+    image_url: str = ""
+    video_url: str = ""
+
+
+def _fetch_first_media(url: str) -> _ThreadsMedia:
     try:
         response = requests.get(
             url,
@@ -129,16 +146,24 @@ def _fetch_first_image_url(url: str) -> str:
             timeout=10,
         )
         if response.status_code != 200:
-            return ""
-        return _extract_first_image_url(response.text)
+            return _ThreadsMedia()
+        return _extract_first_media(response.text)
     except Exception:
-        return ""
+        return _ThreadsMedia()
+
+
+def _fetch_first_image_url(url: str) -> str:
+    return _fetch_first_media(url).image_url
 
 
 def _extract_first_image_url(html: str) -> str:
+    return _extract_first_media(html).image_url
+
+
+def _extract_first_media(html: str) -> _ThreadsMedia:
     parser = _ThreadsImageMetaParser()
     parser.feed(html or "")
-    return parser.image_url
+    return _ThreadsMedia(image_url=parser.image_url, video_url=parser.video_url)
 
 
 class _ThreadsImageMetaParser(HTMLParser):
@@ -148,19 +173,31 @@ class _ThreadsImageMetaParser(HTMLParser):
         "twitter:image",
         "twitter:image:src",
     }
+    VIDEO_META_KEYS = {
+        "og:video",
+        "og:video:url",
+        "og:video:secure_url",
+        "twitter:player:stream",
+    }
 
     def __init__(self) -> None:
         super().__init__()
         self.image_url = ""
+        self.video_url = ""
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self.image_url or tag.lower() != "meta":
+        if (self.image_url and self.video_url) or tag.lower() != "meta":
             return
         attr_map = {key.lower(): value or "" for key, value in attrs}
         meta_key = attr_map.get("property") or attr_map.get("name") or ""
         content = attr_map.get("content", "").strip()
-        if meta_key.lower() in self.IMAGE_META_KEYS and content.startswith("http"):
+        normalized_key = meta_key.lower()
+        if not content.startswith("http"):
+            return
+        if not self.image_url and normalized_key in self.IMAGE_META_KEYS:
             self.image_url = content
+        elif not self.video_url and normalized_key in self.VIDEO_META_KEYS:
+            self.video_url = content
 
 
 def _content_lines(text: str) -> list[str]:
@@ -180,6 +217,7 @@ def _content_lines(text: str) -> list[str]:
 def _clean_line(line: str) -> str:
     line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
     line = re.sub(r"https?://\S+", "", line)
+    line = EMOJI_RE.sub("", line)
     line = re.sub(r"\s+", " ", line)
     return line.strip(" -*•\t")
 

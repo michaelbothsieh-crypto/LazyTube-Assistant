@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from app.notifier import Notifier
+from app.notifier.line_client import LINE_PUSH_URL, LineClient
 from app.notifier.reporting import generate_html_report
 from app.notifier.telegram_client import TelegramClient
 
@@ -41,14 +42,33 @@ def test_send_photo_url_calls_telegram_url_upload():
 
 def test_send_photo_url_pushes_line_image_message():
     mock_line = MagicMock()
-    mock_line.push_messages.return_value = True
+    mock_line.send_image_url.return_value = True
     with patch.object(Notifier, "_line", mock_line), \
          patch("app.notifier.service.is_line_chat", return_value=True):
         assert Notifier.send_photo_url("U123", "https://example.com/first.jpg")
-        mock_line.push_messages.assert_called_once()
-        message = mock_line.push_messages.call_args.args[1][0]
-        assert message["type"] == "image"
-        assert message["originalContentUrl"] == "https://example.com/first.jpg"
+        mock_line.send_image_url.assert_called_once_with("U123", "https://example.com/first.jpg", caption=None)
+
+
+def test_send_video_url_calls_telegram_url_upload():
+    mock_tg = _mock_tg()
+    mock_tg.send_video_url.return_value = True
+    with patch.object(Notifier, "_tg", mock_tg), \
+         patch("app.notifier.service.is_line_chat", return_value=False):
+        assert Notifier.send_video_url("123", "https://example.com/first.mp4")
+        mock_tg.send_video_url.assert_called_once_with("123", "https://example.com/first.mp4", caption=None)
+
+
+def test_line_client_send_image_url_owns_line_payload():
+    response = MagicMock()
+    response.status_code = 200
+    with patch("app.notifier.line_client.post_json", return_value=response) as mocked_post:
+        assert LineClient("token").send_image_url("U123", "https://example.com/first.jpg", caption="preview")
+
+    payload = mocked_post.call_args.kwargs["payload"]
+    assert mocked_post.call_args.args[0] == LINE_PUSH_URL
+    assert payload["messages"][0]["type"] == "image"
+    assert payload["messages"][0]["originalContentUrl"] == "https://example.com/first.jpg"
+    assert payload["messages"][1] == {"type": "text", "text": "preview"}
 
 
 # --- delete_pending_message tests ---

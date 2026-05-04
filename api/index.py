@@ -159,7 +159,9 @@ async def external_dispatch(
             from app.threads_analyzer import analyze_threads_url
 
             analysis = await asyncio.to_thread(analyze_threads_url, url)
-            if analysis.image_url:
+            if analysis.video_url:
+                await asyncio.to_thread(Notifier.send_video_url, chat_id, analysis.video_url)
+            elif analysis.image_url:
                 await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
             Notifier.send_text(chat_id, analysis.format())
             return JSONResponse(content={"ok": True})

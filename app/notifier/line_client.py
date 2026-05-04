@@ -12,6 +12,18 @@ class LineClient:
     def send_text(self, chat_id: str, text: str) -> bool:
         return self.push_messages(chat_id, [{"type": "text", "text": text}])
 
+    def send_image_url(self, chat_id: str, image_url: str, *, caption: str | None = None) -> bool:
+        messages = [
+            {
+                "type": "image",
+                "originalContentUrl": image_url,
+                "previewImageUrl": image_url,
+            }
+        ]
+        if caption:
+            messages.append({"type": "text", "text": caption[:5000]})
+        return self.push_messages(chat_id, messages)
+
     def push_messages(self, chat_id: str, messages: list[dict]) -> bool:
         headers = {
             "Content-Type": "application/json",

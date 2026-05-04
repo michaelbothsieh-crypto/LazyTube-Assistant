@@ -102,19 +102,17 @@ class Notifier:
         if not chat_id or not image_url:
             return False
         if is_line_chat(chat_id):
-            if not cls._line:
-                return False
-            messages = [
-                {
-                    "type": "image",
-                    "originalContentUrl": image_url,
-                    "previewImageUrl": image_url,
-                }
-            ]
-            if caption:
-                messages.append({"type": "text", "text": caption[:5000]})
-            return cls._line.push_messages(chat_id, messages)
+            return cls._line.send_image_url(chat_id, image_url, caption=caption) if cls._line else False
         return cls._tg.send_photo_url(chat_id, image_url, caption=caption) if cls._tg else False
+
+    @classmethod
+    def send_video_url(cls, target_chat_id: str, video_url: str, caption: str | None = None) -> bool:
+        chat_id = target_chat_id or Config.TG_CHAT_ID
+        if not chat_id or not video_url:
+            return False
+        if is_line_chat(chat_id):
+            return cls.send_text(chat_id, caption or "Threads 影片：公開頁面提供影片，但 LINE 需要可公開預覽圖才能直接推送影片。")
+        return cls._tg.send_video_url(chat_id, video_url, caption=caption) if cls._tg else False
 
     @classmethod
     def delete_pending_message(cls, chat_id: str, message_id: str | None) -> None:

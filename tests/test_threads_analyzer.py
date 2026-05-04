@@ -2,6 +2,7 @@ from app.threads_analyzer import (
     ThreadsAnalysis,
     _content_lines,
     _extract_first_image_url,
+    _extract_first_media,
     _split_post_and_replies,
     _summarize_replies,
     is_threads_url,
@@ -42,6 +43,12 @@ def test_content_lines_removes_threads_metadata():
     assert lines == ["你各位猜猜這些鄉親在幹嘛？"]
 
 
+def test_content_lines_removes_emoji_from_content():
+    lines = _content_lines("這些都是有錢有閒的人，不需要各位操心😂")
+
+    assert lines == ["這些都是有錢有閒的人，不需要各位操心"]
+
+
 def test_split_post_and_replies_uses_reply_marker():
     post, replies = _split_post_and_replies(
         [
@@ -69,7 +76,7 @@ def test_format_omits_emoji_and_original_url():
     message = ThreadsAnalysis(
         url="https://www.threads.net/@demo/post/abc",
         post_lines=["你各位猜猜這些鄉親在幹嘛？"],
-        reply_lines=["在排隊等活動吧"],
+        reply_lines=_content_lines("在排隊等活動吧😂"),
         source="worker",
         image_url="https://example.com/image.jpg",
     ).format()
@@ -79,6 +86,7 @@ def test_format_omits_emoji_and_original_url():
     assert "🔗" not in message
     assert "🧵" not in message
     assert "💬" not in message
+    assert "😂" not in message
     assert "貼文主旨" in message
     assert "回覆風向" in message
 
@@ -87,3 +95,15 @@ def test_extract_first_image_url_from_meta_tags():
     html = '<meta property="og:image" content="https://cdn.example.com/first.jpg">'
 
     assert _extract_first_image_url(html) == "https://cdn.example.com/first.jpg"
+
+
+def test_extract_first_media_supports_video_meta_tags():
+    html = """
+    <meta property="og:image" content="https://cdn.example.com/first.jpg">
+    <meta property="og:video" content="https://cdn.example.com/first.mp4">
+    """
+
+    media = _extract_first_media(html)
+
+    assert media.image_url == "https://cdn.example.com/first.jpg"
+    assert media.video_url == "https://cdn.example.com/first.mp4"

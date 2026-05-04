@@ -39,6 +39,16 @@ class TelegramClient:
         except Exception:
             return False
 
+    def send_video_url(self, chat_id: str, video_url: str, *, caption: str | None = None) -> bool:
+        payload = {"chat_id": chat_id, "video": video_url}
+        if caption:
+            payload["caption"] = caption
+        try:
+            response = post_json(self._bot_url("sendVideo"), payload=payload, timeout=30)
+            return response.status_code == 200
+        except Exception:
+            return False
+
     def _send_file(
         self,
         method: str,
