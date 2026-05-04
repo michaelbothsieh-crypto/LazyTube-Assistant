@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from api.utils.github_dispatch import (
@@ -9,6 +10,7 @@ from api.utils.github_dispatch import (
     dispatch_research_workflow,
 )
 from api.utils.telegram import send_telegram_message
+from app.threads_analyzer import analyze_threads_url
 
 from .parsing import extract_url_and_prompt, parse_batch_request, parse_research_request, parse_slide_request
 from .utils import extract_message_id
@@ -101,6 +103,35 @@ async def handle_research(chat_id: str, text: str) -> None:
         await send_telegram_message(chat_id, "研究任務派送狀態暫時無法確認；若幾分鐘內沒有收到結果，請稍後再試。")
 
 
+async def handle_threads(chat_id: str, text: str) -> None:
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        await send_telegram_message(chat_id, "用法：<code>/threads &lt;Threads貼文URL&gt;</code>")
+        return
+
+    url = parts[1].strip()
+    error = validate_url(url)
+    if error:
+        await send_telegram_message(chat_id, error)
+        return
+    if "threads.net/" not in url and "threads.com/" not in url:
+        await send_telegram_message(chat_id, "請提供 Threads 貼文 URL。")
+        return
+
+    pending = await send_telegram_message(chat_id, f"<b>Threads 極速解析中</b>\n\nURL：<code>{url[:100]}</code>")
+    message_id = extract_message_id(pending)
+    try:
+        analysis = await asyncio.to_thread(analyze_threads_url, url)
+        message = analysis.format()
+        if not analysis.post_lines:
+            message = f"❌ 無法解析 Threads 內容，可能是私密貼文、需要登入，或頁面暫時擋爬。\n🔗 {url}"
+        await send_telegram_message(chat_id, message)
+    finally:
+        from app.notifier import Notifier
+
+        Notifier.delete_pending_message(chat_id, message_id)
+
+
 async def _handle_artifact(chat_id: str, text: str, command_name: str, artifact_type: str) -> None:
     url, prompt = extract_url_and_prompt(text)
     if not url:
@@ -121,4 +152,3 @@ async def _handle_artifact(chat_id: str, text: str, command_name: str, artifact_
         artifact_type=artifact_type,
     ):
         await send_telegram_message(chat_id, "任務派送失敗，請稍後再試。")
-

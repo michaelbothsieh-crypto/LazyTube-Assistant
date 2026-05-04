@@ -5,11 +5,16 @@ from api.handlers.tg_webhook.parsing import (
     parse_subscription_request,
 )
 from api.handlers.tg_webhook.validation import normalize_command_text, validate_url
+from api.handlers.tg_webhook.router import COMMAND_HANDLERS
 from app.notebook.parsing import parse_query_output
 
 
 def test_normalize_command_text_removes_bot_suffix():
     assert normalize_command_text("/nlm@LazyTubeBot https://example.com") == "/nlm https://example.com"
+
+
+def test_threads_command_is_registered():
+    assert "/threads" in COMMAND_HANDLERS
 
 
 def test_validate_url_rejects_non_http():

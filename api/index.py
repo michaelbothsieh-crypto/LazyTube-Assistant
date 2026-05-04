@@ -148,6 +148,20 @@ async def external_dispatch(
             )
             return JSONResponse(content={"ok": True})
 
+        if command in ["threads", "/threads"]:
+            if not url:
+                return JSONResponse(
+                    content={"ok": False, "error": "Missing Threads URL"},
+                    status_code=400,
+                )
+            import asyncio
+
+            from app.threads_analyzer import analyze_threads_url
+
+            analysis = await asyncio.to_thread(analyze_threads_url, url)
+            Notifier.send_text(chat_id, analysis.format())
+            return JSONResponse(content={"ok": True})
+
         # ── Podcast 指令（TG / LINE 通用）──────────────────────────────────
         if command in ["podcast", "/podcast"]:
             rss_url = url or ""
@@ -246,4 +260,3 @@ async def external_dispatch(
             content={"ok": False, "error": str(exc)},
             status_code=500,
         )
-

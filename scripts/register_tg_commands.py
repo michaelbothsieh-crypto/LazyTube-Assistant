@@ -30,6 +30,7 @@ COMMANDS = [
     {"command": "batch",        "description": "📦 批次匯入多網址整合摘要 (3-8分)"},
     {"command": "slide",        "description": "📊 產生 PDF/PPTX 簡報 (5-10分)"},
     {"command": "research",     "description": "🔎 深度研究主題並產出網頁報告 (3-10分)"},
+    {"command": "threads",      "description": "⚡ 極速解析 Threads 貼文與回覆風向"},
     # YouTube 訂閱
     {"command": "sub",          "description": "➕ 訂閱 YouTube 頻道（自動摘要）"},
     {"command": "list",         "description": "📋 查看 YouTube 訂閱清單"},
