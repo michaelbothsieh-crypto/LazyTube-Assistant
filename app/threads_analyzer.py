@@ -13,7 +13,7 @@ from app.notebook.parsing import clean_content
 THREADS_HOST_RE = re.compile(r"^https?://(?:www\.)?threads\.(?:net|com)/", re.IGNORECASE)
 BOILERPLATE_RE = re.compile(
     r"^(thread|threads|instagram|meta|log in|sign up|continue with|cookie|privacy|terms|help|"
-    r"open app|download app|use app|likes?|reposts?|shares?|views?|followers?|following)$",
+    r"open app|download app|use app|translate|likes?|reposts?|shares?|views?|followers?|following)$",
     re.IGNORECASE,
 )
 METRIC_RE = re.compile(
@@ -22,6 +22,7 @@ METRIC_RE = re.compile(
     re.IGNORECASE,
 )
 TIME_RE = re.compile(r"^\d+\s*(?:s|m|h|d|w|秒|分鐘|小時|天|週|周)$", re.IGNORECASE)
+COUNT_TOKEN_RE = re.compile(r"^\d+(?:[,.]\d+)?\s*[kmb萬億]?$", re.IGNORECASE)
 EMOJI_RE = re.compile(
     "["
     "\U0001F1E6-\U0001F1FF"
@@ -39,6 +40,8 @@ class ThreadsAnalysis:
     post_lines: list[str]
     reply_lines: list[str]
     source: str
+    author: str = ""
+    like_count: str = ""
     image_url: str = ""
     video_url: str = ""
 
@@ -47,7 +50,8 @@ class ThreadsAnalysis:
         reply_text = _summarize_replies(self.reply_lines)
 
         parts = [
-            "Threads 快速解析",
+            f"發文者：{self.author or '抓不到'}",
+            f"按讚數：{self.like_count or '抓不到'}",
             "",
             "貼文主旨",
             post_text or "抓不到足夠的公開貼文文字。",
@@ -55,8 +59,6 @@ class ThreadsAnalysis:
             "回覆風向",
             reply_text,
         ]
-        if self.source:
-            parts.extend(["", f"來源：{self.source}"])
         return "\n".join(parts).strip()
 
 
@@ -68,6 +70,7 @@ def analyze_threads_url(url: str) -> ThreadsAnalysis:
     normalized_url = _normalize_threads_url(url)
     media = _fetch_first_media(normalized_url)
     raw_text, source = _fetch_threads_text(normalized_url)
+    metadata = _extract_metadata(raw_text)
     lines = _content_lines(raw_text)
     post_lines, reply_lines = _split_post_and_replies(lines)
     return ThreadsAnalysis(
@@ -75,6 +78,8 @@ def analyze_threads_url(url: str) -> ThreadsAnalysis:
         post_lines=post_lines,
         reply_lines=reply_lines,
         source=source,
+        author=metadata.author,
+        like_count=metadata.like_count,
         image_url=media.image_url,
         video_url=media.video_url,
     )
@@ -124,6 +129,48 @@ def _fetch_jina_text(encoded_url: str) -> str:
         return clean_content(response.text)
     except Exception:
         return ""
+
+
+@dataclass(slots=True)
+class _ThreadsMetadata:
+    author: str = ""
+    like_count: str = ""
+
+
+def _extract_metadata(text: str) -> _ThreadsMetadata:
+    lines = [_clean_line(raw_line) for raw_line in (text or "").splitlines()]
+    lines = [line for line in lines if line]
+    author, author_index = _extract_author(lines)
+    like_count = _extract_like_count(lines, start_index=author_index + 1 if author_index >= 0 else 0)
+    return _ThreadsMetadata(author=author, like_count=like_count)
+
+
+def _extract_author(lines: list[str]) -> tuple[str, int]:
+    thread_index = next((index for index, line in enumerate(lines) if line.lower() in {"thread", "threads"}), -1)
+    search_start = thread_index + 1 if thread_index >= 0 else 0
+    for index, line in enumerate(lines[search_start : search_start + 8], start=search_start):
+        if METRIC_RE.fullmatch(line) or TIME_RE.fullmatch(line) or BOILERPLATE_RE.match(line):
+            continue
+        if _looks_like_handle(line):
+            return line.lstrip("@"), index
+    return "", -1
+
+
+def _extract_like_count(lines: list[str], *, start_index: int) -> str:
+    saw_post_text = False
+    for line in lines[start_index:]:
+        if TIME_RE.fullmatch(line) or BOILERPLATE_RE.match(line) or METRIC_RE.fullmatch(line):
+            continue
+        if _is_count_token(line):
+            if saw_post_text:
+                return line
+            continue
+        if _looks_like_handle(line):
+            if saw_post_text:
+                break
+            continue
+        saw_post_text = True
+    return ""
 
 
 @dataclass(slots=True)
@@ -236,6 +283,10 @@ def _is_noise(line: str) -> bool:
     if _looks_like_handle(line):
         return True
     return False
+
+
+def _is_count_token(line: str) -> bool:
+    return bool(COUNT_TOKEN_RE.fullmatch(line))
 
 
 def _looks_like_handle(line: str) -> bool:

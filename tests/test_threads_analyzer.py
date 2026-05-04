@@ -1,6 +1,7 @@
 from app.threads_analyzer import (
     ThreadsAnalysis,
     _content_lines,
+    _extract_metadata,
     _extract_first_image_url,
     _extract_first_media,
     _split_post_and_replies,
@@ -49,6 +50,30 @@ def test_content_lines_removes_emoji_from_content():
     assert lines == ["這些都是有錢有閒的人，不需要各位操心"]
 
 
+def test_extract_metadata_finds_author_and_like_count():
+    metadata = _extract_metadata(
+        """
+        Log in
+        Thread
+        247K views
+        amarillo_rio
+        3h
+        你各位猜猜這些鄉親在幹嘛？
+        台股再漲半個月就上五萬點了，
+        Translate
+        3.2K
+        268
+        51
+        ttaat9087
+        2h
+        回覆內容
+        """
+    )
+
+    assert metadata.author == "amarillo_rio"
+    assert metadata.like_count == "3.2K"
+
+
 def test_split_post_and_replies_uses_reply_marker():
     post, replies = _split_post_and_replies(
         [
@@ -78,15 +103,21 @@ def test_format_omits_emoji_and_original_url():
         post_lines=["你各位猜猜這些鄉親在幹嘛？"],
         reply_lines=_content_lines("在排隊等活動吧😂"),
         source="worker",
+        author="demo",
+        like_count="123",
         image_url="https://example.com/image.jpg",
     ).format()
 
+    assert "Threads 快速解析" not in message
+    assert "來源：worker" not in message
     assert "https://www.threads.net" not in message
     assert "⚡" not in message
     assert "🔗" not in message
     assert "🧵" not in message
     assert "💬" not in message
     assert "😂" not in message
+    assert "發文者：demo" in message
+    assert "按讚數：123" in message
     assert "貼文主旨" in message
     assert "回覆風向" in message
 
