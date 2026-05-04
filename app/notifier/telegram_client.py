@@ -29,6 +29,16 @@ class TelegramClient:
     def send_photo(self, chat_id: str, file_path: str, *, caption: str | None = None) -> bool:
         return self._send_file("sendPhoto", "photo", chat_id, file_path, caption=caption)
 
+    def send_photo_url(self, chat_id: str, image_url: str, *, caption: str | None = None) -> bool:
+        payload = {"chat_id": chat_id, "photo": image_url}
+        if caption:
+            payload["caption"] = caption
+        try:
+            response = post_json(self._bot_url("sendPhoto"), payload=payload, timeout=30)
+            return response.status_code == 200
+        except Exception:
+            return False
+
     def _send_file(
         self,
         method: str,

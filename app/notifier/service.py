@@ -97,6 +97,26 @@ class Notifier:
         return cls._tg.send_photo(chat_id, file_path, caption=caption) if cls._tg else False
 
     @classmethod
+    def send_photo_url(cls, target_chat_id: str, image_url: str, caption: str | None = None) -> bool:
+        chat_id = target_chat_id or Config.TG_CHAT_ID
+        if not chat_id or not image_url:
+            return False
+        if is_line_chat(chat_id):
+            if not cls._line:
+                return False
+            messages = [
+                {
+                    "type": "image",
+                    "originalContentUrl": image_url,
+                    "previewImageUrl": image_url,
+                }
+            ]
+            if caption:
+                messages.append({"type": "text", "text": caption[:5000]})
+            return cls._line.push_messages(chat_id, messages)
+        return cls._tg.send_photo_url(chat_id, image_url, caption=caption) if cls._tg else False
+
+    @classmethod
     def delete_pending_message(cls, chat_id: str, message_id: str | None) -> None:
         if not message_id or is_line_chat(chat_id) or not cls._tg:
             return

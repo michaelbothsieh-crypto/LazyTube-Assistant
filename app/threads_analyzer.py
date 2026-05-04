@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 from dataclasses import dataclass
+from html.parser import HTMLParser
 
 import requests
 
@@ -11,10 +12,16 @@ from app.notebook.parsing import clean_content
 
 THREADS_HOST_RE = re.compile(r"^https?://(?:www\.)?threads\.(?:net|com)/", re.IGNORECASE)
 BOILERPLATE_RE = re.compile(
-    r"^(threads|instagram|meta|log in|sign up|continue with|cookie|privacy|terms|help|"
+    r"^(thread|threads|instagram|meta|log in|sign up|continue with|cookie|privacy|terms|help|"
     r"open app|download app|use app|likes?|reposts?|shares?|views?|followers?|following)$",
     re.IGNORECASE,
 )
+METRIC_RE = re.compile(
+    r"^\d+(?:[,.]\d+)?\s*[kmb萬億]?\s*(likes?|replies|reposts?|shares?|views?|"
+    r"則讚|則回覆|則留言|次觀看|觀看)$",
+    re.IGNORECASE,
+)
+TIME_RE = re.compile(r"^\d+\s*(?:s|m|h|d|w|秒|分鐘|小時|天|週|周)$", re.IGNORECASE)
 
 
 @dataclass(slots=True)
@@ -23,19 +30,19 @@ class ThreadsAnalysis:
     post_lines: list[str]
     reply_lines: list[str]
     source: str
+    image_url: str = ""
 
     def format(self) -> str:
         post_text = "\n".join(self.post_lines).strip()
         reply_text = _summarize_replies(self.reply_lines)
 
         parts = [
-            "⚡ Threads 極速解析",
-            f"🔗 {self.url}",
+            "Threads 快速解析",
             "",
-            "🧵 貼文主旨",
+            "貼文主旨",
             post_text or "抓不到足夠的公開貼文文字。",
             "",
-            "💬 回覆/留言風向",
+            "回覆風向",
             reply_text,
         ]
         if self.source:
@@ -49,6 +56,7 @@ def is_threads_url(url: str) -> bool:
 
 def analyze_threads_url(url: str) -> ThreadsAnalysis:
     normalized_url = _normalize_threads_url(url)
+    image_url = _fetch_first_image_url(normalized_url)
     raw_text, source = _fetch_threads_text(normalized_url)
     lines = _content_lines(raw_text)
     post_lines, reply_lines = _split_post_and_replies(lines)
@@ -57,6 +65,7 @@ def analyze_threads_url(url: str) -> ThreadsAnalysis:
         post_lines=post_lines,
         reply_lines=reply_lines,
         source=source,
+        image_url=image_url,
     )
 
 
@@ -106,6 +115,54 @@ def _fetch_jina_text(encoded_url: str) -> str:
         return ""
 
 
+def _fetch_first_image_url(url: str) -> str:
+    try:
+        response = requests.get(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0 Safari/537.36"
+                )
+            },
+            timeout=10,
+        )
+        if response.status_code != 200:
+            return ""
+        return _extract_first_image_url(response.text)
+    except Exception:
+        return ""
+
+
+def _extract_first_image_url(html: str) -> str:
+    parser = _ThreadsImageMetaParser()
+    parser.feed(html or "")
+    return parser.image_url
+
+
+class _ThreadsImageMetaParser(HTMLParser):
+    IMAGE_META_KEYS = {
+        "og:image",
+        "og:image:url",
+        "twitter:image",
+        "twitter:image:src",
+    }
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.image_url = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self.image_url or tag.lower() != "meta":
+            return
+        attr_map = {key.lower(): value or "" for key, value in attrs}
+        meta_key = attr_map.get("property") or attr_map.get("name") or ""
+        content = attr_map.get("content", "").strip()
+        if meta_key.lower() in self.IMAGE_META_KEYS and content.startswith("http"):
+            self.image_url = content
+
+
 def _content_lines(text: str) -> list[str]:
     lines: list[str] = []
     seen: set[str] = set()
@@ -134,9 +191,19 @@ def _is_noise(line: str) -> bool:
         return True
     if line.startswith(("Image", "Video", "Avatar", "Profile picture")):
         return True
-    if re.fullmatch(r"[\d,]+\s*(likes?|replies|reposts?|views?)", line, re.IGNORECASE):
+    if METRIC_RE.fullmatch(line):
+        return True
+    if TIME_RE.fullmatch(line):
+        return True
+    if _looks_like_handle(line):
         return True
     return False
+
+
+def _looks_like_handle(line: str) -> bool:
+    if re.search(r"[\u4e00-\u9fff\s]", line):
+        return False
+    return bool(re.fullmatch(r"@?[A-Za-z0-9_.]{2,30}", line))
 
 
 def _split_post_and_replies(lines: list[str]) -> tuple[list[str], list[str]]:
@@ -193,5 +260,5 @@ def _summarize_replies(reply_lines: list[str]) -> str:
     elif question_count:
         tone = "偏提問"
 
-    samples = "\n".join(f"・{line}" for line in reply_lines[:4])
+    samples = "\n".join(f"- {line}" for line in reply_lines[:4])
     return f"整體風向：{tone}\n代表回覆：\n{samples}"

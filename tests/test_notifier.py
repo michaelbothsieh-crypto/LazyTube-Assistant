@@ -30,6 +30,27 @@ def test_send_photo_for_line_falls_back_to_document():
         mocked_send_document.assert_called_once()
 
 
+def test_send_photo_url_calls_telegram_url_upload():
+    mock_tg = _mock_tg()
+    mock_tg.send_photo_url.return_value = True
+    with patch.object(Notifier, "_tg", mock_tg), \
+         patch("app.notifier.service.is_line_chat", return_value=False):
+        assert Notifier.send_photo_url("123", "https://example.com/first.jpg")
+        mock_tg.send_photo_url.assert_called_once_with("123", "https://example.com/first.jpg", caption=None)
+
+
+def test_send_photo_url_pushes_line_image_message():
+    mock_line = MagicMock()
+    mock_line.push_messages.return_value = True
+    with patch.object(Notifier, "_line", mock_line), \
+         patch("app.notifier.service.is_line_chat", return_value=True):
+        assert Notifier.send_photo_url("U123", "https://example.com/first.jpg")
+        mock_line.push_messages.assert_called_once()
+        message = mock_line.push_messages.call_args.args[1][0]
+        assert message["type"] == "image"
+        assert message["originalContentUrl"] == "https://example.com/first.jpg"
+
+
 # --- delete_pending_message tests ---
 
 def test_delete_pending_message_calls_delete_on_telegram():

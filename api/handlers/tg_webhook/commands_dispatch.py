@@ -10,6 +10,7 @@ from api.utils.github_dispatch import (
     dispatch_research_workflow,
 )
 from api.utils.telegram import send_telegram_message
+from app.notifier import Notifier
 from app.threads_analyzer import analyze_threads_url
 
 from .parsing import extract_url_and_prompt, parse_batch_request, parse_research_request, parse_slide_request
@@ -118,17 +119,17 @@ async def handle_threads(chat_id: str, text: str) -> None:
         await send_telegram_message(chat_id, "請提供 Threads 貼文 URL。")
         return
 
-    pending = await send_telegram_message(chat_id, f"<b>Threads 極速解析中</b>\n\nURL：<code>{url[:100]}</code>")
+    pending = await send_telegram_message(chat_id, "<b>Threads 解析中</b>")
     message_id = extract_message_id(pending)
     try:
         analysis = await asyncio.to_thread(analyze_threads_url, url)
         message = analysis.format()
         if not analysis.post_lines:
-            message = f"❌ 無法解析 Threads 內容，可能是私密貼文、需要登入，或頁面暫時擋爬。\n🔗 {url}"
+            message = "無法解析 Threads 內容，可能是私密貼文、需要登入，或頁面暫時擋爬。"
+        if analysis.image_url:
+            await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
         await send_telegram_message(chat_id, message)
     finally:
-        from app.notifier import Notifier
-
         Notifier.delete_pending_message(chat_id, message_id)
 
 
