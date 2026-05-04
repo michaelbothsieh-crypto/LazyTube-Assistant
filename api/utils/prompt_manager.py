@@ -4,10 +4,14 @@ from pathlib import Path
 
 # data/prompts/ 目錄：優先從此載入，讓 git 自動追蹤 prompt 變更紀錄
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "prompts"
+_PROMPT_KEY_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
 
 
 def _load_prompt_file(key: str) -> str | None:
     """嘗試從 data/prompts/<key>.txt 載入，找不到回傳 None。"""
+    if not _PROMPT_KEY_RE.fullmatch(key):
+        return None
+
     path = _PROMPTS_DIR / f"{key}.txt"
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
