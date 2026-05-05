@@ -46,7 +46,7 @@ from app.notebook.notebook_session import NotebookSession
 from app.notebook.parsing import parse_query_output
 from app.notebook.runner import NotebookRunner
 from app.notebook.source_loader import SourceLoader
-from app.notifier.reporting import generate_podcast_html_report
+from app.notifier.reporting import generate_html_report, generate_podcast_html_report
 from app.notifier.service import Notifier
 from app.podcast_cache import get_cached_analysis, set_cached_analysis
 from app.podcast_state import get_subscriptions, init_empty, is_processed, mark_processed
@@ -93,6 +93,10 @@ def _should_send_podcast_report(mode: str, chat_id: str) -> bool:
 
 def _should_send_daily_digest(mode: str, chat_id: str) -> bool:
     return mode == "daily" and not chat_id and _env_flag("PODCAST_SEND_DAILY_DIGEST", True)
+
+
+def _should_use_nlm_daily_digest() -> bool:
+    return _env_flag("PODCAST_DIGEST_USE_NLM", True)
 
 
 def _looks_like_rss_url(url: str) -> bool:
@@ -298,6 +302,7 @@ def _build_daily_digest_candidate(kol_meta: dict, ep: dict, analysis: str) -> di
         "stocks": stocks,
         "sentiment": sentiment,
         "summary": _digest_item_summary(analysis),
+        "analysis_text": analysis,
     }
 
 
@@ -570,6 +575,83 @@ def generate_daily_investment_html_report(items: list[dict]) -> str:
   </main>
 </body>
 </html>"""
+
+
+def _daily_digest_nlm_prompt() -> str:
+    return (
+        "你是一位台灣市場投資研究總編輯。Notebook 中每個來源都是一集 Podcast 或一篇 RSS 文章"
+        "產出的高保真逐字稿與投資小結。請跨所有來源整理一份完整的每日投資研究報告，"
+        "全程使用台灣繁體中文，語氣像投研晨報，不要寫成逐字稿摘要。\n\n"
+        "請輸出 Markdown，嚴格包含以下段落：\n"
+        "# 每日 Podcast 投資統整\n"
+        "## 執行摘要：用 5-8 句話統整今天最重要的市場訊號。\n"
+        "## 市場主軸：整理 3-5 個跨來源共同主題，每個主題說明來源共識與分歧。\n"
+        "## 焦點標的：用表格列出台股/美股代號或公司名、方向、提及來源、講者觀點、風險。\n"
+        "## 操作觀察：整理可追蹤的價位、事件、財報、籌碼或總經指標。\n"
+        "## 風險清單：列出短線風險與需要驗證的假設。\n"
+        "## 來源摘要：逐一列出每個來源的一句話重點。\n\n"
+        "重要規範：只能根據來源內容，不要自行補行情或價格。避免過度推論。"
+        "嚴禁包含思考過程，嚴禁使用 Markdown 加粗（** 或 __）。"
+    )
+
+
+def _daily_digest_source_text(item: dict) -> str:
+    stocks = ", ".join(item.get("stocks", [])) or "無明確標的"
+    return (
+        f"來源：{item.get('label', 'Podcast')}\n"
+        f"標題：{item.get('title', '未命名集數')}\n"
+        f"日期：{item.get('published') or '未知'}\n"
+        f"情緒：{_sentiment_label(item.get('sentiment', 'neutral'))}\n"
+        f"抽取標的：{stocks}\n\n"
+        f"{item.get('analysis_text') or item.get('summary') or ''}"
+    )
+
+
+def synthesize_daily_digest_with_nlm(runner: NotebookRunner, items: list[dict]) -> str | None:
+    if not items:
+        return None
+
+    temp_paths: list[str] = []
+    with NotebookSession(runner, "DIGEST") as session:
+        if not session.ready():
+            print("  ⚠️  無法建立每日統整 NotebookLM notebook，改用本機統整")
+            return None
+
+        print(f"  📓 每日統整 Notebook：{session.notebook_id}")
+        added_sources = 0
+        for idx, item in enumerate(items, start=1):
+            safe_label = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_-]+", "_", item.get("label", "source"))[:28]
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                suffix=f"_{idx:02d}_{safe_label}.txt",
+                delete=False,
+            ) as temp_file:
+                temp_file.write(_daily_digest_source_text(item))
+                temp_paths.append(temp_file.name)
+
+            result = runner.run("source", "add", session.notebook_id, "--file", temp_paths[-1], "--wait")
+            if result.returncode != 0:
+                print(f"  ⚠️  每日統整來源加入失敗：{item.get('label', 'Podcast')}")
+            else:
+                added_sources += 1
+
+        try:
+            if added_sources == 0:
+                print("  ⚠️  每日統整沒有成功加入任何來源，改用本機統整")
+                return None
+            query = runner.run("query", "notebook", session.notebook_id, _daily_digest_nlm_prompt())
+            if query.returncode != 0:
+                print("  ⚠️  每日統整 NotebookLM query 失敗，改用本機統整")
+                return None
+            report = parse_query_output(query.stdout)
+            return report or None
+        finally:
+            for temp_path in temp_paths:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
 
 def _apple_episode_hint(url: str) -> dict:
@@ -1028,18 +1110,27 @@ def send_podcast_report(
     return Notifier.send_text(target_chat, header + body, html=False)
 
 
-def send_daily_investment_digest(items: list[dict]) -> bool:
+def send_daily_investment_digest(items: list[dict], runner: NotebookRunner | None = None) -> bool:
     target_chat = Config.TG_CHAT_ID
     if not target_chat:
         print("  ⚠️  未設定 TELEGRAM_CHAT_ID，跳過每日統整報告")
         return False
 
-    markdown_report = build_daily_investment_digest(items)
-    if not markdown_report:
+    fallback_report = build_daily_investment_digest(items)
+    if not fallback_report:
         print("  ℹ️  近一天沒有成功分析的 podcast 訊號，跳過每日統整報告")
         return False
 
-    html_content = generate_daily_investment_html_report(items)
+    nlm_report = None
+    if runner and _should_use_nlm_daily_digest():
+        print("  🧠 使用 NotebookLM 多來源統整每日投資報告...")
+        nlm_report = synthesize_daily_digest_with_nlm(runner, items)
+
+    html_content = (
+        generate_html_report("每日 Podcast 投資統整", nlm_report)
+        if nlm_report
+        else generate_daily_investment_html_report(items)
+    )
     caption = build_daily_investment_digest_caption(items)
     print("  📤 推送每日 Podcast 投資統整報告...")
     if Notifier.send_report_link(target_chat, html_content, caption):
@@ -1047,7 +1138,8 @@ def send_daily_investment_digest(items: list[dict]) -> bool:
         return True
 
     print("  ⚠️  HTML 報告連結不可用，改用純文字推送每日統整")
-    text = markdown_report if len(markdown_report) <= 4096 else markdown_report[:4093] + "..."
+    plain_report = nlm_report or fallback_report
+    text = plain_report if len(plain_report) <= 4096 else plain_report[:4093] + "..."
     return Notifier.send_text(target_chat, text, html=False)
 
 
@@ -1342,7 +1434,7 @@ def main() -> None:
         compute_and_write_consensus()
 
     if send_daily_digest:
-        send_daily_investment_digest(daily_digest_items)
+        send_daily_investment_digest(daily_digest_items, runner=runner)
 
     finish_job_run(run_id, error_message=run_error)
 

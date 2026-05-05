@@ -62,6 +62,7 @@ def test_daily_digest_candidate_uses_conclusion_and_strips_citations(monkeypatch
     assert "[1]" not in item["summary"]
     assert "[2, 3]" not in item["summary"]
     assert "AI 供應鏈偏多" in item["summary"]
+    assert "今天看好台積電與輝達" in item["analysis_text"]
 
 
 def test_send_daily_digest_uses_research_style_report_link(monkeypatch):
@@ -92,3 +93,36 @@ def test_send_daily_digest_uses_research_style_report_link(monkeypatch):
     assert "焦點標的排行" in sent["html_content"]
     assert sent["caption"].startswith("🔎 研究完成：每日 Podcast 投資統整")
     assert "完整統整請點開" not in sent["caption"]
+
+
+def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypatch):
+    sent = {}
+
+    def fake_send_report_link(chat_id, html_content, caption):
+        sent["html_content"] = html_content
+        sent["caption"] = caption
+        return True
+
+    monkeypatch.setattr(scanner.Config, "TG_CHAT_ID", "123")
+    monkeypatch.setattr(scanner.Notifier, "send_report_link", fake_send_report_link)
+    monkeypatch.setattr(scanner, "_should_use_nlm_daily_digest", lambda: True)
+    monkeypatch.setattr(
+        scanner,
+        "synthesize_daily_digest_with_nlm",
+        lambda runner, items: "# 每日 Podcast 投資統整\n\n## 執行摘要\nNotebookLM 跨來源統整。",
+    )
+
+    assert scanner.send_daily_investment_digest([
+        {
+            "label": "節目 A",
+            "title": "AI 伺服器需求",
+            "published": "2026-05-05",
+            "stocks": ["NVDA"],
+            "sentiment": "bullish",
+            "summary": "資料中心需求仍強。",
+            "analysis_text": "【文字紀錄】完整逐字稿",
+        }
+    ], runner=object())
+
+    assert "NotebookLM 跨來源統整" in sent["html_content"]
+    assert sent["caption"].startswith("🔎 研究完成：每日 Podcast 投資統整")
