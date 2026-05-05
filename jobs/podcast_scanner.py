@@ -47,7 +47,7 @@ from app.notebook.notebook_session import NotebookSession
 from app.notebook.parsing import parse_query_output
 from app.notebook.runner import NotebookRunner
 from app.notebook.source_loader import SourceLoader
-from app.notifier.reporting import generate_html_report, generate_podcast_html_report
+from app.notifier.reporting import generate_podcast_html_report
 from app.notifier.service import Notifier
 from app.podcast_cache import get_cached_analysis, set_cached_analysis
 from app.podcast_state import get_subscriptions, init_empty, is_processed, mark_processed
@@ -589,19 +589,265 @@ def generate_daily_investment_html_report(items: list[dict]) -> str:
 </html>"""
 
 
+def generate_daily_synthesized_html_report(markdown_report: str, items: list[dict]) -> str:
+    import markdown
+
+    sentiment_counts, stock_sources = _daily_digest_metrics(items)
+    generated_at = time.strftime("%Y-%m-%d %H:%M")
+    total = len(items)
+
+    def esc(value: object) -> str:
+        text = str(value or "")
+        return (
+            text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+
+    def pct(count: int) -> str:
+        return f"{round(count / total * 100):.0f}%" if total else "0%"
+
+    def stock_class(stock: str) -> str:
+        return "tw" if re.match(r"^\d{4}$", stock) else "us"
+
+    source_chips = "\n".join(
+        f"""
+        <div class="source-chip">
+          <span class="source-name">{esc(item.get("label", "Podcast"))}</span>
+          <span class="source-date">{esc(item.get("published") or "未知日期")}</span>
+        </div>
+        """
+        for item in items[:14]
+    )
+
+    stock_chips = "\n".join(
+        f"""
+        <div class="stock-chip {stock_class(stock)}">
+          <span class="stock-code">{esc(stock)}</span>
+          <span class="stock-count">{len(sources)} sources</span>
+        </div>
+        """
+        for stock, sources in list(stock_sources.items())[:18]
+    ) or '<div class="muted">本輪未抽出明確台美股標的</div>'
+
+    html_body = markdown.markdown(
+        markdown_report,
+        extensions=["extra", "tables", "sane_lists"],
+    )
+
+    for stock in sorted(stock_sources.keys(), key=len, reverse=True):
+        safe_stock = esc(stock)
+        html_body = re.sub(
+            rf"(?<![\w>])({re.escape(safe_stock)})(?![\w<])",
+            rf'<span class="ticker-highlight {stock_class(stock)}">\1</span>',
+            html_body,
+        )
+
+    highlight_terms = [
+        ("偏多", "bullish"),
+        ("看多", "bullish"),
+        ("多方", "bullish"),
+        ("偏空", "bearish"),
+        ("看空", "bearish"),
+        ("風險", "risk"),
+        ("中性", "neutral"),
+        ("觀望", "neutral"),
+    ]
+    for term, class_name in highlight_terms:
+        html_body = html_body.replace(term, f'<span class="term {class_name}">{term}</span>')
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>每日 Podcast 投資統整</title>
+  <style>
+    :root {{
+      --ink: #111827;
+      --muted: #667085;
+      --paper: #f5f7fb;
+      --card: #ffffff;
+      --line: #d8dee9;
+      --blue: #175cd3;
+      --green: #067647;
+      --red: #b42318;
+      --amber: #b54708;
+      --purple: #6941c6;
+      --shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+      line-height: 1.7;
+    }}
+    .brief {{ max-width: 1180px; margin: 0 auto; padding: 32px 18px 68px; }}
+    header {{
+      display: grid;
+      gap: 14px;
+      padding: 30px 0 24px;
+      border-bottom: 3px solid var(--ink);
+    }}
+    .eyebrow {{
+      color: var(--blue);
+      font-size: .78rem;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }}
+    h1 {{ margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.15; letter-spacing: 0; }}
+    .subtitle {{ color: var(--muted); max-width: 820px; margin: 0; }}
+    .meta-row {{ display: flex; flex-wrap: wrap; gap: 10px 18px; color: var(--muted); font-size: .9rem; }}
+    .dashboard {{ display: grid; grid-template-columns: .78fr 1.22fr; gap: 18px; margin-top: 22px; align-items: start; }}
+    .panel {{
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }}
+    .panel h2 {{ margin: 0 0 12px; font-size: .95rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }}
+    .kpi-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }}
+    .kpi {{ border: 1px solid var(--line); border-radius: 8px; padding: 13px; background: #fbfcfe; }}
+    .kpi-label {{ color: var(--muted); font-size: .76rem; font-weight: 800; }}
+    .kpi-value {{ font-size: 1.55rem; font-weight: 900; margin-top: 4px; }}
+    .source-cloud, .stock-cloud {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+    .source-chip, .stock-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 5px 10px;
+      font-size: .82rem;
+    }}
+    .source-name {{ font-weight: 800; }}
+    .source-date, .stock-count {{ color: var(--muted); font-size: .76rem; }}
+    .stock-code {{ font-weight: 900; }}
+    .stock-chip.tw {{ border-color: #b9e6fe; background: #f0f9ff; color: #026aa2; }}
+    .stock-chip.us {{ border-color: #d9d6fe; background: #f4f3ff; color: var(--purple); }}
+    .content {{
+      margin-top: 22px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }}
+    .content h1 {{ display: none; }}
+    .content h2 {{
+      margin: 30px 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 1.18rem;
+      color: #101828;
+    }}
+    .content h2:first-child {{ margin-top: 0; }}
+    .content h3 {{ margin: 18px 0 8px; font-size: 1rem; color: var(--blue); }}
+    .content p {{
+      margin: 0 0 14px;
+      color: #344054;
+      font-size: .98rem;
+    }}
+    .content ul, .content ol {{ margin: 0 0 18px 1.25rem; padding: 0; }}
+    .content li {{ margin-bottom: 8px; }}
+    .content table {{
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin: 12px 0 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: .9rem;
+    }}
+    .content th, .content td {{ padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }}
+    .content th {{ background: #f8fafc; color: var(--muted); font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; }}
+    .content tr:last-child td {{ border-bottom: none; }}
+    .ticker-highlight {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 6px;
+      padding: 0 5px;
+      font-weight: 900;
+      line-height: 1.45;
+    }}
+    .ticker-highlight.tw {{ background: #e0f2fe; color: #026aa2; }}
+    .ticker-highlight.us {{ background: #ede9fe; color: #5b21b6; }}
+    .term {{ border-radius: 999px; padding: 1px 7px; font-weight: 800; }}
+    .term.bullish {{ background: #dcfae6; color: var(--green); }}
+    .term.bearish {{ background: #fee4e2; color: var(--red); }}
+    .term.neutral {{ background: #fef0c7; color: var(--amber); }}
+    .term.risk {{ background: #fff1f3; color: #c01048; }}
+    .muted {{ color: var(--muted); }}
+    footer {{ margin-top: 22px; color: var(--muted); font-size: .82rem; }}
+    @media (max-width: 820px) {{
+      .dashboard {{ grid-template-columns: 1fr; }}
+      .content {{ padding: 20px; overflow-x: auto; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="brief">
+    <header>
+      <div class="eyebrow">Daily Investment Brief</div>
+      <h1>每日 Podcast 投資統整</h1>
+      <p class="subtitle">NotebookLM 跨來源統整，並保留來源日期、焦點標的與方向高亮，方便快速掃讀今日投資訊號。</p>
+      <div class="meta-row">
+        <span>產生時間：{esc(generated_at)}</span>
+        <span>來源數：{total}</span>
+        <span>焦點標的：{len(stock_sources)}</span>
+      </div>
+    </header>
+    <section class="dashboard">
+      <div class="panel">
+        <h2>情緒概況</h2>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">偏多</div><div class="kpi-value">{pct(sentiment_counts.get("bullish", 0))}</div></div>
+          <div class="kpi"><div class="kpi-label">偏空</div><div class="kpi-value">{pct(sentiment_counts.get("bearish", 0))}</div></div>
+          <div class="kpi"><div class="kpi-label">中性</div><div class="kpi-value">{sentiment_counts.get("neutral", 0)}</div></div>
+          <div class="kpi"><div class="kpi-label">訊號</div><div class="kpi-value">{total}</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>來源日期</h2>
+        <div class="source-cloud">{source_chips}</div>
+        <h2 style="margin-top:16px;">股票特別提及</h2>
+        <div class="stock-cloud">{stock_chips}</div>
+      </div>
+    </section>
+    <article class="content">{html_body}</article>
+    <footer>AI 統整僅供研究追蹤，不構成投資建議。請搭配原始來源、財報與風險承受度自行判斷。</footer>
+  </main>
+</body>
+</html>"""
+
+
 def _daily_digest_nlm_prompt() -> str:
     return (
         "你是一位台灣市場投資研究總編輯。Notebook 中每個來源都是一集 Podcast 或一篇 RSS 文章"
         "產出的高保真逐字稿與投資小結。請跨所有來源整理一份完整的每日投資研究報告，"
         "全程使用台灣繁體中文，語氣像投研晨報，不要寫成逐字稿摘要。\n\n"
-        "請輸出 Markdown，嚴格包含以下段落：\n"
+        "請輸出乾淨 Markdown，嚴格包含以下段落與格式：\n"
         "# 每日 Podcast 投資統整\n"
-        "## 執行摘要：用 5-8 句話統整今天最重要的市場訊號。\n"
-        "## 市場主軸：整理 3-5 個跨來源共同主題，每個主題說明來源共識與分歧。\n"
-        "## 焦點標的：用表格列出台股/美股代號或公司名、方向、提及來源、講者觀點、風險。\n"
-        "## 操作觀察：整理可追蹤的價位、事件、財報、籌碼或總經指標。\n"
-        "## 風險清單：列出短線風險與需要驗證的假設。\n"
-        "## 來源摘要：逐一列出每個來源的一句話重點。\n\n"
+        "## 執行摘要\n"
+        "用 5-8 句話統整今天最重要的市場訊號，避免逐集流水帳。\n"
+        "## 市場主軸\n"
+        "整理 3-5 個跨來源共同主題。每個主題用 `### 主題名稱`，底下用 bullet 分別寫：共識、分歧、投資含義。\n"
+        "## 焦點標的\n"
+        "一定要使用 Markdown pipe table，欄位固定為：標的代號/公司名｜方向｜提及來源｜來源日期｜講者觀點｜風險。\n"
+        "方向只允許：偏多、偏空、中性。\n"
+        "## 操作觀察\n"
+        "用 bullet list 整理可追蹤的價位、事件、財報、籌碼或總經指標；每點都要說明對應觀察意義。\n"
+        "## 風險清單\n"
+        "用 bullet list 列出短線風險與需要驗證的假設；每點開頭用風險名稱。\n"
+        "## 來源摘要\n"
+        "用 bullet list 逐一列出每個來源，格式為 `來源名稱（YYYY-MM-DD）：一句話重點`，必須包含日期。\n\n"
         "重要規範：只能根據來源內容，不要自行補行情或價格。避免過度推論。"
         "嚴禁包含思考過程，嚴禁使用 Markdown 加粗（** 或 __）。"
     )
@@ -1217,7 +1463,7 @@ def send_daily_investment_digest(items: list[dict], runner: NotebookRunner | Non
         nlm_report = synthesize_daily_digest_with_nlm(runner, items)
 
     html_content = (
-        generate_html_report("每日 Podcast 投資統整", nlm_report)
+        generate_daily_synthesized_html_report(nlm_report, items)
         if nlm_report
         else generate_daily_investment_html_report(items)
     )
