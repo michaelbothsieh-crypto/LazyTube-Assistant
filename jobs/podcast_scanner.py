@@ -37,6 +37,7 @@ from app.db_writer import (
     ensure_kol,
     finish_job_item,
     finish_job_run,
+    _get_conn,
     start_job_item,
     start_job_run,
     migrate_legacy_kol_aliases,
@@ -97,6 +98,16 @@ def _should_send_daily_digest(mode: str, chat_id: str) -> bool:
 
 def _should_use_nlm_daily_digest() -> bool:
     return _env_flag("PODCAST_DIGEST_USE_NLM", True)
+
+
+def _should_use_db_digest_fallback() -> bool:
+    return _env_flag("PODCAST_DIGEST_DB_FALLBACK", True)
+
+
+def _analysis_cache_key(prompt_key: str) -> str:
+    if prompt_key == "podcast":
+        return os.environ.get("PODCAST_ANALYSIS_CACHE_KEY", "podcast_transcript_v2")
+    return prompt_key
 
 
 def _looks_like_rss_url(url: str) -> bool:
@@ -652,6 +663,52 @@ def synthesize_daily_digest_with_nlm(runner: NotebookRunner, items: list[dict]) 
                     os.remove(temp_path)
                 except OSError:
                     pass
+
+
+def load_recent_digest_items_from_db(limit: int = 20) -> list[dict]:
+    if not _should_use_db_digest_fallback():
+        return []
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                      k.kol_name,
+                      e.title,
+                      e.published,
+                      e.summary,
+                      e.sentiment,
+                      e.stocks_mentioned
+                    FROM episodes e
+                    JOIN kols k ON k.kol_id = e.kol_id
+                    WHERE e.published >= CURRENT_DATE - (%s::int * INTERVAL '1 day')
+                      AND POSITION('://' IN k.kol_name) = 0
+                    ORDER BY e.published DESC, e.analyzed_at DESC
+                    LIMIT %s
+                    """,
+                    (DAILY_DIGEST_LOOKBACK_DAYS, limit),
+                )
+                rows = cur.fetchall()
+    except Exception as exc:
+        print(f"  ⚠️  DB daily digest fallback 讀取失敗：{exc}")
+        return []
+
+    items: list[dict] = []
+    for kol_name, title, published, summary, sentiment, stocks in rows:
+        analysis = str(summary or "")
+        items.append({
+            "label": kol_name or "Podcast",
+            "title": title or "未命名集數",
+            "published": published.isoformat() if hasattr(published, "isoformat") else str(published or ""),
+            "stocks": list(stocks or []),
+            "sentiment": sentiment or "neutral",
+            "summary": _digest_item_summary(analysis) if analysis else "",
+            "analysis_text": analysis,
+        })
+    if items:
+        print(f"  📚 從 DB 載入 {len(items)} 則近一天訊號作為每日統整 fallback")
+    return items
 
 
 def _apple_episode_hint(url: str) -> dict:
@@ -1237,8 +1294,9 @@ def main() -> None:
     on_demand_msg = os.environ.get("PODCAST_MESSAGE_ID", "")
     episode_number = os.environ.get("PODCAST_EPISODE_NUMBER", "").strip()
     prompt_key = os.environ.get("CUSTOM_PROMPT", "podcast")
+    cache_prompt_key = _analysis_cache_key(prompt_key)
     prompt = get_nlm_prompt(prompt_key)
-    print(f"📝 模式：{mode}  Prompt：{prompt_key}  集數：{episode_number or '最新'}")
+    print(f"📝 模式：{mode}  Prompt：{prompt_key}  Cache：{cache_prompt_key}  集數：{episode_number or '最新'}")
 
     website_kols_file = os.environ.get("WEBSITE_KOLS_FILE", "").strip()
 
@@ -1335,7 +1393,7 @@ def main() -> None:
                     item_skipped = True
                     continue
 
-                cached_analysis = get_cached_analysis(rss_url, ep["guid"], prompt_key)
+                cached_analysis = get_cached_analysis(rss_url, ep["guid"], cache_prompt_key)
                 if cached_analysis:
                     print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
                     # 快取命中也要寫 DB，確保網站資訊完整
@@ -1380,7 +1438,7 @@ def main() -> None:
                     print("  ❌ NLM 分析失敗")
                     continue
 
-                if set_cached_analysis(rss_url, ep["guid"], prompt_key, analysis):
+                if set_cached_analysis(rss_url, ep["guid"], cache_prompt_key, analysis):
                     print(f"  💾 已寫入 Podcast 分析快取（TTL {Config.REDIS_PODCAST_TTL}s）")
 
                 # 無論 daily 或 on-demand，分析成功就寫 DB
@@ -1434,6 +1492,8 @@ def main() -> None:
         compute_and_write_consensus()
 
     if send_daily_digest:
+        if not daily_digest_items:
+            daily_digest_items = load_recent_digest_items_from_db()
         send_daily_investment_digest(daily_digest_items, runner=runner)
 
     finish_job_run(run_id, error_message=run_error)

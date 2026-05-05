@@ -126,3 +126,12 @@ def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypat
 
     assert "NotebookLM 跨來源統整" in sent["html_content"]
     assert sent["caption"].startswith("🔎 研究完成：每日 Podcast 投資統整")
+
+
+def test_podcast_prompt_uses_transcript_cache_namespace(monkeypatch):
+    monkeypatch.delenv("PODCAST_ANALYSIS_CACHE_KEY", raising=False)
+    assert scanner._analysis_cache_key("podcast") == "podcast_transcript_v2"
+    assert scanner._analysis_cache_key("finance") == "finance"
+
+    monkeypatch.setenv("PODCAST_ANALYSIS_CACHE_KEY", "podcast_transcript_v3")
+    assert scanner._analysis_cache_key("podcast") == "podcast_transcript_v3"
