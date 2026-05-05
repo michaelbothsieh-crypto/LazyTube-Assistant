@@ -55,6 +55,7 @@ from api.utils.prompt_manager import get_nlm_prompt
 MAX_EPISODES_PER_RUN = 2
 MAX_DAILY_FEED_ITEMS = int(os.environ.get("PODCAST_MAX_DAILY_FEED_ITEMS", "12"))
 DAILY_FRESHNESS_DAYS = int(os.environ.get("PODCAST_DAILY_FRESHNESS_DAYS", "2"))
+DAILY_DIGEST_LOOKBACK_DAYS = int(os.environ.get("PODCAST_DAILY_DIGEST_LOOKBACK_DAYS", "1"))
 DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
@@ -88,6 +89,10 @@ def _should_send_podcast_report(mode: str, chat_id: str) -> bool:
     if mode == "daily":
         return _env_flag("PODCAST_SEND_TELEGRAM_DAILY", False)
     return True
+
+
+def _should_send_daily_digest(mode: str, chat_id: str) -> bool:
+    return mode == "daily" and not chat_id and _env_flag("PODCAST_SEND_DAILY_DIGEST", True)
 
 
 def _looks_like_rss_url(url: str) -> bool:
@@ -251,6 +256,322 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
     return summary, stocks, sentiment
 
 
+def _extract_analysis_section(text: str, header: str) -> str:
+    m = re.search(rf"【{re.escape(header)}】\s*([\s\S]*?)(?=\n【|$)", text)
+    return m.group(1).strip() if m else ""
+
+
+def _strip_analysis_citations(text: str) -> str:
+    return re.sub(r"\s*\[\d+(?:[,，\s\-–]+\d+)*\]", "", text).strip()
+
+
+def _digest_item_summary(analysis: str) -> str:
+    summary = _extract_analysis_section(analysis, "投資倒數小結")
+    conclusion = ""
+    if summary:
+        cm = re.search(r"本集結論[：:]\s*(.*?)$", summary, re.DOTALL)
+        conclusion = cm.group(1).strip() if cm else summary
+    if not conclusion:
+        conclusion = _extract_analysis_section(analysis, "市場總結與操作建議")
+    if not conclusion:
+        clean = re.sub(r"【.*?】", "", analysis).strip()
+        conclusion = clean[:360]
+    return _strip_analysis_citations(re.sub(r"\s+", " ", conclusion))[:420]
+
+
+def _sentiment_label(sentiment: str) -> str:
+    return {
+        "bullish": "偏多",
+        "bearish": "偏空",
+        "neutral": "中性",
+    }.get(sentiment, "中性")
+
+
+def _build_daily_digest_candidate(kol_meta: dict, ep: dict, analysis: str) -> dict | None:
+    if not _is_in_daily_digest_window(ep):
+        return None
+    _, stocks, sentiment = _parse_nlm_analysis(analysis)
+    return {
+        "label": kol_meta.get("label") or ep.get("feed_title") or "Podcast",
+        "title": ep.get("title") or "未命名集數",
+        "published": format_rss_date(ep.get("published", "")),
+        "stocks": stocks,
+        "sentiment": sentiment,
+        "summary": _digest_item_summary(analysis),
+    }
+
+
+def build_daily_investment_digest(items: list[dict]) -> str:
+    if not items:
+        return ""
+
+    generated_at = time.strftime("%Y-%m-%d %H:%M")
+    stock_sources: dict[str, list[str]] = {}
+    for item in items:
+        for stock in item.get("stocks", []):
+            stock_sources.setdefault(stock, [])
+            label = item.get("label", "Podcast")
+            if label not in stock_sources[stock]:
+                stock_sources[stock].append(label)
+
+    sentiment_counts = {"bullish": 0, "bearish": 0, "neutral": 0}
+    for item in items:
+        sentiment = item.get("sentiment", "neutral")
+        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+
+    lines = [
+        "# 每日 Podcast 投資統整",
+        "",
+        f"產生時間：{generated_at}",
+        f"掃描範圍：近 {DAILY_DIGEST_LOOKBACK_DAYS} 天成功完成分析的 podcast / 文章來源",
+        f"本次納入：{len(items)} 則訊號",
+        "",
+        "## 今日重點",
+        (
+            f"- 情緒分布：偏多 {sentiment_counts.get('bullish', 0)}、"
+            f"中性 {sentiment_counts.get('neutral', 0)}、偏空 {sentiment_counts.get('bearish', 0)}"
+        ),
+        f"- 焦點標的：{', '.join(stock_sources.keys()) if stock_sources else '本輪未抽出明確台美股標的'}",
+        "",
+        "## 焦點標的",
+    ]
+
+    if stock_sources:
+        for stock, sources in stock_sources.items():
+            lines.append(f"- {stock}：{', '.join(sources)}")
+    else:
+        lines.append("- 無明確上市標的")
+
+    lines.extend(["", "## 逐集訊號"])
+    for item in items:
+        stocks = ", ".join(item.get("stocks", [])) or "無明確標的"
+        lines.extend([
+            "",
+            f"### {item.get('label', 'Podcast')}｜{item.get('title', '未命名集數')}",
+            "",
+            f"- 日期：{item.get('published') or '未知'}",
+            f"- 情緒：{_sentiment_label(item.get('sentiment', 'neutral'))}",
+            f"- 標的：{stocks}",
+            "",
+            item.get("summary") or "未取得摘要。",
+        ])
+
+    lines.extend([
+        "",
+        "## 風險提醒",
+        "",
+        "以上內容為 Podcast 與 RSS 來源的 AI 統整，只供研究追蹤，不構成投資建議。",
+    ])
+    return "\n".join(lines)
+
+
+def _daily_digest_metrics(items: list[dict]) -> tuple[dict[str, int], dict[str, list[str]]]:
+    sentiment_counts = {"bullish": 0, "bearish": 0, "neutral": 0}
+    stock_sources: dict[str, list[str]] = {}
+    for item in items:
+        sentiment = item.get("sentiment", "neutral")
+        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+        for stock in item.get("stocks", []):
+            stock_sources.setdefault(stock, [])
+            label = item.get("label", "Podcast")
+            if label not in stock_sources[stock]:
+                stock_sources[stock].append(label)
+    return sentiment_counts, stock_sources
+
+
+def build_daily_investment_digest_caption(items: list[dict]) -> str:
+    if not items:
+        return ""
+    sentiment_counts, stock_sources = _daily_digest_metrics(items)
+    top_stocks = ", ".join(list(stock_sources.keys())[:8]) or "無明確上市標的"
+    first_summary = items[0].get("summary", "本輪未取得摘要。")
+    if len(first_summary) > 180:
+        first_summary = first_summary[:177] + "..."
+    return (
+        "🔎 研究完成：每日 Podcast 投資統整\n\n"
+        "📝 核心結論：\n"
+        f"本次納入 {len(items)} 則近一天訊號；"
+        f"情緒分布為偏多 {sentiment_counts.get('bullish', 0)}、"
+        f"中性 {sentiment_counts.get('neutral', 0)}、偏空 {sentiment_counts.get('bearish', 0)}。\n"
+        f"焦點標的：{top_stocks}\n\n"
+        f"{first_summary}"
+    )
+
+
+def generate_daily_investment_html_report(items: list[dict]) -> str:
+    sentiment_counts, stock_sources = _daily_digest_metrics(items)
+    generated_at = time.strftime("%Y-%m-%d %H:%M")
+    total = len(items)
+    stock_count = len(stock_sources)
+    top_stocks = list(stock_sources.items())[:12]
+
+    def esc(value: object) -> str:
+        text = str(value or "")
+        return (
+            text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+
+    def pct(count: int) -> str:
+        return f"{round(count / total * 100):.0f}%" if total else "0%"
+
+    def sentiment_class(sentiment: str) -> str:
+        return {
+            "bullish": "bullish",
+            "bearish": "bearish",
+            "neutral": "neutral",
+        }.get(sentiment, "neutral")
+
+    stock_rows = "\n".join(
+        f"""
+        <tr>
+          <td><span class="ticker">{esc(stock)}</span></td>
+          <td>{len(sources)}</td>
+          <td>{esc(", ".join(sources))}</td>
+        </tr>
+        """
+        for stock, sources in top_stocks
+    ) or '<tr><td colspan="3" class="muted">本輪未抽出明確台美股標的</td></tr>'
+
+    source_cards = "\n".join(
+        f"""
+        <article class="source-card">
+          <div class="source-topline">
+            <span>{esc(item.get("label", "Podcast"))}</span>
+            <span>{esc(item.get("published") or "未知日期")}</span>
+          </div>
+          <h3>{esc(item.get("title", "未命名集數"))}</h3>
+          <div class="source-meta">
+            <span class="pill {sentiment_class(item.get("sentiment", "neutral"))}">{esc(_sentiment_label(item.get("sentiment", "neutral")))}</span>
+            <span>{esc(", ".join(item.get("stocks", [])) or "無明確標的")}</span>
+          </div>
+          <p>{esc(item.get("summary") or "未取得摘要。")}</p>
+        </article>
+        """
+        for item in items
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>每日 Podcast 投資統整</title>
+  <style>
+    :root {{
+      --ink: #111827;
+      --muted: #667085;
+      --line: #d9e2ec;
+      --paper: #f6f8fb;
+      --card: #ffffff;
+      --blue: #1455d9;
+      --green: #047857;
+      --red: #b42318;
+      --amber: #b54708;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+      line-height: 1.65;
+    }}
+    .report {{ max-width: 1120px; margin: 0 auto; padding: 36px 20px 64px; }}
+    header {{
+      padding: 30px 0 22px;
+      border-bottom: 3px solid var(--ink);
+      display: grid;
+      gap: 10px;
+    }}
+    .eyebrow {{ color: var(--blue); font-size: 0.78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }}
+    h1 {{ margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.15; letter-spacing: 0; }}
+    .subtitle {{ max-width: 760px; color: var(--muted); margin: 0; }}
+    .meta {{ display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: .9rem; }}
+    .kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }}
+    .kpi {{ background: var(--card); border: 1px solid var(--line); padding: 18px; border-radius: 8px; }}
+    .kpi .label {{ color: var(--muted); font-size: .78rem; font-weight: 700; }}
+    .kpi .value {{ font-size: 1.65rem; font-weight: 800; margin-top: 6px; }}
+    section {{ margin-top: 28px; }}
+    h2 {{ font-size: 1.1rem; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }}
+    .grid {{ display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; align-items: start; }}
+    .panel {{ background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }}
+    .bars {{ display: grid; gap: 12px; }}
+    .bar-row {{ display: grid; grid-template-columns: 56px 1fr 48px; align-items: center; gap: 10px; font-size: .9rem; }}
+    .bar-track {{ height: 10px; background: #edf2f7; border-radius: 999px; overflow: hidden; }}
+    .bar-fill {{ height: 100%; background: var(--blue); }}
+    table {{ width: 100%; border-collapse: collapse; font-size: .92rem; }}
+    th, td {{ padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
+    th {{ color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .08em; }}
+    .ticker {{ font-weight: 800; color: var(--blue); }}
+    .source-list {{ display: grid; gap: 14px; }}
+    .source-card {{ background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }}
+    .source-topline {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .8rem; font-weight: 700; }}
+    .source-card h3 {{ margin: 8px 0; font-size: 1rem; line-height: 1.4; }}
+    .source-card p {{ margin: 12px 0 0; color: #344054; }}
+    .source-meta {{ display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: .85rem; }}
+    .pill {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 9px; font-weight: 800; }}
+    .pill.bullish {{ color: var(--green); background: #ecfdf3; }}
+    .pill.bearish {{ color: var(--red); background: #fef3f2; }}
+    .pill.neutral {{ color: var(--amber); background: #fffaeb; }}
+    .muted {{ color: var(--muted); }}
+    footer {{ margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }}
+    @media (max-width: 760px) {{
+      .kpis, .grid {{ grid-template-columns: 1fr; }}
+      .report {{ padding: 24px 14px 48px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="report">
+    <header>
+      <div class="eyebrow">Daily Investment Brief</div>
+      <h1>每日 Podcast 投資統整</h1>
+      <p class="subtitle">彙整近 {DAILY_DIGEST_LOOKBACK_DAYS} 天成功完成分析的 Podcast 與 RSS 來源，萃取市場情緒、焦點標的與逐集投資訊號。</p>
+      <div class="meta">
+        <span>產生時間：{esc(generated_at)}</span>
+        <span>資料來源：{total} 則訊號</span>
+      </div>
+    </header>
+
+    <section class="kpis">
+      <div class="kpi"><div class="label">納入訊號</div><div class="value">{total}</div></div>
+      <div class="kpi"><div class="label">焦點標的</div><div class="value">{stock_count}</div></div>
+      <div class="kpi"><div class="label">偏多比例</div><div class="value">{pct(sentiment_counts.get("bullish", 0))}</div></div>
+      <div class="kpi"><div class="label">偏空比例</div><div class="value">{pct(sentiment_counts.get("bearish", 0))}</div></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>市場情緒分布</h2>
+        <div class="bars">
+          <div class="bar-row"><span>偏多</span><div class="bar-track"><div class="bar-fill" style="width:{pct(sentiment_counts.get("bullish", 0))}"></div></div><strong>{sentiment_counts.get("bullish", 0)}</strong></div>
+          <div class="bar-row"><span>中性</span><div class="bar-track"><div class="bar-fill" style="width:{pct(sentiment_counts.get("neutral", 0))}"></div></div><strong>{sentiment_counts.get("neutral", 0)}</strong></div>
+          <div class="bar-row"><span>偏空</span><div class="bar-track"><div class="bar-fill" style="width:{pct(sentiment_counts.get("bearish", 0))}"></div></div><strong>{sentiment_counts.get("bearish", 0)}</strong></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>焦點標的排行</h2>
+        <table>
+          <thead><tr><th>標的</th><th>提及</th><th>來源</th></tr></thead>
+          <tbody>{stock_rows}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>逐集投資訊號</h2>
+      <div class="source-list">{source_cards}</div>
+    </section>
+
+    <footer>AI 統整僅供研究追蹤，不構成投資建議。請搭配原始來源、財報與風險承受度自行判斷。</footer>
+  </main>
+</body>
+</html>"""
+
+
 def _apple_episode_hint(url: str) -> dict:
     """
     偵測 Apple Podcasts 單集 URL（含 ?i= 參數）並萃取比對線索。
@@ -269,7 +590,6 @@ def _apple_episode_hint(url: str) -> dict:
     slug = ""
     for seg in path.split("/"):
         if not seg:
-            finish_job_item(item_id, "skipped", item_found, item_written, error_msg)
             continue
         if re.match(r"id\d+$", seg):
             continue
@@ -336,6 +656,16 @@ def _is_recent_daily_episode(ep: dict) -> bool:
     if not published:
         return False
     cutoff = date.today() - timedelta(days=DAILY_FRESHNESS_DAYS)
+    return published >= cutoff
+
+
+def _is_in_daily_digest_window(ep: dict) -> bool:
+    if DAILY_DIGEST_LOOKBACK_DAYS <= 0:
+        return True
+    published = _episode_published_date(ep)
+    if not published:
+        return False
+    cutoff = date.today() - timedelta(days=DAILY_DIGEST_LOOKBACK_DAYS)
     return published >= cutoff
 
 
@@ -698,6 +1028,29 @@ def send_podcast_report(
     return Notifier.send_text(target_chat, header + body, html=False)
 
 
+def send_daily_investment_digest(items: list[dict]) -> bool:
+    target_chat = Config.TG_CHAT_ID
+    if not target_chat:
+        print("  ⚠️  未設定 TELEGRAM_CHAT_ID，跳過每日統整報告")
+        return False
+
+    markdown_report = build_daily_investment_digest(items)
+    if not markdown_report:
+        print("  ℹ️  近一天沒有成功分析的 podcast 訊號，跳過每日統整報告")
+        return False
+
+    html_content = generate_daily_investment_html_report(items)
+    caption = build_daily_investment_digest_caption(items)
+    print("  📤 推送每日 Podcast 投資統整報告...")
+    if Notifier.send_report_link(target_chat, html_content, caption):
+        print("  ✅ 每日統整報告推送成功")
+        return True
+
+    print("  ⚠️  HTML 報告連結不可用，改用純文字推送每日統整")
+    text = markdown_report if len(markdown_report) <= 4096 else markdown_report[:4093] + "..."
+    return Notifier.send_text(target_chat, text, html=False)
+
+
 
 
 
@@ -835,8 +1188,12 @@ def main() -> None:
     total_success = 0
     error_msg = ""
     send_reports = _should_send_podcast_report(mode, on_demand_chat)
+    send_daily_digest = _should_send_daily_digest(mode, on_demand_chat)
+    daily_digest_items: list[dict] = []
     if not send_reports:
         print("Telegram daily reports disabled; updating DB/website only.")
+    if send_daily_digest:
+        print(f"Daily digest enabled; collecting items from the last {DAILY_DIGEST_LOOKBACK_DAYS} day(s).")
     run_id = start_job_run("podcast_scanner", mode, len(rss_sources))
     run_error = ""
 
@@ -902,6 +1259,9 @@ def main() -> None:
                             message_id=on_demand_msg,
                         )
                         on_demand_msg = ""
+                    digest_item = _build_daily_digest_candidate(kol_meta, ep, cached_analysis)
+                    if send_daily_digest and digest_item:
+                        daily_digest_items.append(digest_item)
                     error_msg = ""
                     if mode == "daily":
                         mark_processed(rss_url, ep["guid"], chat_id=on_demand_chat)
@@ -945,6 +1305,9 @@ def main() -> None:
                         message_id=on_demand_msg,
                     )
                     on_demand_msg = ""
+                digest_item = _build_daily_digest_candidate(kol_meta, ep, analysis)
+                if send_daily_digest and digest_item:
+                    daily_digest_items.append(digest_item)
                 error_msg = ""
 
                 if mode == "daily":
@@ -977,6 +1340,9 @@ def main() -> None:
     if mode == "daily" and total_success > 0:
         print("\n📊 更新 Neon DB 共識指標...")
         compute_and_write_consensus()
+
+    if send_daily_digest:
+        send_daily_investment_digest(daily_digest_items)
 
     finish_job_run(run_id, error_message=run_error)
 
