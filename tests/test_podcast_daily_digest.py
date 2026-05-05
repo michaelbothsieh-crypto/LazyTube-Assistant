@@ -135,3 +135,34 @@ def test_podcast_prompt_uses_transcript_cache_namespace(monkeypatch):
 
     monkeypatch.setenv("PODCAST_ANALYSIS_CACHE_KEY", "podcast_transcript_v3")
     assert scanner._analysis_cache_key("podcast") == "podcast_transcript_v3"
+
+
+def test_supplement_digest_items_from_db_when_too_few(monkeypatch):
+    fresh = [{
+        "label": "節目 A",
+        "title": "今日盤勢",
+        "published": "2026-05-05",
+        "stocks": ["2330"],
+        "sentiment": "neutral",
+        "summary": "新訊號",
+    }]
+    db_items = [
+        fresh[0],
+        {
+            "label": "節目 B",
+            "title": "AI 供應鏈",
+            "published": "2026-05-05",
+            "stocks": ["NVDA"],
+            "sentiment": "bullish",
+            "summary": "補充訊號",
+        },
+    ]
+
+    monkeypatch.setattr(scanner, "DAILY_DIGEST_MIN_ITEMS", 5)
+    monkeypatch.setattr(scanner, "load_recent_digest_items_from_db", lambda: db_items)
+
+    merged = scanner.supplement_digest_items_from_db(fresh)
+
+    assert len(merged) == 2
+    assert merged[0]["title"] == "今日盤勢"
+    assert merged[1]["title"] == "AI 供應鏈"

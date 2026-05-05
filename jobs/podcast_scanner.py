@@ -57,6 +57,7 @@ MAX_EPISODES_PER_RUN = 2
 MAX_DAILY_FEED_ITEMS = int(os.environ.get("PODCAST_MAX_DAILY_FEED_ITEMS", "12"))
 DAILY_FRESHNESS_DAYS = int(os.environ.get("PODCAST_DAILY_FRESHNESS_DAYS", "2"))
 DAILY_DIGEST_LOOKBACK_DAYS = int(os.environ.get("PODCAST_DAILY_DIGEST_LOOKBACK_DAYS", "1"))
+DAILY_DIGEST_MIN_ITEMS = int(os.environ.get("PODCAST_DAILY_DIGEST_MIN_ITEMS", "5"))
 DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
@@ -709,6 +710,38 @@ def load_recent_digest_items_from_db(limit: int = 20) -> list[dict]:
     if items:
         print(f"  📚 從 DB 載入 {len(items)} 則近一天訊號作為每日統整 fallback")
     return items
+
+
+def supplement_digest_items_from_db(items: list[dict]) -> list[dict]:
+    if len(items) >= DAILY_DIGEST_MIN_ITEMS:
+        return items
+    db_items = load_recent_digest_items_from_db()
+    if not db_items:
+        return items
+
+    seen = {
+        (
+            str(item.get("label", "")),
+            str(item.get("title", "")),
+            str(item.get("published", "")),
+        )
+        for item in items
+    }
+    merged = list(items)
+    for item in db_items:
+        key = (
+            str(item.get("label", "")),
+            str(item.get("title", "")),
+            str(item.get("published", "")),
+        )
+        if key in seen:
+            continue
+        merged.append(item)
+        seen.add(key)
+
+    if len(merged) > len(items):
+        print(f"  📚 每日統整訊號不足 {DAILY_DIGEST_MIN_ITEMS} 則，已用 DB 補到 {len(merged)} 則")
+    return merged
 
 
 def _apple_episode_hint(url: str) -> dict:
@@ -1492,8 +1525,7 @@ def main() -> None:
         compute_and_write_consensus()
 
     if send_daily_digest:
-        if not daily_digest_items:
-            daily_digest_items = load_recent_digest_items_from_db()
+        daily_digest_items = supplement_digest_items_from_db(daily_digest_items)
         send_daily_investment_digest(daily_digest_items, runner=runner)
 
     finish_job_run(run_id, error_message=run_error)
