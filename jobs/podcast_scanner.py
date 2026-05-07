@@ -181,7 +181,7 @@ def _fallback_article_analysis(ep: dict) -> str:
         f"{source} 發布「{title}」。{excerpt}\n\n"
         "【投資倒數小結】\n"
         "1. 台美股焦點標的：無明確上市標的。\n"
-        f"2. 本集結論：此來源因 NotebookLM query timeout，先以 RSS 摘要保留為低信心觀察訊號；後續可由下一次掃描或人工詳讀補強。"
+        f"2. 本集結論：此來源因 AI 分析逾時，先以 RSS 摘要保留為低信心觀察訊號；後續可由下一次掃描或人工詳讀補強。"
     )
 
 
@@ -858,7 +858,7 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     <header>
       <div class="eyebrow">Daily Investment Brief</div>
       <h1>每日 Podcast 投資統整</h1>
-      <p class="subtitle">NotebookLM 跨來源統整。頂部只保留今日判讀、主軸雷達、焦點股票與風險雷達；來源日期收斂在底部來源摘要，避免重複資訊干擾閱讀。</p>
+      <p class="subtitle">跨來源統整。頂部只保留今日判讀、主軸雷達、焦點股票與風險雷達；來源日期收斂在底部來源摘要，避免重複資訊干擾閱讀。</p>
       <div class="meta-row">
         <span>產生時間：{esc(generated_at)}</span>
         <span>來源數：{total}</span>
@@ -952,7 +952,7 @@ def synthesize_daily_digest_with_nlm(runner: NotebookRunner, items: list[dict]) 
     temp_paths: list[str] = []
     with NotebookSession(runner, "DIGEST") as session:
         if not session.ready():
-            print("  ⚠️  無法建立每日統整 NotebookLM notebook，改用本機統整")
+            print("  ⚠️  無法建立每日統整分析工作區，改用本機統整")
             return None
 
         print(f"  📓 每日統整 Notebook：{session.notebook_id}")
@@ -980,7 +980,7 @@ def synthesize_daily_digest_with_nlm(runner: NotebookRunner, items: list[dict]) 
                 return None
             query = runner.run("query", "notebook", session.notebook_id, _daily_digest_nlm_prompt())
             if query.returncode != 0:
-                print("  ⚠️  每日統整 NotebookLM query 失敗，改用本機統整")
+                print("  ⚠️  每日統整 AI query 失敗，改用本機統整")
                 return None
             report = parse_query_output(query.stdout)
             return report or None
@@ -1417,7 +1417,7 @@ def download_audio(audio_url: str, title: str, max_retries: int = 2) -> str | No
 def analyze_with_nlm(runner: NotebookRunner, mp3_path: str, prompt: str) -> str | None:
     with NotebookSession(runner, "POD") as session:
         if not session.ready():
-            print("  ❌ 無法建立 NotebookLM notebook")
+            print("  ❌ 無法建立 AI 分析工作區")
             return None
         print(f"  📓 Notebook：{session.notebook_id}")
         print("  ⏳ 上傳音檔等待轉錄...")
@@ -1442,7 +1442,7 @@ def analyze_with_nlm(runner: NotebookRunner, mp3_path: str, prompt: str) -> str 
 def analyze_source_url_with_nlm(runner: NotebookRunner, url: str, prompt: str) -> str | None:
     with NotebookSession(runner, "WEB") as session:
         if not session.ready():
-            print("  ❌ 無法建立 NotebookLM notebook")
+            print("  ❌ 無法建立 AI 分析工作區")
             return None
         loader = SourceLoader(runner)
         print("  ⏳ 載入文章來源...")
@@ -1539,7 +1539,7 @@ def send_daily_investment_digest(items: list[dict], runner: NotebookRunner | Non
 
     nlm_report = None
     if runner and _should_use_nlm_daily_digest():
-        print("  🧠 使用 NotebookLM 多來源統整每日投資報告...")
+        print("  🧠 使用多來源 AI 統整每日投資報告...")
         nlm_report = synthesize_daily_digest_with_nlm(runner, items)
 
     html_content = (
@@ -1754,7 +1754,7 @@ def main() -> None:
 
                 cached_analysis = get_cached_analysis(rss_url, ep["guid"], cache_prompt_key)
                 if cached_analysis:
-                    print("  ⚡ 命中 Podcast 分析快取，跳過下載與 NotebookLM")
+                    print("  ⚡ 命中 Podcast 分析快取，跳過下載與 AI 分析")
                     # 快取命中也要寫 DB，確保網站資訊完整
                     if _write_episode_to_db(kol_meta, ep, cached_analysis):
                         item_written += 1

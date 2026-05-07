@@ -109,7 +109,7 @@ def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypat
     monkeypatch.setattr(
         scanner,
         "synthesize_daily_digest_with_nlm",
-        lambda runner, items: "# 每日 Podcast 投資統整\n\n## 執行摘要\nNotebookLM 跨來源統整。",
+        lambda runner, items: "# 每日 Podcast 投資統整\n\n## 執行摘要\n跨來源統整。",
     )
 
     assert scanner.send_daily_investment_digest([
@@ -124,7 +124,8 @@ def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypat
         }
     ], runner=object())
 
-    assert "NotebookLM 跨來源統整" in sent["html_content"]
+    assert "跨來源統整" in sent["html_content"]
+    assert "NotebookLM" not in sent["html_content"]
     assert "今日判讀" in sent["html_content"]
     assert "主軸雷達" in sent["html_content"]
     assert "股票特別提及" in sent["html_content"]
