@@ -27,5 +27,11 @@
       "source": "/(.*)",
       "destination": "/web/$1"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/podcast-scanner",
+      "schedule": "30 2 * * *"
+    }
   ]
 }

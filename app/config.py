@@ -41,6 +41,7 @@ class Config:
     ALLOWED_USERS = os.environ.get("ALLOWED_USERS", "")
 
     TG_WEBHOOK_SECRET = os.environ.get("TG_WEBHOOK_SECRET", "")
+    CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
     # GitHub Actions dispatch
     GH_PAT_WORKFLOW = os.environ.get("GH_PAT_WORKFLOW")

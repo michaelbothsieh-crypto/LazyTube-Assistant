@@ -54,6 +54,21 @@ async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 
+@app.get("/api/cron/podcast-scanner")
+async def cron_podcast_scanner(authorization: str = Header(default="")):
+    """Vercel Cron entrypoint that dispatches the daily podcast scanner workflow."""
+    if not Config.CRON_SECRET:
+        logger.error("CRON_SECRET is not configured")
+        raise HTTPException(status_code=500, detail="Cron secret not configured")
+    if authorization != f"Bearer {Config.CRON_SECRET}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    success = await GitHubActionManager.dispatch("podcast-scanner.yml", {}, timeout=10.0)
+    if not success:
+        raise HTTPException(status_code=502, detail="Podcast scanner dispatch failed")
+    return {"ok": True, "workflow": "podcast-scanner.yml"}
+
+
 @app.get("/api/report-proxy")
 async def report_proxy(id: str):
     content = await _fetch_redis_bytes(f"html_report_{id}", "report_proxy")
