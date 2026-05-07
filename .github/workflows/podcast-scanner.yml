@@ -1,9 +1,6 @@
 name: Podcast 財經分析掃描器
 
 on:
-  schedule:
-    # 每天台北時間 10:30 執行（UTC 02:30）
-    - cron: '30 2 * * *'
   workflow_dispatch:  # 支援手動觸發
 
 env:
