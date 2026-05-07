@@ -125,7 +125,8 @@ def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypat
     ], runner=object())
 
     assert "NotebookLM 跨來源統整" in sent["html_content"]
-    assert "來源日期" in sent["html_content"]
+    assert "今日判讀" in sent["html_content"]
+    assert "主軸雷達" in sent["html_content"]
     assert "股票特別提及" in sent["html_content"]
     assert "ticker-highlight" in sent["html_content"]
     assert sent["caption"].startswith("🔎 研究完成：每日 Podcast 投資統整")

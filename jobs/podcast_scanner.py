@@ -611,25 +611,74 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     def stock_class(stock: str) -> str:
         return "tw" if re.match(r"^\d{4}$", stock) else "us"
 
-    source_chips = "\n".join(
-        f"""
-        <div class="source-chip">
-          <span class="source-name">{esc(item.get("label", "Podcast"))}</span>
-          <span class="source-date">{esc(item.get("published") or "未知日期")}</span>
-        </div>
-        """
-        for item in items[:14]
-    )
-
     stock_chips = "\n".join(
         f"""
-        <div class="stock-chip {stock_class(stock)}">
+        <div class="chip {stock_class(stock)}">
           <span class="stock-code">{esc(stock)}</span>
-          <span class="stock-count">{len(sources)} sources</span>
+          <small>{len(sources)} sources</small>
         </div>
         """
         for stock, sources in list(stock_sources.items())[:18]
     ) or '<div class="muted">本輪未抽出明確台美股標的</div>'
+
+    def section_preview(header: str, fallback: str) -> str:
+        pattern = rf"(?:^|\n)##\s*{re.escape(header)}\s*\n([\s\S]*?)(?=\n##\s+|$)"
+        match = re.search(pattern, markdown_report)
+        text = match.group(1).strip() if match else fallback
+        text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^[\-\*\d.、\s]+", "", text, flags=re.MULTILINE)
+        text = re.sub(r"\|", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text[:150] + ("..." if len(text) > 150 else "")
+
+    def keyword_chips(candidates: list[tuple[str, str]], class_name: str, empty: str) -> str:
+        chips = [
+            f'<span class="chip {class_name}">{esc(label)} <small>{esc(kind)}</small></span>'
+            for label, kind in candidates
+            if label in markdown_report
+        ]
+        return "\n".join(chips[:8]) or f'<span class="muted">{esc(empty)}</span>'
+
+    bullish_pct = round(sentiment_counts.get("bullish", 0) / total * 100) if total else 0
+    bearish_pct = round(sentiment_counts.get("bearish", 0) / total * 100) if total else 0
+    market_temperature = "偏熱" if bullish_pct >= 60 else "偏冷" if bearish_pct >= 40 else "觀望"
+    direction_label = "偏多" if bullish_pct > bearish_pct else "偏空" if bearish_pct > bullish_pct else "中性"
+    risk_level = "中高" if any(word in markdown_report for word in ["槓桿", "泡沫", "通膨", "回檔", "估值"]) else "中"
+    executive_preview = section_preview("執行摘要", "今日主要訊號請見下方完整報告。")
+    operation_preview = section_preview("操作觀察", "後續追蹤指標請見下方操作觀察。")
+    risk_preview = section_preview("風險清單", "主要風險請見下方風險清單。")
+    topic_chips = keyword_chips(
+        [
+            ("AI", "主題"),
+            ("半導體", "供應鏈"),
+            ("台股", "市場"),
+            ("美股", "市場"),
+            ("財報", "事件"),
+            ("雲端", "需求"),
+            ("資安", "防禦"),
+            ("軍工", "題材"),
+            ("航太", "題材"),
+            ("油價", "總經"),
+            ("通膨", "總經"),
+            ("機器人", "題材"),
+        ],
+        "topic",
+        "主軸將由下方市場主軸段落呈現",
+    )
+    risk_chips = keyword_chips(
+        [
+            ("槓桿", "資金"),
+            ("通膨", "總經"),
+            ("油價", "總經"),
+            ("估值", "評價"),
+            ("回檔", "技術"),
+            ("泡沫", "情緒"),
+            ("資安", "營運"),
+            ("關稅", "政策"),
+        ],
+        "risk",
+        "風險將由下方風險清單段落呈現",
+    )
 
     html_body = markdown.markdown(
         markdown_report,
@@ -671,11 +720,16 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
       --card: #ffffff;
       --line: #d8dee9;
       --blue: #175cd3;
+      --blue-soft: #eff6ff;
       --green: #067647;
+      --green-soft: #ecfdf3;
       --red: #b42318;
+      --red-soft: #fff1f3;
       --amber: #b54708;
+      --amber-soft: #fffaeb;
       --purple: #6941c6;
-      --shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+      --purple-soft: #f4f3ff;
+      --shadow: 0 14px 32px rgba(16, 24, 40, 0.08);
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -702,7 +756,7 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     h1 {{ margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.15; letter-spacing: 0; }}
     .subtitle {{ color: var(--muted); max-width: 820px; margin: 0; }}
     .meta-row {{ display: flex; flex-wrap: wrap; gap: 10px 18px; color: var(--muted); font-size: .9rem; }}
-    .dashboard {{ display: grid; grid-template-columns: .78fr 1.22fr; gap: 18px; margin-top: 22px; align-items: start; }}
+    .dashboard {{ display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; margin-top: 22px; align-items: stretch; }}
     .panel {{
       background: var(--card);
       border: 1px solid var(--line);
@@ -711,26 +765,26 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
       box-shadow: var(--shadow);
     }}
     .panel h2 {{ margin: 0 0 12px; font-size: .95rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }}
-    .kpi-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }}
-    .kpi {{ border: 1px solid var(--line); border-radius: 8px; padding: 13px; background: #fbfcfe; }}
-    .kpi-label {{ color: var(--muted); font-size: .76rem; font-weight: 800; }}
-    .kpi-value {{ font-size: 1.55rem; font-weight: 900; margin-top: 4px; }}
-    .source-cloud, .stock-cloud {{ display: flex; flex-wrap: wrap; gap: 8px; }}
-    .source-chip, .stock-chip {{
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: #fff;
-      padding: 5px 10px;
-      font-size: .82rem;
-    }}
-    .source-name {{ font-weight: 800; }}
-    .source-date, .stock-count {{ color: var(--muted); font-size: .76rem; }}
+    .readout {{ display: grid; gap: 12px; }}
+    .readout-card {{ border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fbfcfe; }}
+    .readout-card h3 {{ margin: 0 0 6px; font-size: 1rem; color: var(--ink); }}
+    .readout-card p {{ margin: 0; color: #344054; font-size: .92rem; }}
+    .readout-card.base {{ border-left: 4px solid var(--green); }}
+    .readout-card.watch {{ border-left: 4px solid var(--amber); }}
+    .readout-card.risk {{ border-left: 4px solid var(--red); }}
+    .signal-strip {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }}
+    .signal {{ border-radius: 8px; padding: 12px; border: 1px solid var(--line); background: #fff; }}
+    .signal-label {{ color: var(--muted); font-size: .74rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }}
+    .signal-value {{ font-size: 1.35rem; font-weight: 900; margin-top: 4px; }}
+    .signal small {{ display: block; color: var(--muted); margin-top: 2px; }}
+    .topic-cloud, .stock-cloud, .risk-cloud {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+    .chip {{ display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 6px 11px; font-size: .84rem; font-weight: 800; }}
+    .chip small {{ color: var(--muted); font-weight: 700; }}
+    .chip.topic {{ background: var(--blue-soft); border-color: #b9d6fe; color: #1849a9; }}
+    .chip.risk {{ background: var(--red-soft); border-color: #fecdd6; color: #c01048; }}
     .stock-code {{ font-weight: 900; }}
-    .stock-chip.tw {{ border-color: #b9e6fe; background: #f0f9ff; color: #026aa2; }}
-    .stock-chip.us {{ border-color: #d9d6fe; background: #f4f3ff; color: var(--purple); }}
+    .chip.tw {{ border-color: #b9e6fe; background: #f0f9ff; color: #026aa2; }}
+    .chip.us {{ border-color: #d9d6fe; background: var(--purple-soft); color: var(--purple); }}
     .content {{
       margin-top: 22px;
       background: var(--card);
@@ -764,11 +818,18 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
       border: 1px solid var(--line);
       border-radius: 8px;
       overflow: hidden;
-      font-size: .9rem;
+      font-size: .86rem;
+      table-layout: fixed;
     }}
     .content th, .content td {{ padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }}
     .content th {{ background: #f8fafc; color: var(--muted); font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; }}
     .content tr:last-child td {{ border-bottom: none; }}
+    .content th:nth-child(1), .content td:nth-child(1) {{ width: 13%; min-width: 112px; }}
+    .content th:nth-child(2), .content td:nth-child(2) {{ width: 7%; min-width: 68px; text-align: center; white-space: nowrap; }}
+    .content th:nth-child(3), .content td:nth-child(3) {{ width: 18%; }}
+    .content th:nth-child(4), .content td:nth-child(4) {{ width: 9%; min-width: 92px; white-space: nowrap; }}
+    .content th:nth-child(5), .content td:nth-child(5) {{ width: 33%; }}
+    .content th:nth-child(6), .content td:nth-child(6) {{ width: 20%; }}
     .ticker-highlight {{
       display: inline-flex;
       align-items: center;
@@ -797,7 +858,7 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     <header>
       <div class="eyebrow">Daily Investment Brief</div>
       <h1>每日 Podcast 投資統整</h1>
-      <p class="subtitle">NotebookLM 跨來源統整，並保留來源日期、焦點標的與方向高亮，方便快速掃讀今日投資訊號。</p>
+      <p class="subtitle">NotebookLM 跨來源統整。頂部只保留今日判讀、主軸雷達、焦點股票與風險雷達；來源日期收斂在底部來源摘要，避免重複資訊干擾閱讀。</p>
       <div class="meta-row">
         <span>產生時間：{esc(generated_at)}</span>
         <span>來源數：{total}</span>
@@ -806,19 +867,38 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     </header>
     <section class="dashboard">
       <div class="panel">
-        <h2>情緒概況</h2>
-        <div class="kpi-grid">
-          <div class="kpi"><div class="kpi-label">偏多</div><div class="kpi-value">{pct(sentiment_counts.get("bullish", 0))}</div></div>
-          <div class="kpi"><div class="kpi-label">偏空</div><div class="kpi-value">{pct(sentiment_counts.get("bearish", 0))}</div></div>
-          <div class="kpi"><div class="kpi-label">中性</div><div class="kpi-value">{sentiment_counts.get("neutral", 0)}</div></div>
-          <div class="kpi"><div class="kpi-label">訊號</div><div class="kpi-value">{total}</div></div>
+        <h2>今日判讀</h2>
+        <div class="readout">
+          <div class="readout-card base">
+            <h3>主情境</h3>
+            <p>{esc(executive_preview)}</p>
+          </div>
+          <div class="readout-card watch">
+            <h3>要驗證</h3>
+            <p>{esc(operation_preview)}</p>
+          </div>
+          <div class="readout-card risk">
+            <h3>反向風險</h3>
+            <p>{esc(risk_preview)}</p>
+          </div>
+        </div>
+        <div class="signal-strip">
+          <div class="signal"><div class="signal-label">市場溫度</div><div class="signal-value">{market_temperature}</div><small>由來源情緒與文字風險判斷</small></div>
+          <div class="signal"><div class="signal-label">主要方向</div><div class="signal-value">{bullish_pct}% {direction_label}</div><small>偏多/偏空來源占比</small></div>
+          <div class="signal"><div class="signal-label">風險等級</div><div class="signal-value">{risk_level}</div><small>依風險關鍵詞輔助判斷</small></div>
         </div>
       </div>
       <div class="panel">
-        <h2>來源日期</h2>
-        <div class="source-cloud">{source_chips}</div>
-        <h2 style="margin-top:16px;">股票特別提及</h2>
+        <h2>主軸雷達</h2>
+        <div class="topic-cloud">
+          {topic_chips}
+        </div>
+        <h2 style="margin-top:18px;">股票特別提及</h2>
         <div class="stock-cloud">{stock_chips}</div>
+        <h2 style="margin-top:18px;">風險雷達</h2>
+        <div class="risk-cloud">
+          {risk_chips}
+        </div>
       </div>
     </section>
     <article class="content">{html_body}</article>

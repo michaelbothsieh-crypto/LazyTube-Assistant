@@ -24,6 +24,30 @@
     "rss_url": "https://feeds.soundon.fm/podcasts/d2aab16c-3a70-4023-b52b-e50f07852ecd.xml"
   },
   {
+    "kol_id": "manny_newsletter",
+    "label": "曼報",
+    "host": "Manny Li",
+    "avatar": "📝",
+    "color": "#2563eb",
+    "rss_url": "https://feed.firstory.me/rss/user/ckb7oop2y0yit0873vc36njil"
+  },
+  {
+    "kol_id": "miula_viewpoint",
+    "label": "M觀點 | 科技X商業X投資",
+    "host": "Miula",
+    "avatar": "💡",
+    "color": "#7c3aed",
+    "rss_url": "https://feeds.soundon.fm/podcasts/b8f5a471-f4f7-4763-9678-65887beda63a.xml"
+  },
+  {
+    "kol_id": "jenny_us_stock",
+    "label": "美股投資學-財女珍妮",
+    "host": "財女Jenny",
+    "avatar": "💎",
+    "color": "#db2777",
+    "rss_url": "https://feeds.soundon.fm/podcasts/4a8660a0-e0d0-490b-8d46-c28219606f47.xml"
+  },
+  {
     "kol_id": "billkitchen",
     "label": "比爾的財經廚房",
     "host": "楊比爾",
