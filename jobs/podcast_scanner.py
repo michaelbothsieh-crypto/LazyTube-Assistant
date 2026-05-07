@@ -544,7 +544,7 @@ def generate_daily_investment_html_report(items: list[dict]) -> str:
 <body>
   <main class="report">
     <header>
-      <div class="eyebrow">Daily Investment Brief</div>
+      <div class="eyebrow">每日投資晨報</div>
       <h1>每日 Podcast 投資統整</h1>
       <p class="subtitle">彙整近 {DAILY_DIGEST_LOOKBACK_DAYS} 天成功完成分析的 Podcast 與 RSS 來源，萃取市場情緒、焦點標的與逐集投資訊號。</p>
       <div class="meta">
@@ -611,11 +611,25 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     def stock_class(stock: str) -> str:
         return "tw" if re.match(r"^\d{4}$", stock) else "us"
 
+    def direction_summary() -> tuple[str, int, str]:
+        bullish_count = sentiment_counts.get("bullish", 0)
+        bearish_count = sentiment_counts.get("bearish", 0)
+        neutral_count = sentiment_counts.get("neutral", 0)
+        if total <= 0:
+            return "無明確", 0, "尚無可判讀的來源情緒"
+        if bullish_count == bearish_count and bullish_count > 0:
+            return "多空拉鋸", round(bullish_count / total * 100), "偏多與偏空來源相近"
+        if neutral_count >= bullish_count and neutral_count >= bearish_count:
+            return "中性觀望", round(neutral_count / total * 100), "中性來源占比最高"
+        if bullish_count > bearish_count:
+            return "偏多", round(bullish_count / total * 100), "偏多來源占比高於偏空"
+        return "偏空", round(bearish_count / total * 100), "偏空來源占比高於偏多"
+
     stock_chips = "\n".join(
         f"""
         <div class="chip {stock_class(stock)}">
           <span class="stock-code">{esc(stock)}</span>
-          <small>{len(sources)} sources</small>
+          <small>{len(sources)} 來源</small>
         </div>
         """
         for stock, sources in list(stock_sources.items())[:18]
@@ -627,7 +641,9 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
         text = match.group(1).strip() if match else fallback
         text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
         text = re.sub(r"^[\-\*\d.、\s]+", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$", "", text, flags=re.MULTILINE)
         text = re.sub(r"\|", " ", text)
+        text = re.sub(r"\s{2,}", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
         return text[:150] + ("..." if len(text) > 150 else "")
 
@@ -641,8 +657,17 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
 
     bullish_pct = round(sentiment_counts.get("bullish", 0) / total * 100) if total else 0
     bearish_pct = round(sentiment_counts.get("bearish", 0) / total * 100) if total else 0
-    market_temperature = "偏熱" if bullish_pct >= 60 else "偏冷" if bearish_pct >= 40 else "觀望"
-    direction_label = "偏多" if bullish_pct > bearish_pct else "偏空" if bearish_pct > bullish_pct else "中性"
+    neutral_pct = round(sentiment_counts.get("neutral", 0) / total * 100) if total else 0
+    market_temperature = (
+        "偏熱"
+        if bullish_pct >= 60
+        else "偏冷"
+        if bearish_pct >= 40
+        else "觀望"
+        if neutral_pct >= 50
+        else "分歧"
+    )
+    direction_label, direction_pct, direction_hint = direction_summary()
     risk_level = "中高" if any(word in markdown_report for word in ["槓桿", "泡沫", "通膨", "回檔", "估值"]) else "中"
     executive_preview = section_preview("執行摘要", "今日主要訊號請見下方完整報告。")
     operation_preview = section_preview("操作觀察", "後續追蹤指標請見下方操作觀察。")
@@ -856,9 +881,9 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
 <body>
   <main class="brief">
     <header>
-      <div class="eyebrow">Daily Investment Brief</div>
+      <div class="eyebrow">每日投資晨報</div>
       <h1>每日 Podcast 投資統整</h1>
-      <p class="subtitle">跨來源統整。頂部只保留今日判讀、主軸雷達、焦點股票與風險雷達；來源日期收斂在底部來源摘要，避免重複資訊干擾閱讀。</p>
+      <p class="subtitle">跨來源統整。頂部保留今日判讀、主軸雷達、焦點股票與風險雷達；來源日期收斂在底部來源摘要，避免重複資訊干擾閱讀。</p>
       <div class="meta-row">
         <span>產生時間：{esc(generated_at)}</span>
         <span>來源數：{total}</span>
@@ -884,7 +909,7 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
         </div>
         <div class="signal-strip">
           <div class="signal"><div class="signal-label">市場溫度</div><div class="signal-value">{market_temperature}</div><small>由來源情緒與文字風險判斷</small></div>
-          <div class="signal"><div class="signal-label">主要方向</div><div class="signal-value">{bullish_pct}% {direction_label}</div><small>偏多/偏空來源占比</small></div>
+          <div class="signal"><div class="signal-label">主要方向</div><div class="signal-value">{direction_pct}% {direction_label}</div><small>{esc(direction_hint)}</small></div>
           <div class="signal"><div class="signal-label">風險等級</div><div class="signal-value">{risk_level}</div><small>依風險關鍵詞輔助判斷</small></div>
         </div>
       </div>
@@ -912,7 +937,7 @@ def _daily_digest_nlm_prompt() -> str:
     return (
         "你是一位台灣市場投資研究總編輯。Notebook 中每個來源都是一集 Podcast 或一篇 RSS 文章"
         "產出的高保真逐字稿與投資小結。請跨所有來源整理一份完整的每日投資研究報告，"
-        "全程使用台灣繁體中文，語氣像投研晨報，不要寫成逐字稿摘要。\n\n"
+        "全程只使用台灣繁體中文，語氣像投研晨報，不要寫成逐字稿摘要。\n\n"
         "請輸出乾淨 Markdown，嚴格包含以下段落與格式：\n"
         "# 每日 Podcast 投資統整\n"
         "## 執行摘要\n"
@@ -929,6 +954,7 @@ def _daily_digest_nlm_prompt() -> str:
         "## 來源摘要\n"
         "用 bullet list 逐一列出每個來源，格式為 `來源名稱（YYYY-MM-DD）：一句話重點`，必須包含日期。\n\n"
         "重要規範：只能根據來源內容，不要自行補行情或價格。避免過度推論。"
+        "不得使用英文句子或簡體中文；公司英文名與股票代號可以保留。"
         "嚴禁包含思考過程，嚴禁使用 Markdown 加粗（** 或 __）。"
     )
 
@@ -975,6 +1001,14 @@ def _is_valid_daily_digest_report(report: str | None) -> bool:
         "Based on recent market signals",
     ]
     if any(phrase in text for phrase in leaked_process_phrases):
+        return False
+
+    simplified_only_chars = set(
+        "简体国证发财经观点风险汇总业绩个这为与后湾称际"
+        "实数据产导购价长门类机应链则线压"
+    )
+    simplified_count = sum(1 for char in text if char in simplified_only_chars)
+    if simplified_count >= 6:
         return False
 
     # The final report should be a Taiwanese Chinese research brief, not a short English draft.
@@ -1582,6 +1616,9 @@ def send_daily_investment_digest(items: list[dict], runner: NotebookRunner | Non
     if runner and _should_use_nlm_daily_digest():
         print("  🧠 使用多來源 AI 統整每日投資報告...")
         nlm_report = synthesize_daily_digest_with_nlm(runner, items)
+        if nlm_report and not _is_valid_daily_digest_report(nlm_report):
+            print("  ⚠️  每日統整 AI 輸出未通過送出前檢查，改用本機統整")
+            nlm_report = None
 
     html_content = (
         generate_daily_synthesized_html_report(nlm_report, items)

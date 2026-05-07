@@ -1,6 +1,41 @@
 import jobs.podcast_scanner as scanner
 
 
+def _valid_synthesized_report() -> str:
+    return (
+        "# 每日 Podcast 投資統整\n\n"
+        "## 執行摘要\n"
+        "今日多個來源共同指向 AI 伺服器、半導體供應鏈與雲端資本支出的延續性。"
+        "整體訊號偏向結構性需求仍在，但短線估值、財報預期與訂單驗證仍是主要變數。"
+        "台股供應鏈受惠於資料中心與先進封裝題材，美股大型科技股則需觀察資本支出是否持續。"
+        "記憶體與網通零組件被多個來源提及，顯示市場正在尋找 AI 主線以外的延伸受惠者。"
+        "不過，部分公司股價已反映樂觀假設，因此追價風險需要被獨立列入評估。"
+        "今天的投資含義不是全面追高，而是把供應鏈能見度、客戶集中度、庫存週期與財測可信度拆開檢查。"
+        "若後續來源持續出現同一批標的，代表資金共識正在形成；若只有單一來源提及，則應先視為觀察名單。\n\n"
+        "## 市場主軸\n"
+        "### AI 供應鏈延續\n"
+        "- 共識：資料中心需求仍是主要成長來源。\n"
+        "- 分歧：短線估值是否已過度反映。\n"
+        "- 投資含義：優先追蹤訂單與毛利率。\n\n"
+        "### 記憶體與高速傳輸\n"
+        "- 共識：雲端資本支出帶動高頻寬記憶體與光通訊需求。\n"
+        "- 分歧：價格循環是否已進入過熱階段。\n"
+        "- 投資含義：觀察供給擴張速度與客戶拉貨節奏。\n\n"
+        "## 焦點標的\n"
+        "| 標的代號/公司名 | 方向 | 提及來源 | 來源日期 | 講者觀點 | 風險 |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| NVDA | 偏多 | 節目 A | 2026-05-05 | AI 需求仍強 | 估值偏高 |\n\n"
+        "## 操作觀察\n"
+        "- 財報展望：觀察資料中心營收與毛利率是否延續。\n"
+        "- 訂單驗證：若供應鏈開始同步上修出貨與資本支出，偏多訊號可信度提高。\n"
+        "- 估值位置：若利多公布後股價無法續強，需留意短線資金轉向防守。\n\n"
+        "## 風險清單\n"
+        "- 估值風險：若財測不如預期，可能出現回檔。\n\n"
+        "## 來源摘要\n"
+        "- 節目 A（2026-05-05）：聚焦 AI 供應鏈需求與估值風險。"
+    )
+
+
 def test_build_daily_digest_dedupes_stocks_and_sources():
     items = [
         {
@@ -30,7 +65,8 @@ def test_build_daily_digest_dedupes_stocks_and_sources():
     assert "- 2330：節目 A" in report
     assert "偏多 1、中性 1、偏空 0" in report
     assert "<title>每日 Podcast 投資統整</title>" in html
-    assert "Daily Investment Brief" in html
+    assert "每日投資晨報" in html
+    assert "Daily Investment Brief" not in html
     assert "市場情緒分布" in html
     assert "焦點標的排行" in html
     assert "逐集投資訊號" in html
@@ -109,7 +145,7 @@ def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypat
     monkeypatch.setattr(
         scanner,
         "synthesize_daily_digest_with_nlm",
-        lambda runner, items: "# 每日 Podcast 投資統整\n\n## 執行摘要\n跨來源統整。",
+        lambda runner, items: _valid_synthesized_report(),
     )
 
     assert scanner.send_daily_investment_digest([
@@ -124,8 +160,10 @@ def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypat
         }
     ], runner=object())
 
-    assert "跨來源統整" in sent["html_content"]
+    assert "AI 伺服器" in sent["html_content"]
     assert "NotebookLM" not in sent["html_content"]
+    assert "Daily Investment Brief" not in sent["html_content"]
+    assert "sources" not in sent["html_content"]
     assert "今日判讀" in sent["html_content"]
     assert "主軸雷達" in sent["html_content"]
     assert "股票特別提及" in sent["html_content"]
@@ -178,40 +216,54 @@ def test_daily_digest_nlm_report_validation_rejects_short_english_draft():
 
 
 def test_daily_digest_nlm_report_validation_accepts_required_sections():
-    good_report = (
-        "# 每日 Podcast 投資統整\n\n"
-        "## 執行摘要\n"
-        "今日多個來源共同指向 AI 伺服器、半導體供應鏈與雲端資本支出的延續性。"
-        "整體訊號偏向結構性需求仍在，但短線估值、財報預期與訂單驗證仍是主要變數。"
-        "台股供應鏈受惠於資料中心與先進封裝題材，美股大型科技股則需觀察資本支出是否持續。"
-        "記憶體與網通零組件被多個來源提及，顯示市場正在尋找 AI 主線以外的延伸受惠者。"
-        "不過，部分公司股價已反映樂觀假設，因此追價風險需要被獨立列入評估。"
-        "今天的投資含義不是全面追高，而是把供應鏈能見度、客戶集中度、庫存週期與財測可信度拆開檢查。"
-        "若後續來源持續出現同一批標的，代表資金共識正在形成；若只有單一來源提及，則應先視為觀察名單。\n\n"
-        "## 市場主軸\n"
-        "### AI 供應鏈延續\n"
-        "- 共識：資料中心需求仍是主要成長來源。\n"
-        "- 分歧：短線估值是否已過度反映。\n"
-        "- 投資含義：優先追蹤訂單與毛利率。\n\n"
-        "### 記憶體與高速傳輸\n"
-        "- 共識：雲端資本支出帶動高頻寬記憶體與光通訊需求。\n"
-        "- 分歧：價格循環是否已進入過熱階段。\n"
-        "- 投資含義：觀察供給擴張速度與客戶拉貨節奏。\n\n"
-        "## 焦點標的\n"
-        "| 標的代號/公司名 | 方向 | 提及來源 | 來源日期 | 講者觀點 | 風險 |\n"
-        "| --- | --- | --- | --- | --- | --- |\n"
-        "| NVDA | 偏多 | 節目 A | 2026-05-05 | AI 需求仍強 | 估值偏高 |\n\n"
-        "## 操作觀察\n"
-        "- 財報展望：觀察資料中心營收與毛利率是否延續。\n\n"
-        "- 訂單驗證：若供應鏈開始同步上修出貨與資本支出，偏多訊號可信度提高。\n"
-        "- 估值位置：若利多公布後股價無法續強，需留意短線資金轉向防守。\n\n"
-        "## 風險清單\n"
-        "- 估值風險：若財測不如預期，可能出現回檔。\n\n"
-        "## 來源摘要\n"
-        "- 節目 A（2026-05-05）：聚焦 AI 供應鏈需求與估值風險。"
+    assert scanner._is_valid_daily_digest_report(_valid_synthesized_report())
+
+
+def test_daily_digest_nlm_report_validation_rejects_simplified_chinese():
+    simplified_report = _valid_synthesized_report().replace(
+        "財報展望：觀察資料中心營收與毛利率是否延續",
+        "财报展望：观察资料中心营收与毛利率是否延续，这个风险需要继续验证",
     )
 
-    assert scanner._is_valid_daily_digest_report(good_report)
+    assert not scanner._is_valid_daily_digest_report(simplified_report)
+
+
+def test_synthesized_report_uses_direction_percentage_for_dominant_sentiment():
+    html = scanner.generate_daily_synthesized_html_report(
+        _valid_synthesized_report(),
+        [
+            {
+                "label": "節目 A",
+                "title": "AI 伺服器需求",
+                "published": "2026-05-05",
+                "stocks": ["NVDA"],
+                "sentiment": "bearish",
+                "summary": "估值壓力升高。",
+            },
+            {
+                "label": "節目 B",
+                "title": "半導體觀察",
+                "published": "2026-05-05",
+                "stocks": ["NVDA"],
+                "sentiment": "bearish",
+                "summary": "等待財報驗證。",
+            },
+            {
+                "label": "節目 C",
+                "title": "資金觀察",
+                "published": "2026-05-05",
+                "stocks": ["NVDA"],
+                "sentiment": "neutral",
+                "summary": "等待財報驗證。",
+            },
+        ],
+    )
+
+    assert "67% 偏空" in html
+    assert "0% 偏空" not in html
+    assert "每日投資晨報" in html
+    assert "Daily Investment Brief" not in html
+    assert "3 來源" in html
 
 
 def test_podcast_prompt_uses_transcript_cache_namespace(monkeypatch):
