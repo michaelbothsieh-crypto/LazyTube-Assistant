@@ -264,6 +264,8 @@ def test_synthesized_report_uses_direction_percentage_for_dominant_sentiment():
     assert "每日投資晨報" in html
     assert "Daily Investment Brief" not in html
     assert "3 來源" in html
+    assert "min-width: 1040px" in html
+    assert "table-layout: auto" in html
 
 
 def test_podcast_prompt_uses_transcript_cache_namespace(monkeypatch):

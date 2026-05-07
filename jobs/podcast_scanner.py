@@ -837,6 +837,7 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     .content li {{ margin-bottom: 8px; }}
     .content table {{
       width: 100%;
+      min-width: 1040px;
       border-collapse: separate;
       border-spacing: 0;
       margin: 12px 0 22px;
@@ -844,17 +845,24 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
       border-radius: 8px;
       overflow: hidden;
       font-size: .86rem;
-      table-layout: fixed;
+      table-layout: auto;
     }}
-    .content th, .content td {{ padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }}
+    .content th, .content td {{
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }}
     .content th {{ background: #f8fafc; color: var(--muted); font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; }}
     .content tr:last-child td {{ border-bottom: none; }}
-    .content th:nth-child(1), .content td:nth-child(1) {{ width: 13%; min-width: 112px; }}
-    .content th:nth-child(2), .content td:nth-child(2) {{ width: 7%; min-width: 68px; text-align: center; white-space: nowrap; }}
-    .content th:nth-child(3), .content td:nth-child(3) {{ width: 18%; }}
-    .content th:nth-child(4), .content td:nth-child(4) {{ width: 9%; min-width: 92px; white-space: nowrap; }}
-    .content th:nth-child(5), .content td:nth-child(5) {{ width: 33%; }}
-    .content th:nth-child(6), .content td:nth-child(6) {{ width: 20%; }}
+    .content th:nth-child(1), .content td:nth-child(1) {{ width: 150px; min-width: 150px; }}
+    .content th:nth-child(2), .content td:nth-child(2) {{ width: 74px; min-width: 74px; text-align: center; }}
+    .content th:nth-child(3), .content td:nth-child(3) {{ width: 180px; min-width: 180px; }}
+    .content th:nth-child(4), .content td:nth-child(4) {{ width: 170px; min-width: 170px; }}
+    .content th:nth-child(5), .content td:nth-child(5) {{ width: 300px; min-width: 300px; }}
+    .content th:nth-child(6), .content td:nth-child(6) {{ width: 220px; min-width: 220px; }}
     .ticker-highlight {{
       display: inline-flex;
       align-items: center;
