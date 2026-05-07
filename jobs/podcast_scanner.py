@@ -945,6 +945,44 @@ def _daily_digest_source_text(item: dict) -> str:
     )
 
 
+def _is_valid_daily_digest_report(report: str | None) -> bool:
+    if not report:
+        return False
+
+    text = report.strip()
+    required_sections = [
+        "# 每日 Podcast 投資統整",
+        "## 執行摘要",
+        "## 市場主軸",
+        "## 焦點標的",
+        "## 操作觀察",
+        "## 風險清單",
+        "## 來源摘要",
+    ]
+    if not all(section in text for section in required_sections):
+        return False
+
+    if len(text) < 600:
+        return False
+
+    leaked_process_phrases = [
+        "I'm now",
+        "I am now",
+        "I will",
+        "Evaluating ",
+        "Analyzing ",
+        "Let's ",
+        "Based on recent market signals",
+    ]
+    if any(phrase in text for phrase in leaked_process_phrases):
+        return False
+
+    # The final report should be a Taiwanese Chinese research brief, not a short English draft.
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
+    latin_words = len(re.findall(r"\b[A-Za-z]{4,}\b", text))
+    return chinese_chars >= 120 and chinese_chars >= latin_words
+
+
 def synthesize_daily_digest_with_nlm(runner: NotebookRunner, items: list[dict]) -> str | None:
     if not items:
         return None
@@ -983,6 +1021,9 @@ def synthesize_daily_digest_with_nlm(runner: NotebookRunner, items: list[dict]) 
                 print("  ⚠️  每日統整 AI query 失敗，改用本機統整")
                 return None
             report = parse_query_output(query.stdout)
+            if not _is_valid_daily_digest_report(report):
+                print("  ⚠️  每日統整 AI 輸出格式不完整或混入草稿，改用本機統整")
+                return None
             return report or None
         finally:
             for temp_path in temp_paths:
