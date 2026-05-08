@@ -131,6 +131,52 @@ def test_send_daily_digest_uses_research_style_report_link(monkeypatch):
     assert "完整統整請點開" not in sent["caption"]
 
 
+def test_send_daily_digest_publishes_latest_brief_index(monkeypatch):
+    sent = {}
+    redis_write = {}
+
+    class FakeResponse:
+        status_code = 200
+
+    def fake_post(url, json, headers, timeout):
+        redis_write["url"] = url
+        redis_write["json"] = json
+        redis_write["headers"] = headers
+        redis_write["timeout"] = timeout
+        return FakeResponse()
+
+    def fake_send_cached_report_link(cls, chat_id, proxy_url, caption):
+        sent["chat_id"] = chat_id
+        sent["proxy_url"] = proxy_url
+        sent["caption"] = caption
+        return True
+
+    monkeypatch.setattr(scanner.Config, "TG_CHAT_ID", "123")
+    monkeypatch.setattr(scanner.Config, "REDIS_URL", "https://example.upstash.io")
+    monkeypatch.setattr(scanner.Config, "REDIS_TOKEN", "token")
+    monkeypatch.setattr(scanner.Notifier, "cache_html_to_redis", classmethod(lambda cls, html: "https://lazy-tube-assistant.vercel.app/api/report-proxy?id=abcd1234"))
+    monkeypatch.setattr(scanner.Notifier, "send_cached_report_link", classmethod(fake_send_cached_report_link))
+    monkeypatch.setattr(scanner.requests, "post", fake_post)
+
+    assert scanner.send_daily_investment_digest([
+        {
+            "label": "節目 A",
+            "title": "AI 伺服器需求",
+            "published": "2026-05-05",
+            "stocks": ["NVDA", "2330"],
+            "sentiment": "bullish",
+            "summary": "資料中心需求仍強，台積電與輝達供應鏈持續受惠。",
+        }
+    ])
+
+    assert sent["proxy_url"].endswith("id=abcd1234")
+    assert redis_write["json"][0] == "SET"
+    assert redis_write["json"][1] == scanner.DAILY_BRIEF_REDIS_KEY
+    assert "資料中心需求仍強" in redis_write["json"][2]
+    assert "NVDA" in redis_write["json"][2]
+    assert "2330" in redis_write["json"][2]
+
+
 def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypatch):
     sent = {}
 

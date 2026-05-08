@@ -93,6 +93,97 @@ a {
   font-size: 0.92rem;
 }
 
+.daily-brief-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(201, 244, 92, 0.11), rgba(98, 221, 255, 0.08)),
+    rgba(13, 17, 24, 0.9);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+}
+
+.daily-brief-copy {
+  min-width: 0;
+}
+
+.daily-brief-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 4px;
+}
+
+.daily-brief-title-row h2 {
+  margin: 0;
+  font-size: 1.22rem;
+  line-height: 1.2;
+}
+
+.daily-brief-title-row time {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.daily-brief-banner p {
+  display: -webkit-box;
+  max-width: 860px;
+  margin: 9px 0 0;
+  overflow: hidden;
+  color: var(--soft);
+  line-height: 1.58;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.daily-brief-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.daily-brief-meta b {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(98, 221, 255, 0.34);
+  border-radius: 999px;
+  color: var(--cyan);
+  background: rgba(98, 221, 255, 0.08);
+  font-size: 0.78rem;
+}
+
+.daily-brief-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(201, 244, 92, 0.38);
+  border-radius: 8px;
+  background: rgba(201, 244, 92, 0.12);
+  color: var(--lime);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.daily-brief-open:hover {
+  border-color: rgba(201, 244, 92, 0.68);
+  background: rgba(201, 244, 92, 0.18);
+}
+
 .research-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -934,6 +1025,7 @@ a {
 
   .research-grid,
   .decision-board,
+  .daily-brief-banner,
   .research-header,
   .kol-marquee,
   .detail-report-header {
@@ -953,6 +1045,10 @@ a {
 
   .research-nav > div {
     display: none;
+  }
+
+  .daily-brief-open {
+    width: 100%;
   }
 
   .detail-report-nav > div {

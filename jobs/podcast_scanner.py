@@ -11,13 +11,14 @@ podcast_scanner.py — 每日定時掃描 Podcast RSS，上傳 NLM 取得財經�
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import feedparser
@@ -58,6 +59,7 @@ MAX_DAILY_FEED_ITEMS = int(os.environ.get("PODCAST_MAX_DAILY_FEED_ITEMS", "12"))
 DAILY_FRESHNESS_DAYS = int(os.environ.get("PODCAST_DAILY_FRESHNESS_DAYS", "2"))
 DAILY_DIGEST_LOOKBACK_DAYS = int(os.environ.get("PODCAST_DAILY_DIGEST_LOOKBACK_DAYS", "1"))
 DAILY_DIGEST_MIN_ITEMS = int(os.environ.get("PODCAST_DAILY_DIGEST_MIN_ITEMS", "5"))
+DAILY_BRIEF_REDIS_KEY = "daily_podcast_brief_latest"
 DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
@@ -413,6 +415,62 @@ def build_daily_investment_digest_caption(items: list[dict]) -> str:
         f"焦點標的：{top_stocks}\n\n"
         f"{first_summary}"
     )
+
+
+def _plain_daily_preview(text: str, max_length: int = 220) -> str:
+    preview = re.sub(r"<[^>]+>", " ", str(text or ""))
+    preview = re.sub(r"^[#*\-\s]+", "", preview, flags=re.MULTILINE)
+    preview = re.sub(r"\s+", " ", preview).strip()
+    if len(preview) <= max_length:
+        return preview
+    return preview[: max_length - 3].rstrip() + "..."
+
+
+def _extract_markdown_section(markdown: str, section_title: str) -> str:
+    if not markdown:
+        return ""
+    pattern = rf"##\s+{re.escape(section_title)}\s*([\s\S]*?)(?=\n##\s+|\Z)"
+    match = re.search(pattern, markdown)
+    return match.group(1).strip() if match else ""
+
+
+def build_daily_brief_preview(nlm_report: str | None, fallback_report: str, items: list[dict]) -> str:
+    executive_summary = _extract_markdown_section(nlm_report or "", "執行摘要")
+    if executive_summary:
+        return _plain_daily_preview(executive_summary)
+
+    first_summary = next((item.get("summary") for item in items if item.get("summary")), "")
+    return _plain_daily_preview(first_summary or fallback_report)
+
+
+def publish_daily_brief_index(report_url: str, preview: str, items: list[dict]) -> bool:
+    if not report_url or not Config.REDIS_URL or not Config.REDIS_TOKEN:
+        return False
+
+    _, stock_sources = _daily_digest_metrics(items)
+    payload = {
+        "title": "每日 Podcast 投資統整",
+        "report_url": report_url,
+        "preview": preview,
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "source_count": len(items),
+        "stock_count": len(stock_sources),
+        "top_stocks": list(stock_sources.keys())[:8],
+    }
+    headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
+    try:
+        response = requests.post(
+            Config.REDIS_URL,
+            json=["SET", DAILY_BRIEF_REDIS_KEY, json.dumps(payload, ensure_ascii=False), "EX", str(Config.REDIS_HTML_TTL)],
+            headers=headers,
+            timeout=20,
+        )
+        if response.status_code == 200:
+            return True
+        print(f"  ⚠️  每日簡報索引寫入失敗：HTTP {response.status_code}")
+    except Exception as exc:
+        print(f"  ⚠️  每日簡報索引寫入失敗：{exc}")
+    return False
 
 
 def generate_daily_investment_html_report(items: list[dict]) -> str:
@@ -1635,6 +1693,15 @@ def send_daily_investment_digest(items: list[dict], runner: NotebookRunner | Non
     )
     caption = build_daily_investment_digest_caption(items)
     print("  📤 推送每日 Podcast 投資統整報告...")
+    report_url = Notifier.cache_html_to_redis(html_content)
+    if report_url:
+        preview = build_daily_brief_preview(nlm_report, fallback_report, items)
+        if publish_daily_brief_index(report_url, preview, items):
+            print("  ✅ 已更新網站每日簡報入口")
+        if Notifier.send_cached_report_link(target_chat, report_url, caption):
+            print("  ✅ 每日統整報告推送成功")
+            return True
+
     if Notifier.send_report_link(target_chat, html_content, caption):
         print("  ✅ 每日統整報告推送成功")
         return True

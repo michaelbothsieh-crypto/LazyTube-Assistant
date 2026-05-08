@@ -63,9 +63,20 @@ export interface ConsensusHistory {
   sentiment_bullish: number
 }
 
+export interface DailyBrief {
+  title: string
+  report_url: string
+  preview: string
+  generated_at: string
+  source_count: number
+  stock_count: number
+  top_stocks: string[]
+}
+
 export interface ConsensusData {
   generated_at: string
   date: string
+  daily_brief: DailyBrief | null
   episodes_analyzed: number
   consensus: {
     stocks: Stock[]

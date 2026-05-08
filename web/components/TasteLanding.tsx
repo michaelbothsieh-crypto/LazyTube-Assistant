@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import type { ConsensusData, Episode } from '@/types'
-import { Activity, ChevronRight, Minus, TrendDown, TrendUp, Users } from '@/components/icons'
+import type { ConsensusData, DailyBrief, Episode } from '@/types'
+import { Activity, ChevronRight, ExternalLink, Minus, TrendDown, TrendUp, Users } from '@/components/icons'
 
 type TasteLandingProps = {
   data: ConsensusData
@@ -33,12 +33,14 @@ const ignoredTickers = new Set(['GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'N
 function formatDateTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-TW', {
+  const parts = new Intl.DateTimeFormat('zh-TW', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date)
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ''
+  return `${part('month')}/${part('day')} ${part('dayPeriod')}${part('hour')}:${part('minute')}`
 }
 
 function dominantSentiment(data: ConsensusData) {
@@ -70,6 +72,35 @@ function formatOutlook(episode: Episode) {
   const tickers = episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).slice(0, 3)
   if (!tickers.length) return '觀察敘事是否擴散到更多來源。'
   return `留意 ${tickers.join(' / ')} 的催化、估值與供應鏈驗證。`
+}
+
+function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
+  const hasMeta = brief.source_count > 0 || brief.stock_count > 0
+
+  return (
+    <section className="daily-brief-banner" aria-label="Daily podcast investment brief">
+      <div className="daily-brief-copy">
+        <span className="eyebrow">每日簡報</span>
+        <div className="daily-brief-title-row">
+          <h2>{brief.title}</h2>
+          {brief.generated_at && <time>{formatDateTime(brief.generated_at)}</time>}
+        </div>
+        <p>{brief.preview}</p>
+        <div className="daily-brief-meta" aria-label="Daily brief metadata">
+          {hasMeta && (
+            <span>{brief.source_count} 來源 / {brief.stock_count} 標的</span>
+          )}
+          {brief.top_stocks.map((ticker) => (
+            <b key={ticker}>{ticker}</b>
+          ))}
+        </div>
+      </div>
+      <a className="daily-brief-open" href={brief.report_url} target="_blank" rel="noopener noreferrer">
+        查看完整 HTML
+        <ExternalLink size={16} />
+      </a>
+    </section>
+  )
 }
 
 export default function TasteLanding({ data }: TasteLandingProps) {
@@ -110,6 +141,8 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <a href="#automation">自動化</a>
         </div>
       </nav>
+
+      {data.daily_brief && <DailyBriefBanner brief={data.daily_brief} />}
 
       <section className="research-header">
         <div>

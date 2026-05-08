@@ -1,7 +1,9 @@
 import { neon } from '@neondatabase/serverless'
 import { unstable_cache } from 'next/cache'
 import fallbackLatest from '@/data/latest.json'
-import type { ConsensusData, ConsensusHistory, DailySignal, Episode, JobRun, Stock } from '@/types'
+import type { ConsensusData, ConsensusHistory, DailyBrief, DailySignal, Episode, JobRun, Stock } from '@/types'
+
+const DAILY_BRIEF_REDIS_KEY = 'daily_podcast_brief_latest'
 
 const configuredKolFallbacks: Record<string, Pick<Episode, 'kol_name' | 'host' | 'avatar' | 'color'>> = {
   gooaye: { kol_name: '股癌 Podcast', host: '謝孟恭', avatar: '', color: '#4f8cff' },
@@ -35,8 +37,12 @@ function sql() {
 export const getLatestData = _getLatestData
 
 async function _getLatestData(): Promise<ConsensusData> {
+  const dailyBrief = await getLatestDailyBrief()
   const db = sql()
-  if (!db) return fallbackConsensusData()
+  if (!db) {
+    const fallback = fallbackConsensusData()
+    return { ...fallback, daily_brief: dailyBrief ?? fallback.daily_brief }
+  }
 
   try {
     const [consensus] = await db`
@@ -47,7 +53,7 @@ async function _getLatestData(): Promise<ConsensusData> {
       LIMIT 1
     `
 
-    if (!consensus) return emptyConsensusData()
+    if (!consensus) return { ...emptyConsensusData(), daily_brief: dailyBrief }
 
     const latestDateValue = consensus.date instanceof Date ? consensus.date : new Date(String(consensus.date))
     const latestDate: string = consensus.date instanceof Date
@@ -155,9 +161,56 @@ async function _getLatestData(): Promise<ConsensusData> {
       consensus_history: [...history].reverse().map(mapHistoryRow),
       signals: signals.map(mapSignalRow),
       automation: automationFromRun(runs[0]),
+      daily_brief: dailyBrief,
     }
   } catch {
-    return fallbackConsensusData()
+    const fallback = fallbackConsensusData()
+    return { ...fallback, daily_brief: dailyBrief ?? fallback.daily_brief }
+  }
+}
+
+async function getLatestDailyBrief(): Promise<DailyBrief | null> {
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!redisUrl || !redisToken) return null
+
+  try {
+    const response = await fetch(redisUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${redisToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(['GET', DAILY_BRIEF_REDIS_KEY]),
+      next: { revalidate: 300 },
+    })
+    if (!response.ok) return null
+    const data = await response.json() as { result?: unknown }
+    const raw = typeof data.result === 'string' ? data.result : ''
+    if (!raw) return null
+    return normalizeDailyBrief(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+function normalizeDailyBrief(value: unknown): DailyBrief | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const reportUrl = String(record.report_url ?? '')
+  const preview = String(record.preview ?? '').trim()
+  if (!reportUrl || !preview) return null
+
+  return {
+    title: String(record.title ?? '每日 Podcast 投資統整'),
+    report_url: reportUrl,
+    preview,
+    generated_at: String(record.generated_at ?? ''),
+    source_count: Number(record.source_count ?? 0),
+    stock_count: Number(record.stock_count ?? 0),
+    top_stocks: Array.isArray(record.top_stocks)
+      ? record.top_stocks.map((stock) => String(stock)).filter(Boolean).slice(0, 8)
+      : [],
   }
 }
 
@@ -421,6 +474,7 @@ function emptyConsensusData(): ConsensusData {
     consensus_history: [],
     signals: [],
     automation: { latest_run: null, completeness_pct: 0 },
+    daily_brief: null,
   }
 }
 
@@ -441,6 +495,7 @@ function fallbackConsensusData(): ConsensusData {
     consensus_history: data.consensus_history ?? [],
     signals: data.signals ?? [],
     automation: data.automation ?? { latest_run: null, completeness_pct: 0 },
+    daily_brief: data.daily_brief ?? null,
   }
 }
 

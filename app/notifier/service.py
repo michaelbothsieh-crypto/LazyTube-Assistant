@@ -167,7 +167,31 @@ class Notifier:
         proxy_url = cls.cache_html_to_redis(html_content)
         if not proxy_url:
             return False
+        return cls.send_cached_report_link(
+            chat_id,
+            proxy_url,
+            caption,
+            label=label,
+            title=title,
+            ep_date=ep_date,
+            preview=preview,
+        )
 
+    @classmethod
+    def send_cached_report_link(
+        cls,
+        chat_id: str,
+        proxy_url: str,
+        caption: str,
+        *,
+        label: str = "",
+        title: str = "",
+        ep_date: str = "",
+        preview: str = "",
+    ) -> bool:
+        """發送已快取好的 HTML 報告連結。"""
+        if not proxy_url:
+            return False
         # 組純文字 caption（podcast 傳入欄位 / research 直接傳 caption）
         if label or title:
             # 清理標題：移除腳注符號 [1]、【】等避免混淆
