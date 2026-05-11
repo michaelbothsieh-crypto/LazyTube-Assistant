@@ -175,6 +175,40 @@ def test_send_daily_digest_publishes_latest_brief_index(monkeypatch):
     assert "資料中心需求仍強" in redis_write["json"][2]
     assert "NVDA" in redis_write["json"][2]
     assert "2330" in redis_write["json"][2]
+    assert "sentiment_distribution" in redis_write["json"][2]
+    assert "watchpoints" in redis_write["json"][2]
+
+
+def test_daily_brief_payload_extracts_research_structure():
+    payload = scanner.build_daily_brief_payload(
+        "https://example.com/report",
+        "AI 供應鏈仍是今日主軸。",
+        [
+            {
+                "label": "節目 A",
+                "title": "AI 伺服器需求",
+                "published": "2026-05-05",
+                "stocks": ["NVDA", "2330"],
+                "sentiment": "bullish",
+                "summary": "資料中心需求仍強。",
+            },
+            {
+                "label": "節目 B",
+                "title": "估值觀察",
+                "published": "2026-05-05",
+                "stocks": ["NVDA"],
+                "sentiment": "neutral",
+                "summary": "短線估值需要財報驗證。",
+            },
+        ],
+        _valid_synthesized_report(),
+    )
+
+    assert payload["themes"] == ["AI 供應鏈延續", "記憶體與高速傳輸"]
+    assert payload["sentiment_distribution"] == {"bullish": 1, "neutral": 1, "bearish": 0}
+    assert payload["top_stocks"] == ["NVDA", "2330"]
+    assert payload["watchpoints"]
+    assert payload["risk_flags"]
 
 
 def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypatch):

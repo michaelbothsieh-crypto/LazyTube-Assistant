@@ -201,17 +201,31 @@ function normalizeDailyBrief(value: unknown): DailyBrief | null {
   const reportUrl = String(record.report_url ?? '')
   const preview = String(record.preview ?? '').trim()
   if (!reportUrl || !preview) return null
+  const arrayOfStrings = (input: unknown, limit = 8): string[] => Array.isArray(input)
+    ? input.map((item) => String(item)).filter(Boolean).slice(0, limit)
+    : []
+  const sentiment = record.sentiment_distribution && typeof record.sentiment_distribution === 'object'
+    ? record.sentiment_distribution as Record<string, unknown>
+    : {}
 
   return {
     title: String(record.title ?? '每日 Podcast 投資統整'),
     report_url: reportUrl,
     preview,
+    thesis: String(record.thesis ?? preview),
     generated_at: String(record.generated_at ?? ''),
     source_count: Number(record.source_count ?? 0),
     stock_count: Number(record.stock_count ?? 0),
-    top_stocks: Array.isArray(record.top_stocks)
-      ? record.top_stocks.map((stock) => String(stock)).filter(Boolean).slice(0, 8)
-      : [],
+    top_stocks: arrayOfStrings(record.top_stocks),
+    sentiment_distribution: {
+      bullish: Number(sentiment.bullish ?? 0),
+      neutral: Number(sentiment.neutral ?? 0),
+      bearish: Number(sentiment.bearish ?? 0),
+    },
+    themes: arrayOfStrings(record.themes, 3),
+    watchpoints: arrayOfStrings(record.watchpoints, 3),
+    risk_flags: arrayOfStrings(record.risk_flags, 3),
+    source_labels: arrayOfStrings(record.source_labels),
   }
 }
 

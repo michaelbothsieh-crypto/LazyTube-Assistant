@@ -70,6 +70,10 @@ function formatOutlook(episode: Episode) {
 
 function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
   const hasMeta = brief.source_count > 0 || brief.stock_count > 0
+  const thesis = brief.thesis || brief.preview
+  const themes = brief.themes?.length ? brief.themes : brief.top_stocks.slice(0, 3)
+  const watchpoints = brief.watchpoints?.length ? brief.watchpoints : [brief.preview]
+  const riskFlags = brief.risk_flags?.length ? brief.risk_flags : ['檢查來源共識是否被後續財報、估值與籌碼驗證。']
 
   return (
     <section className="daily-brief-banner" aria-label="Daily podcast investment brief">
@@ -79,7 +83,7 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
           <h2>{brief.title}</h2>
           {brief.generated_at && <time>{formatDateTime(brief.generated_at)}</time>}
         </div>
-        <p>{brief.preview}</p>
+        <p>{thesis}</p>
         <div className="daily-brief-meta" aria-label="Daily brief metadata">
           {hasMeta && (
             <span>{brief.source_count} 來源 / {brief.stock_count} 標的</span>
@@ -89,10 +93,25 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
           ))}
         </div>
       </div>
-      <a className="daily-brief-open" href={brief.report_url} target="_blank" rel="noopener noreferrer">
-        查看完整 HTML
-        <ExternalLink size={16} />
-      </a>
+      <div className="daily-brief-research">
+        <div>
+          <span>主軸</span>
+          <strong>{themes[0] || '等待主軸'}</strong>
+          <small>{themes.slice(1).join(' / ') || '跨來源共識整理'}</small>
+        </div>
+        <div>
+          <span>驗證</span>
+          <strong>{watchpoints[0]}</strong>
+        </div>
+        <div>
+          <span>風險</span>
+          <strong>{riskFlags[0]}</strong>
+        </div>
+        <a className="daily-brief-open" href={brief.report_url} target="_blank" rel="noopener noreferrer">
+          完整 HTML
+          <ExternalLink size={16} />
+        </a>
+      </div>
     </section>
   )
 }
@@ -122,9 +141,20 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const marketCallDetail = hasEffectiveSamples
     ? `${data.episodes_analyzed} 集有效樣本 / 共識分數 ${data.consensus.consensus_score}`
     : '等待 Podcast scanner 寫入有效樣本'
+  const dailyBriefThesis = data.daily_brief?.thesis || data.daily_brief?.preview
   const marketCallText = strongestSignal
     ? `${strongestSignal.ticker} / ${strongestSignal.name} 是今日最高信心訊號，${strongestSignal.source_count} 個來源共同指向${sentimentTone[strongestSignal.direction].label}。`
     : data.consensus.weekly_theme || '等待今日 KOL 語言訊號寫入。'
+  const boardThesis = dailyBriefThesis || marketCallText
+  const dailyThemes = data.daily_brief?.themes?.length
+    ? data.daily_brief.themes
+    : topStocks.slice(0, 3).map((stock) => `${stock.ticker} ${stock.name}`)
+  const dailyWatchpoints = data.daily_brief?.watchpoints?.length
+    ? data.daily_brief.watchpoints
+    : [marketCallText]
+  const dailyRiskFlags = data.daily_brief?.risk_flags?.length
+    ? data.daily_brief.risk_flags
+    : [bearishSignal ? formatSignalThesis(bearishSignal) : '目前未偵測到高信心偏空訊號。']
 
   const coverageText = useMemo(() => {
     if (!latestRun) return '尚未取得最新自動化執行紀錄'
@@ -149,7 +179,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           <p className="eyebrow">Daily decision brief</p>
           <h1>今日 KOL 語言共識：{directionTone.label}</h1>
           <p>
-            {marketCallText}
+            {boardThesis}
           </p>
           <div className="market-pulse" aria-label="Market pulse">
             <span>今日脈搏</span>
@@ -242,19 +272,19 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           </div>
           <div className="risk-list">
             <div>
-              <span>反向訊號</span>
-              <strong>{bearishSignal ? readableTicker(bearishSignal.ticker) : '尚無'}</strong>
-              <p>{bearishSignal ? formatSignalThesis(bearishSignal) : '目前未偵測到高信心偏空訊號。'}</p>
+              <span>主軸</span>
+              <strong>{dailyThemes[0] || '尚無'}</strong>
+              <p>{dailyThemes.slice(1).join(' / ') || data.consensus.weekly_theme || '等待更多來源形成主軸。'}</p>
             </div>
             <div>
-              <span>擁擠標的</span>
-              <strong>{crowdedStock ? crowdedStock.ticker : '尚無'}</strong>
-              <p>{crowdedStock ? `${crowdedStock.mentions} 次提及，方向為 ${sentimentTone[crowdedStock.sentiment].label}。` : '尚無標的熱度資料。'}</p>
+              <span>驗證</span>
+              <strong>{crowdedStock ? readableTicker(crowdedStock.ticker) : '觀察'}</strong>
+              <p>{dailyWatchpoints[0] || '追蹤標的熱度是否延續到更多來源。'}</p>
             </div>
             <div>
-              <span>資料覆蓋</span>
-              <strong>{data.automation.completeness_pct}%</strong>
-              <p>{coverageText}</p>
+              <span>風險</span>
+              <strong>{bearishSignal ? readableTicker(bearishSignal.ticker) : `${data.automation.completeness_pct}%`}</strong>
+              <p>{dailyRiskFlags[0] || coverageText}</p>
             </div>
           </div>
         </aside>

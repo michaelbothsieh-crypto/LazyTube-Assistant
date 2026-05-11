@@ -95,7 +95,7 @@ a {
 
 .daily-brief-banner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.52fr);
   align-items: center;
   gap: 18px;
   margin-top: 14px;
@@ -182,6 +182,50 @@ a {
 .daily-brief-open:hover {
   border-color: rgba(201, 244, 92, 0.68);
   background: rgba(201, 244, 92, 0.18);
+}
+
+.daily-brief-research {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.daily-brief-research > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.daily-brief-research span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.daily-brief-research strong,
+.daily-brief-research small {
+  min-width: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.daily-brief-research strong {
+  color: var(--text);
+  line-height: 1.32;
+  -webkit-line-clamp: 2;
+}
+
+.daily-brief-research small {
+  color: var(--soft);
+  line-height: 1.28;
+  -webkit-line-clamp: 1;
 }
 
 .overview-section {
@@ -813,7 +857,11 @@ a {
 }
 
 .panel-large {
-  min-height: 360px;
+  min-height: auto;
+}
+
+.signal-workspace .panel-large {
+  min-height: 0;
 }
 
 .panel-head {

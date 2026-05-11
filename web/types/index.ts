@@ -67,10 +67,16 @@ export interface DailyBrief {
   title: string
   report_url: string
   preview: string
+  thesis: string
   generated_at: string
   source_count: number
   stock_count: number
   top_stocks: string[]
+  sentiment_distribution: { bullish: number; bearish: number; neutral: number }
+  themes: string[]
+  watchpoints: string[]
+  risk_flags: string[]
+  source_labels: string[]
 }
 
 export interface ConsensusData {

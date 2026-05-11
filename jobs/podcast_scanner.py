@@ -443,20 +443,92 @@ def build_daily_brief_preview(nlm_report: str | None, fallback_report: str, item
     return _plain_daily_preview(first_summary or fallback_report)
 
 
-def publish_daily_brief_index(report_url: str, preview: str, items: list[dict]) -> bool:
-    if not report_url or not Config.REDIS_URL or not Config.REDIS_TOKEN:
-        return False
+def _extract_markdown_bullets(markdown: str, section_title: str, limit: int = 3) -> list[str]:
+    section = _extract_markdown_section(markdown, section_title)
+    if not section:
+        return []
+    bullets: list[str] = []
+    for line in section.splitlines():
+        cleaned = re.sub(r"^\s*(?:[-*]|\d+[.、])\s*", "", line).strip()
+        cleaned = re.sub(r"^#+\s*", "", cleaned).strip()
+        if not cleaned or cleaned.startswith("|") or set(cleaned) <= {"-", ":", " "}:
+            continue
+        bullets.append(_plain_daily_preview(cleaned, 92))
+        if len(bullets) >= limit:
+            break
+    return bullets
 
-    _, stock_sources = _daily_digest_metrics(items)
-    payload = {
+
+def _extract_market_theme_titles(markdown: str, limit: int = 3) -> list[str]:
+    section = _extract_markdown_section(markdown, "市場主軸")
+    titles = [
+        match.group(1).strip()
+        for match in re.finditer(r"^###\s+(.+)$", section, flags=re.MULTILINE)
+    ]
+    return titles[:limit]
+
+
+def build_daily_brief_payload(
+    report_url: str,
+    preview: str,
+    items: list[dict],
+    report_markdown: str | None = None,
+) -> dict:
+    sentiment_counts, stock_sources = _daily_digest_metrics(items)
+    report_markdown = report_markdown or ""
+    themes = _extract_market_theme_titles(report_markdown)
+    if not themes:
+        themes = list(stock_sources.keys())[:3]
+
+    watchpoints = _extract_markdown_bullets(report_markdown, "操作觀察")
+    if not watchpoints:
+        watchpoints = [
+            _plain_daily_preview(item.get("summary", ""), 92)
+            for item in items
+            if item.get("summary")
+        ][:3]
+
+    risk_flags = _extract_markdown_bullets(report_markdown, "風險清單")
+    if not risk_flags:
+        risk_flags = ["追蹤估值、財報與來源共識是否被後續資料驗證。"]
+
+    source_labels = []
+    for item in items:
+        label = str(item.get("label") or "Podcast")
+        if label not in source_labels:
+            source_labels.append(label)
+
+    return {
         "title": "每日 Podcast 投資統整",
         "report_url": report_url,
         "preview": preview,
+        "thesis": _plain_daily_preview(preview, 150),
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "source_count": len(items),
         "stock_count": len(stock_sources),
         "top_stocks": list(stock_sources.keys())[:8],
+        "sentiment_distribution": {
+            "bullish": sentiment_counts.get("bullish", 0),
+            "neutral": sentiment_counts.get("neutral", 0),
+            "bearish": sentiment_counts.get("bearish", 0),
+        },
+        "themes": themes[:3],
+        "watchpoints": watchpoints[:3],
+        "risk_flags": risk_flags[:3],
+        "source_labels": source_labels[:8],
     }
+
+
+def publish_daily_brief_index(
+    report_url: str,
+    preview: str,
+    items: list[dict],
+    report_markdown: str | None = None,
+) -> bool:
+    if not report_url or not Config.REDIS_URL or not Config.REDIS_TOKEN:
+        return False
+
+    payload = build_daily_brief_payload(report_url, preview, items, report_markdown)
     headers = {"Authorization": f"Bearer {Config.REDIS_TOKEN}"}
     try:
         response = requests.post(
@@ -1696,7 +1768,7 @@ def send_daily_investment_digest(items: list[dict], runner: NotebookRunner | Non
     report_url = Notifier.cache_html_to_redis(html_content)
     if report_url:
         preview = build_daily_brief_preview(nlm_report, fallback_report, items)
-        if publish_daily_brief_index(report_url, preview, items):
+        if publish_daily_brief_index(report_url, preview, items, nlm_report or fallback_report):
             print("  ✅ 已更新網站每日簡報入口")
         if Notifier.send_cached_report_link(target_chat, report_url, caption):
             print("  ✅ 每日統整報告推送成功")
