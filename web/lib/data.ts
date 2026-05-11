@@ -48,7 +48,6 @@ async function _getLatestData(): Promise<ConsensusData> {
     const [consensus] = await db`
       SELECT *
       FROM consensus_daily
-      WHERE date >= CURRENT_DATE - INTERVAL '2 days'
       ORDER BY date DESC
       LIMIT 1
     `
@@ -79,7 +78,8 @@ async function _getLatestData(): Promise<ConsensusData> {
                  e.stocks_mentioned, e.report_url, e.analyzed_at
           FROM episodes e
           JOIN kols k ON k.kol_id = e.kol_id
-          WHERE e.published >= CURRENT_DATE - INTERVAL '2 days'
+          WHERE e.published >= ${latestDateValue}::date - INTERVAL '2 days'
+            AND e.published <= ${latestDateValue}::date + INTERVAL '1 day'
         ),
         latest_episodes AS (
           SELECT DISTINCT ON (source_key) *
@@ -303,8 +303,7 @@ export const getLatestStocks = unstable_cache(
         FROM stock_mentions sm
         WHERE sm.date = (
           SELECT MAX(date)
-          FROM consensus_daily
-          WHERE date >= CURRENT_DATE - INTERVAL '2 days'
+          FROM stock_mentions
         )
         ORDER BY sm.mentions DESC
       `
