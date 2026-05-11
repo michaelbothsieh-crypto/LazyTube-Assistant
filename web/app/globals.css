@@ -193,7 +193,7 @@ a {
 }
 
 .overview-copy,
-.overview-metric,
+.market-snapshot,
 .research-header > div,
 .run-card,
 .panel,
@@ -226,25 +226,14 @@ a {
   line-height: 1.62;
 }
 
-.overview-metrics {
+.market-snapshot {
   min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  padding: 16px;
 }
 
-.overview-metric {
-  min-width: 0;
-  min-height: 126px;
-  padding: 14px;
-}
-
-.overview-metric.is-primary {
-  grid-column: span 2;
-  min-height: 150px;
-}
-
-.overview-metric span {
+.snapshot-head span,
+.snapshot-stats span,
+.sentiment-bar-row span {
   display: block;
   color: var(--muted);
   font-size: 0.78rem;
@@ -253,22 +242,18 @@ a {
   letter-spacing: 0;
 }
 
-.overview-metric strong {
+.snapshot-head strong {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 10px;
-  font-size: 1.65rem;
-  line-height: 1;
-}
-
-.overview-metric.is-primary strong {
   font-size: 2.35rem;
   line-height: 1.05;
 }
 
-.overview-metric small {
+.snapshot-head small,
+.market-snapshot > p {
   display: -webkit-box;
   margin-top: 9px;
   color: var(--soft);
@@ -276,6 +261,67 @@ a {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.sentiment-chart {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.sentiment-bar-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 48px;
+  gap: 10px;
+  align-items: center;
+}
+
+.sentiment-track {
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.sentiment-track i {
+  display: block;
+  min-width: 3px;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.sentiment-bar-row strong {
+  text-align: right;
+  font-size: 0.92rem;
+}
+
+.snapshot-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.snapshot-stats > div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.snapshot-stats strong {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  overflow: hidden;
+  font-size: 1rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .research-header > div {
@@ -1163,13 +1209,9 @@ a {
   .summary-strip,
   .pipeline-grid,
   .insight-grid,
-  .overview-metrics,
+  .snapshot-stats,
   .kol-report-grid {
     grid-template-columns: 1fr;
-  }
-
-  .overview-metric.is-primary {
-    grid-column: auto;
   }
 
   .signal-table-head {

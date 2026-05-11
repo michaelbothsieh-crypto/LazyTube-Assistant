@@ -114,6 +114,11 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const marketCallValue = hasEffectiveSamples ? directionTone.label : '待資料'
   const marketCallColor = hasEffectiveSamples ? directionTone.color : 'var(--muted)'
   const showDirectionIcon = hasEffectiveSamples && direction !== 'neutral'
+  const sentimentBars = [
+    { key: 'bullish', label: '偏多', value: data.consensus.market_sentiment.bullish, color: 'var(--gain)' },
+    { key: 'neutral', label: '中性', value: data.consensus.market_sentiment.neutral, color: 'var(--muted)' },
+    { key: 'bearish', label: '偏空', value: data.consensus.market_sentiment.bearish, color: 'var(--risk)' },
+  ] as const
   const marketCallDetail = hasEffectiveSamples
     ? `${data.episodes_analyzed} 集有效樣本 / 共識分數 ${data.consensus.consensus_score}`
     : '等待 Podcast scanner 寫入有效樣本'
@@ -153,36 +158,41 @@ export default function TasteLanding({ data }: TasteLandingProps) {
             ))}
           </div>
         </article>
-        <aside className="overview-metrics" aria-label="Market overview">
-          <div className="overview-metric is-primary">
-            <span>市場方向</span>
+        <aside className="market-snapshot" aria-label="Market overview">
+          <div className="snapshot-head">
+            <span>市場快照</span>
             <strong style={{ color: marketCallColor }}>
               {showDirectionIcon && <DirectionIcon size={20} />}
               {marketCallValue}
             </strong>
             <small>{marketCallDetail}</small>
           </div>
-          <div className="overview-metric">
-            <span>多中空比例</span>
-            <strong>{data.consensus.market_sentiment.bullish}/{data.consensus.market_sentiment.neutral}/{data.consensus.market_sentiment.bearish}</strong>
-            <small>偏多 / 中性 / 偏空</small>
+          <div className="sentiment-chart" aria-label="Sentiment distribution">
+            {sentimentBars.map((item) => (
+              <div className="sentiment-bar-row" key={item.key}>
+                <span>{item.label}</span>
+                <div className="sentiment-track">
+                  <i style={{ width: `${item.value}%`, background: item.color }} />
+                </div>
+                <strong style={{ color: item.color }}>{item.value}%</strong>
+              </div>
+            ))}
           </div>
-          <div className="overview-metric">
-            <span>KOL 樣本</span>
-            <strong>
-              <Users size={18} />
-              {data.episodes_analyzed} 集
-            </strong>
-            <small>更新 {formatDateTime(data.generated_at)}</small>
+          <div className="snapshot-stats">
+            <div>
+              <span>KOL 樣本</span>
+              <strong><Users size={16} />{data.episodes_analyzed} 集</strong>
+            </div>
+            <div>
+              <span>掃描覆蓋</span>
+              <strong><Activity size={16} />{data.automation.completeness_pct}%</strong>
+            </div>
+            <div>
+              <span>更新</span>
+              <strong>{formatDateTime(data.generated_at)}</strong>
+            </div>
           </div>
-          <div className="overview-metric">
-            <span>掃描覆蓋</span>
-            <strong>
-              <Activity size={18} />
-              {data.automation.completeness_pct}%
-            </strong>
-            <small>{coverageText}</small>
-          </div>
+          <p>{coverageText}</p>
         </aside>
       </section>
 
