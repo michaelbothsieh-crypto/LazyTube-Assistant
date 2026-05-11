@@ -48,6 +48,14 @@
     "rss_url": "https://feeds.soundon.fm/podcasts/4a8660a0-e0d0-490b-8d46-c28219606f47.xml"
   },
   {
+    "kol_id": "jiuclass",
+    "label": "韭菜畢業班",
+    "host": "叔叔",
+    "avatar": "🌿",
+    "color": "#ec4899",
+    "rss_url": "https://feeds.soundon.fm/podcasts/70907bd6-d0ae-4b64-bc38-2bf48ae4fc36.xml"
+  },
+  {
     "kol_id": "billkitchen",
     "label": "比爾的財經廚房",
     "host": "楊比爾",
