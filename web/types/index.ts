@@ -77,6 +77,23 @@ export interface DailyBrief {
   watchpoints: string[]
   risk_flags: string[]
   source_labels: string[]
+  ticker_cards: {
+    ticker: string
+    mention_count: number
+    source_count: number
+    sources: string[]
+    latest_date: string
+    sentiment_distribution: { bullish: number; bearish: number; neutral: number }
+    reason: string
+  }[]
+  source_digest: {
+    label: string
+    title: string
+    published: string
+    sentiment: 'bullish' | 'bearish' | 'neutral'
+    stocks: string[]
+    summary: string
+  }[]
 }
 
 export interface ConsensusData {

@@ -468,6 +468,60 @@ def _extract_market_theme_titles(markdown: str, limit: int = 3) -> list[str]:
     return titles[:limit]
 
 
+def _daily_ticker_cards(items: list[dict], limit: int = 6) -> list[dict]:
+    tickers: dict[str, dict] = {}
+    for item in items:
+        label = str(item.get("label") or "Podcast")
+        published = str(item.get("published") or "")
+        summary = _plain_daily_preview(item.get("summary", ""), 110)
+        sentiment = str(item.get("sentiment") or "neutral")
+        for ticker in item.get("stocks", []):
+            card = tickers.setdefault(ticker, {
+                "ticker": ticker,
+                "mention_count": 0,
+                "sources": [],
+                "latest_date": "",
+                "sentiment_distribution": {"bullish": 0, "neutral": 0, "bearish": 0},
+                "reason": "",
+            })
+            card["mention_count"] += 1
+            if label not in card["sources"]:
+                card["sources"].append(label)
+            if published and published > card["latest_date"]:
+                card["latest_date"] = published
+            if sentiment in card["sentiment_distribution"]:
+                card["sentiment_distribution"][sentiment] += 1
+            if summary and not card["reason"]:
+                card["reason"] = summary
+
+    def conviction(card: dict) -> tuple[int, int, str]:
+        source_count = len(card["sources"])
+        mentions = int(card["mention_count"])
+        return source_count, mentions, str(card["latest_date"])
+
+    cards = sorted(tickers.values(), key=conviction, reverse=True)[:limit]
+    for card in cards:
+        card["source_count"] = len(card["sources"])
+        card["sources"] = card["sources"][:5]
+        if not card["reason"]:
+            card["reason"] = "本輪來源提及此標的，待後續逐集摘要補齊理由。"
+    return cards
+
+
+def _daily_source_digest(items: list[dict], limit: int = 8) -> list[dict]:
+    digest = []
+    for item in items[:limit]:
+        digest.append({
+            "label": str(item.get("label") or "Podcast"),
+            "title": str(item.get("title") or "未命名集數"),
+            "published": str(item.get("published") or ""),
+            "sentiment": str(item.get("sentiment") or "neutral"),
+            "stocks": list(item.get("stocks", []))[:6],
+            "summary": _plain_daily_preview(item.get("summary", ""), 120),
+        })
+    return digest
+
+
 def build_daily_brief_payload(
     report_url: str,
     preview: str,
@@ -516,6 +570,8 @@ def build_daily_brief_payload(
         "watchpoints": watchpoints[:3],
         "risk_flags": risk_flags[:3],
         "source_labels": source_labels[:8],
+        "ticker_cards": _daily_ticker_cards(items),
+        "source_digest": _daily_source_digest(items),
     }
 
 

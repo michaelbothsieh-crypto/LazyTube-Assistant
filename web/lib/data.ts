@@ -226,6 +226,44 @@ function normalizeDailyBrief(value: unknown): DailyBrief | null {
     watchpoints: arrayOfStrings(record.watchpoints, 3),
     risk_flags: arrayOfStrings(record.risk_flags, 3),
     source_labels: arrayOfStrings(record.source_labels),
+    ticker_cards: Array.isArray(record.ticker_cards)
+      ? record.ticker_cards.map((item) => {
+        const card = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+        const distribution = card.sentiment_distribution && typeof card.sentiment_distribution === 'object'
+          ? card.sentiment_distribution as Record<string, unknown>
+          : {}
+        return {
+          ticker: String(card.ticker ?? ''),
+          mention_count: Number(card.mention_count ?? 0),
+          source_count: Number(card.source_count ?? 0),
+          sources: arrayOfStrings(card.sources, 5),
+          latest_date: String(card.latest_date ?? ''),
+          sentiment_distribution: {
+            bullish: Number(distribution.bullish ?? 0),
+            neutral: Number(distribution.neutral ?? 0),
+            bearish: Number(distribution.bearish ?? 0),
+          },
+          reason: String(card.reason ?? ''),
+        }
+      }).filter((card) => card.ticker).slice(0, 6)
+      : [],
+    source_digest: Array.isArray(record.source_digest)
+      ? record.source_digest.map((item) => {
+        const source = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+        const sentimentValue = String(source.sentiment ?? 'neutral')
+        const sentiment: 'bullish' | 'bearish' | 'neutral' = sentimentValue === 'bullish' || sentimentValue === 'bearish'
+          ? sentimentValue
+          : 'neutral'
+        return {
+          label: String(source.label ?? 'Podcast'),
+          title: String(source.title ?? '未命名集數'),
+          published: String(source.published ?? ''),
+          sentiment,
+          stocks: arrayOfStrings(source.stocks, 6),
+          summary: String(source.summary ?? ''),
+        }
+      }).slice(0, 8)
+      : [],
   }
 }
 

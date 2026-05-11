@@ -74,6 +74,8 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
   const themes = brief.themes?.length ? brief.themes : brief.top_stocks.slice(0, 3)
   const watchpoints = brief.watchpoints?.length ? brief.watchpoints : [brief.preview]
   const riskFlags = brief.risk_flags?.length ? brief.risk_flags : ['檢查來源共識是否被後續財報、估值與籌碼驗證。']
+  const tickerCards = brief.ticker_cards?.slice(0, 3) ?? []
+  const sourceDigest = brief.source_digest?.slice(0, 2) ?? []
 
   return (
     <section className="daily-brief-banner" aria-label="Daily podcast investment brief">
@@ -92,6 +94,26 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
             <b key={ticker}>{ticker}</b>
           ))}
         </div>
+        {tickerCards.length > 0 && (
+          <div className="daily-brief-tickers" aria-label="Daily brief focus tickers">
+            {tickerCards.map((card) => (
+              <div key={card.ticker}>
+                <b>{card.ticker}</b>
+                <span>{card.source_count} 源 / {card.mention_count} 次</span>
+                <small>{card.reason}</small>
+              </div>
+            ))}
+          </div>
+        )}
+        {sourceDigest.length > 0 && (
+          <div className="daily-brief-sources" aria-label="Daily brief source digest">
+            {sourceDigest.map((source) => (
+              <span key={`${source.label}-${source.title}`}>
+                {source.label}：{source.stocks.slice(0, 3).join(' / ') || source.summary}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <div className="daily-brief-research">
         <div>
@@ -155,6 +177,17 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const dailyRiskFlags = data.daily_brief?.risk_flags?.length
     ? data.daily_brief.risk_flags
     : [bearishSignal ? formatSignalThesis(bearishSignal) : '目前未偵測到高信心偏空訊號。']
+  const dailyTickerCards = data.daily_brief?.ticker_cards?.length
+    ? data.daily_brief.ticker_cards
+    : topStocks.slice(0, 3).map((stock) => ({
+      ticker: stock.ticker,
+      mention_count: stock.mentions,
+      source_count: stock.kols.length,
+      sources: stock.kols,
+      latest_date: data.date,
+      sentiment_distribution: { bullish: 0, neutral: 0, bearish: 0 },
+      reason: `${stock.name} 被 ${stock.mentions} 次提及，主導方向為${sentimentTone[stock.sentiment].label}。`,
+    }))
 
   const coverageText = useMemo(() => {
     if (!latestRun) return '尚未取得最新自動化執行紀錄'
@@ -287,6 +320,17 @@ export default function TasteLanding({ data }: TasteLandingProps) {
               <p>{dailyRiskFlags[0] || coverageText}</p>
             </div>
           </div>
+          {dailyTickerCards.length > 0 && (
+            <div className="ticker-intel-list">
+              {dailyTickerCards.slice(0, 4).map((card) => (
+                <div key={card.ticker}>
+                  <b>{card.ticker}</b>
+                  <span>{card.source_count} 源 / {card.mention_count} 次</span>
+                  <p>{card.sources.slice(0, 3).join('、') || '來源待同步'}｜{card.reason}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </aside>
       </section>
 

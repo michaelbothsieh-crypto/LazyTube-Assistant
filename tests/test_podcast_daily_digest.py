@@ -209,6 +209,10 @@ def test_daily_brief_payload_extracts_research_structure():
     assert payload["top_stocks"] == ["NVDA", "2330"]
     assert payload["watchpoints"]
     assert payload["risk_flags"]
+    assert payload["ticker_cards"][0]["ticker"] == "NVDA"
+    assert payload["ticker_cards"][0]["source_count"] == 2
+    assert payload["ticker_cards"][0]["sentiment_distribution"] == {"bullish": 1, "neutral": 1, "bearish": 0}
+    assert payload["source_digest"][0]["label"] == "節目 A"
 
 
 def test_send_daily_digest_uses_nlm_multi_source_report_when_available(monkeypatch):
