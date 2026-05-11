@@ -48,6 +48,7 @@ async function _getLatestData(): Promise<ConsensusData> {
     const [consensus] = await db`
       SELECT *
       FROM consensus_daily
+      WHERE episodes_analyzed > 0
       ORDER BY date DESC
       LIMIT 1
     `
