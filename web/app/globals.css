@@ -662,6 +662,7 @@ a {
 
 .risk-list {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -800,7 +801,13 @@ a {
 
 .signal-workspace {
   align-items: start;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: 1fr;
+}
+
+.signal-aside {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
 
 .panel {
@@ -820,7 +827,7 @@ a {
 }
 
 .compact-head {
-  margin-top: 12px;
+  margin-top: 0;
   margin-bottom: 8px;
 }
 
@@ -903,6 +910,8 @@ a {
 
 .rank-list {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 14px;
 }
 
 .rank-row {
@@ -1218,6 +1227,7 @@ a {
   .summary-strip,
   .pipeline-grid,
   .insight-grid,
+  .signal-aside,
   .snapshot-stats,
   .kol-report-grid {
     grid-template-columns: 1fr;
@@ -1233,6 +1243,14 @@ a {
 
   .signal-table-row {
     grid-template-columns: 80px minmax(0, 1fr) 56px;
+  }
+
+  .rank-list {
+    grid-template-columns: 1fr;
+  }
+
+  .risk-list {
+    grid-template-columns: 1fr;
   }
 
   .priority-signal {
