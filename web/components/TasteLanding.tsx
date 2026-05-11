@@ -124,6 +124,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const hasEffectiveSamples = data.episodes_analyzed > 0
   const marketCallValue = hasEffectiveSamples ? directionTone.label : '待資料'
   const marketCallColor = hasEffectiveSamples ? directionTone.color : 'var(--muted)'
+  const showDirectionIcon = hasEffectiveSamples && direction !== 'neutral'
   const marketCallDetail = hasEffectiveSamples
     ? `${data.episodes_analyzed} 集有效樣本 / 共識分數 ${data.consensus.consensus_score}`
     : '等待 Podcast scanner 寫入有效樣本'
@@ -167,7 +168,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         <aside className="run-card" id="automation">
           <span>Market call</span>
           <strong style={{ color: marketCallColor }}>
-            <DirectionIcon size={26} />
+            {showDirectionIcon && <DirectionIcon size={26} />}
             {marketCallValue}
           </strong>
           <p>{marketCallDetail}</p>
@@ -262,7 +263,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         <div>
           <span>市場方向</span>
           <strong style={{ color: directionTone.color }}>
-            <DirectionIcon size={18} />
+            {showDirectionIcon && <DirectionIcon size={18} />}
             {directionTone.label}
           </strong>
           <small>
