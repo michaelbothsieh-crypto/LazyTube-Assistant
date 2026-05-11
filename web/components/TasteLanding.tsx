@@ -121,6 +121,12 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const strongestSignal = topDecisionSignals[0]
   const bearishSignal = signals.find((signal) => signal.direction === 'bearish')
   const crowdedStock = topStocks[0]
+  const hasEffectiveSamples = data.episodes_analyzed > 0
+  const marketCallValue = hasEffectiveSamples ? directionTone.label : '待資料'
+  const marketCallColor = hasEffectiveSamples ? directionTone.color : 'var(--muted)'
+  const marketCallDetail = hasEffectiveSamples
+    ? `${data.episodes_analyzed} 集有效樣本 / 共識分數 ${data.consensus.consensus_score}`
+    : '等待 Podcast scanner 寫入有效樣本'
   const marketCallText = strongestSignal
     ? `${strongestSignal.ticker} / ${strongestSignal.name} 是今日最高信心訊號，${strongestSignal.source_count} 個來源共同指向${sentimentTone[strongestSignal.direction].label}。`
     : data.consensus.weekly_theme || '等待今日 KOL 語言訊號寫入。'
@@ -160,12 +166,12 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         </div>
         <aside className="run-card" id="automation">
           <span>Market call</span>
-          <strong style={{ color: directionTone.color }}>
+          <strong style={{ color: marketCallColor }}>
             <DirectionIcon size={26} />
-            {data.consensus.consensus_score}
+            {marketCallValue}
           </strong>
-          <p>共識分數 / {data.episodes_analyzed} 集有效樣本</p>
-          <small>每日台北 10:30 掃描；首頁只顯示最近兩天內的有效資料。</small>
+          <p>{marketCallDetail}</p>
+          <small>每日台北 10:30 掃描；首頁顯示最近一次有效資料。</small>
         </aside>
       </section>
 
@@ -215,7 +221,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
                 </Link>
               )
             }) : (
-              <p className="empty-note">尚無最近兩天內的訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
+              <p className="empty-note">尚無有效訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
             )}
           </div>
         </article>
@@ -340,7 +346,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
                 </Link>
               )
             }) : (
-              <p className="empty-note">尚無最近兩天內的訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
+              <p className="empty-note">尚無有效訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
             )}
           </div>
         </article>
