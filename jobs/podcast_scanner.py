@@ -63,6 +63,15 @@ DAILY_BRIEF_REDIS_KEY = "daily_podcast_brief_latest"
 DOWNLOAD_TIMEOUT_SEC = 300
 MP3_SIZE_LIMIT_MB = 200
 
+KNOWN_TW_TICKERS = {
+    "1301", "2002", "2303", "2308", "2317", "2330", "2376", "2377",
+    "2379", "2382", "2454", "2881", "2882", "3008", "3231", "3711",
+}
+
+INVALID_NUMERIC_TICKERS = {
+    "2000", "2300", "2500", "3000",
+}
+
 ARTICLE_INCLUDE_KEYWORDS = {
     "ai", "人工智慧", "生成式", "agent", "代理", "openai", "chatgpt",
     "google", "alphabet", "gemini", "microsoft", "微軟", "amazon", "aws",
@@ -204,6 +213,13 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
         'GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC',
     }
 
+    def is_valid_ticker(ticker: str) -> bool:
+        if ticker in INVALID_NUMERIC_TICKERS:
+            return False
+        if re.match(r'^\d{4}$', ticker):
+            return ticker in KNOWN_TW_TICKERS
+        return bool(re.match(r'^[A-Z]{2,5}$', ticker)) and ticker not in skip_tickers
+
     stocks: list[str] = []
 
     # ── 新格式：從【個股觀點】提取代號（每行第一欄，以｜分隔）────────────
@@ -213,9 +229,7 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
             parts = line.split('｜')
             if len(parts) >= 2:
                 ticker = parts[0].strip()
-                if re.match(r'^\d{4}$', ticker):
-                    stocks.append(ticker)
-                elif re.match(r'^[A-Z]{2,5}$', ticker) and ticker not in skip_tickers:
+                if is_valid_ticker(ticker):
                     stocks.append(ticker)
 
     # ── 舊格式 fallback：從【投資倒數小結】提取 ─────────────────────────
@@ -225,7 +239,7 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
             section = m3.group(1)
             tw = re.findall(r'\b(\d{4})\b', section)
             us = re.findall(r'\b([A-Z]{2,5})\b', section)
-            stocks = list(dict.fromkeys(tw + [t for t in us if t not in skip_tickers]))
+            stocks = list(dict.fromkeys([ticker for ticker in tw + us if is_valid_ticker(ticker)]))
 
     # 同時比對中文公司名 → ticker（補充純中文文本的情況）
     cn_map: dict[str, str] = {
@@ -245,6 +259,8 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
     for cn, ticker in cn_map.items():
         if cn in analysis and ticker not in stocks:
             stocks.append(ticker)
+
+    stocks = [ticker for ticker in stocks if is_valid_ticker(ticker)]
 
     # ── 摘要：供 DB 顯示用，優先取【市場總結】，fallback 取前 400 字 ──────
     summary_section = re.search(r'【市場總結與操作建議】\s*([\s\S]*?)(?=\n【|$)', analysis)
@@ -476,6 +492,8 @@ def _daily_ticker_cards(items: list[dict], limit: int = 6) -> list[dict]:
         summary = _plain_daily_preview(item.get("summary", ""), 110)
         sentiment = str(item.get("sentiment") or "neutral")
         for ticker in item.get("stocks", []):
+            if ticker in INVALID_NUMERIC_TICKERS or (re.match(r"^\d{4}$", str(ticker)) and ticker not in KNOWN_TW_TICKERS):
+                continue
             card = tickers.setdefault(ticker, {
                 "ticker": ticker,
                 "mention_count": 0,
@@ -516,7 +534,12 @@ def _daily_source_digest(items: list[dict], limit: int = 8) -> list[dict]:
             "title": str(item.get("title") or "未命名集數"),
             "published": str(item.get("published") or ""),
             "sentiment": str(item.get("sentiment") or "neutral"),
-            "stocks": list(item.get("stocks", []))[:6],
+            "stocks": [
+                ticker
+                for ticker in item.get("stocks", [])
+                if ticker not in INVALID_NUMERIC_TICKERS
+                and not (re.match(r"^\d{4}$", str(ticker)) and ticker not in KNOWN_TW_TICKERS)
+            ][:6],
             "summary": _plain_daily_preview(item.get("summary", ""), 120),
         })
     return digest

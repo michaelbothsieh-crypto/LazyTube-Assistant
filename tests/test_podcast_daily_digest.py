@@ -101,6 +101,23 @@ def test_daily_digest_candidate_uses_conclusion_and_strips_citations(monkeypatch
     assert "今天看好台積電與輝達" in item["analysis_text"]
 
 
+def test_parse_nlm_analysis_rejects_plain_numeric_values_as_tickers():
+    _, stocks, _ = scanner._parse_nlm_analysis(
+        "【文字紀錄】\n"
+        "AI 資本支出浪潮持續，資料中心擴建可能達 2000、2500、3000 等級，但重點是台積電與輝達。\n\n"
+        "【投資倒數小結】\n"
+        "1. 台美股焦點標的：2000：不是股票。2500：不是股票。3000：不是股票。2300：不是股票。NVDA：AI 需求強。2330：先進製程受惠。\n"
+        "2. 本集結論：AI 供應鏈偏多。"
+    )
+
+    assert "NVDA" in stocks
+    assert "2330" in stocks
+    assert "2000" not in stocks
+    assert "2300" not in stocks
+    assert "2500" not in stocks
+    assert "3000" not in stocks
+
+
 def test_send_daily_digest_uses_research_style_report_link(monkeypatch):
     sent = {}
 
