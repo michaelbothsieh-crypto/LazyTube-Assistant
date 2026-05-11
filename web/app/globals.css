@@ -607,14 +607,18 @@ a {
 
 .risk-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .risk-list > div {
-  min-height: 102px;
+  min-height: auto;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: baseline;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   background: rgba(255, 255, 255, 0.025);
 }
 
@@ -627,17 +631,22 @@ a {
 
 .risk-list strong {
   display: block;
-  margin-top: 9px;
-  font-size: 1.7rem;
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
+  font-size: 1.25rem;
   line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .risk-list p {
   display: -webkit-box;
-  margin: 8px 0 0;
+  grid-column: 1 / -1;
+  margin: 7px 0 0;
   color: var(--soft);
-  line-height: 1.42;
-  -webkit-line-clamp: 2;
+  line-height: 1.36;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -736,6 +745,7 @@ a {
 
 .signal-workspace {
   align-items: start;
+  grid-template-columns: minmax(0, 1fr) 340px;
 }
 
 .panel {
@@ -755,13 +765,23 @@ a {
 }
 
 .compact-head {
-  margin-top: 16px;
+  margin-top: 12px;
+  margin-bottom: 8px;
 }
 
 .panel-head h2 {
   margin: 4px 0 0;
   font-size: 1.35rem;
   line-height: 1.1;
+}
+
+.signal-workspace .panel-head {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.signal-workspace .panel-head h2 {
+  font-size: 1.18rem;
 }
 
 .panel-head small {
@@ -775,25 +795,26 @@ a {
 .signal-table-head,
 .signal-table-row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 92px 90px 70px 70px;
+  grid-template-columns: 92px minmax(0, 1fr) 86px 72px 56px 62px;
   gap: 10px;
   align-items: center;
 }
 
 .signal-table-head {
-  min-height: 34px;
+  min-height: 30px;
   color: var(--muted);
   font-size: 0.78rem;
   border-bottom: 1px solid var(--line);
 }
 
 .signal-table-row {
-  min-height: 44px;
+  min-height: 38px;
   border-bottom: 1px solid var(--line);
 }
 
 .signal-table-row b {
   color: var(--gain);
+  font-size: 0.96rem;
 }
 
 .signal-table-row span,
@@ -830,7 +851,7 @@ a {
 }
 
 .rank-row {
-  min-height: 42px;
+  min-height: 34px;
   display: grid;
   grid-template-columns: 28px 78px minmax(0, 1fr) auto;
   gap: 8px;
