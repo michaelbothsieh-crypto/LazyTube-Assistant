@@ -15,12 +15,6 @@ const sentimentTone = {
   bearish: { label: '偏空', color: 'var(--risk)', Icon: TrendDown },
 } as const
 
-const extractionSteps = [
-  { label: '語句收集', value: 'RSS + episode', detail: '每日 10:30 掃描近期 KOL 與科技商業 RSS，保留來源與集數脈絡。' },
-  { label: '觀點萃取', value: 'thesis', detail: '把敘事拆成標的、方向、理由、風險與催化條件。' },
-  { label: '共識建模', value: 'signal graph', detail: '用跨來源重複度與信心分數呈現語言力量的擴散。' },
-] as const
-
 const horizonLabel: Record<string, string> = {
   'long-term': '長線',
   swing: '波段',
@@ -107,18 +101,13 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const [filter, setFilter] = useState<'all' | 'bullish' | 'neutral' | 'bearish'>('all')
   const topStocks = data.consensus.stocks.filter((stock) => !ignoredTickers.has(stock.ticker)).slice(0, 8)
   const signals = data.signals.filter((signal) => !ignoredTickers.has(signal.ticker)).slice(0, 8)
-  const topDecisionSignals = signals.slice(0, 3)
   const episodes = data.episodes.slice(0, 16)
   const filteredEpisodes = filter === 'all' ? episodes : episodes.filter((episode) => episode.sentiment === filter)
-  const featuredInsights = episodes
-    .filter((episode) => episode.unique_insight)
-    .slice(0, 3)
-  const marqueeEpisodes = (featuredInsights.length ? featuredInsights : episodes).slice(0, 10)
   const direction = dominantSentiment(data)
   const directionTone = sentimentTone[direction]
   const DirectionIcon = directionTone.Icon
   const latestRun = data.automation.latest_run
-  const strongestSignal = topDecisionSignals[0]
+  const strongestSignal = signals[0]
   const bearishSignal = signals.find((signal) => signal.direction === 'bearish')
   const crowdedStock = topStocks[0]
   const hasEffectiveSamples = data.episodes_analyzed > 0
@@ -142,7 +131,6 @@ export default function TasteLanding({ data }: TasteLandingProps) {
       <nav className="research-nav" aria-label="Primary navigation">
         <Link href="/" className="brand-mark">KOL Signal Lab</Link>
         <div>
-          <a href="#extraction">架構</a>
           <a href="#signals">訊號</a>
           <a href="#kols">KOL</a>
           <a href="#automation">自動化</a>
@@ -151,8 +139,8 @@ export default function TasteLanding({ data }: TasteLandingProps) {
 
       {data.daily_brief && <DailyBriefBanner brief={data.daily_brief} />}
 
-      <section className="research-header">
-        <div>
+      <section className="overview-section" id="automation">
+        <article className="overview-copy">
           <p className="eyebrow">Daily decision brief</p>
           <h1>今日 KOL 語言共識：{directionTone.label}</h1>
           <p>
@@ -164,164 +152,46 @@ export default function TasteLanding({ data }: TasteLandingProps) {
               <b key={stock.ticker}>{stock.ticker}<small>{stock.mentions}x</small></b>
             ))}
           </div>
-        </div>
-        <aside className="run-card" id="automation">
-          <span>Market call</span>
-          <strong style={{ color: marketCallColor }}>
-            {showDirectionIcon && <DirectionIcon size={26} />}
-            {marketCallValue}
-          </strong>
-          <p>{marketCallDetail}</p>
-          <small>每日台北 10:30 掃描；首頁顯示最近一次有效資料。</small>
-        </aside>
-      </section>
-
-      {marqueeEpisodes.length > 0 && (
-        <section className="kol-marquee" aria-label="KOL precision viewpoints">
-          <div className="kol-marquee-label">
-            <span>Live KOL tape</span>
-            <strong>精準觀點</strong>
-          </div>
-          <div className="kol-marquee-window">
-            <div className="kol-marquee-track">
-              {[...marqueeEpisodes, ...marqueeEpisodes].map((episode, index) => (
-                <Link href={`/kol/${episode.kol_id}`} className="kol-marquee-item" key={`${episode.kol_id}-${index}`}>
-                  <b>{episode.kol_name}</b>
-                  <span>{compactInsight(episode, 88)}</span>
-                  <i>{formatOutlook(episode)}</i>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section className="decision-board" id="signals" aria-label="Daily market decision board">
-        <article className="panel panel-large">
-          <div className="panel-head">
-            <div>
-              <span>今日必看訊號</span>
-              <h2>先看最高信心標的，再決定是否下鑽證據</h2>
-            </div>
-            <small>{topDecisionSignals.length} priority signals</small>
-          </div>
-          <div className="priority-signal-list">
-            {topDecisionSignals.length ? topDecisionSignals.map((signal, index) => {
-              const tone = sentimentTone[signal.direction]
-              return (
-                <Link href="#kols" className="priority-signal" key={signal.ticker}>
-                  <b>{String(index + 1).padStart(2, '0')}</b>
-                  <div>
-                    <span>{signal.ticker}</span>
-                    <strong>{signal.name}</strong>
-                    <p>{formatSignalThesis(signal)}</p>
-                  </div>
-                  <i style={{ color: tone.color }}>{tone.label}</i>
-                  <em>{signal.confidence_score}</em>
-                  <small>{signal.source_count} 來源</small>
-                </Link>
-              )
-            }) : (
-              <p className="empty-note">尚無有效訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
-            )}
-          </div>
         </article>
-
-        <aside className="panel risk-panel">
-          <div className="panel-head">
-            <div>
-              <span>風險雷達</span>
-              <h2>今日要先排除的盲點</h2>
-            </div>
+        <aside className="overview-metrics" aria-label="Market overview">
+          <div className="overview-metric is-primary">
+            <span>市場方向</span>
+            <strong style={{ color: marketCallColor }}>
+              {showDirectionIcon && <DirectionIcon size={20} />}
+              {marketCallValue}
+            </strong>
+            <small>{marketCallDetail}</small>
           </div>
-          <div className="risk-list">
-            <div>
-              <span>反向訊號</span>
-              <strong>{bearishSignal ? readableTicker(bearishSignal.ticker) : '尚無'}</strong>
-              <p>{bearishSignal ? formatSignalThesis(bearishSignal) : '目前未偵測到高信心偏空訊號。'}</p>
-            </div>
-            <div>
-              <span>擁擠標的</span>
-              <strong>{crowdedStock ? crowdedStock.ticker : '尚無'}</strong>
-              <p>{crowdedStock ? `${crowdedStock.mentions} 次提及，方向為 ${sentimentTone[crowdedStock.sentiment].label}。` : '尚無標的熱度資料。'}</p>
-            </div>
-            <div>
-              <span>資料覆蓋</span>
-              <strong>{data.automation.completeness_pct}%</strong>
-              <p>{coverageText}</p>
-            </div>
+          <div className="overview-metric">
+            <span>多中空比例</span>
+            <strong>{data.consensus.market_sentiment.bullish}/{data.consensus.market_sentiment.neutral}/{data.consensus.market_sentiment.bearish}</strong>
+            <small>偏多 / 中性 / 偏空</small>
+          </div>
+          <div className="overview-metric">
+            <span>KOL 樣本</span>
+            <strong>
+              <Users size={18} />
+              {data.episodes_analyzed} 集
+            </strong>
+            <small>更新 {formatDateTime(data.generated_at)}</small>
+          </div>
+          <div className="overview-metric">
+            <span>掃描覆蓋</span>
+            <strong>
+              <Activity size={18} />
+              {data.automation.completeness_pct}%
+            </strong>
+            <small>{coverageText}</small>
           </div>
         </aside>
       </section>
 
-      <section className="summary-strip" aria-label="Daily summary">
-        <div>
-          <span>報告日期</span>
-          <strong>{data.date}</strong>
-          <small>更新 {formatDateTime(data.generated_at)}</small>
-        </div>
-        <div>
-          <span>市場方向</span>
-          <strong style={{ color: directionTone.color }}>
-            {showDirectionIcon && <DirectionIcon size={18} />}
-            {directionTone.label}
-          </strong>
-          <small>
-            多 {data.consensus.market_sentiment.bullish}% / 中 {data.consensus.market_sentiment.neutral}% / 空 {data.consensus.market_sentiment.bearish}%
-          </small>
-        </div>
-        <div>
-          <span>KOL 樣本</span>
-          <strong>
-            <Users size={18} />
-            {data.episodes_analyzed} 集
-          </strong>
-          <small>來自目前啟用的 RSS 來源</small>
-        </div>
-        <div>
-          <span>自動化</span>
-          <strong>
-            <Activity size={18} />
-            {data.automation.completeness_pct}%
-          </strong>
-          <small>{coverageText}</small>
-        </div>
-      </section>
-
-      <section className="language-lab" id="extraction" aria-label="KOL language extraction architecture">
-        <div className="panel-head">
-          <div>
-            <span>萃取架構</span>
-            <h2>從一句話到可追蹤訊號</h2>
-          </div>
-          <small>scan 10:30 TPE</small>
-        </div>
-        <div className="pipeline-grid">
-          {extractionSteps.map((step, index) => (
-            <div className="pipeline-step" key={step.label}>
-              <b>{String(index + 1).padStart(2, '0')}</b>
-              <span>{step.label}</span>
-              <strong>{step.value}</strong>
-              <p>{step.detail}</p>
-            </div>
-          ))}
-        </div>
-        <div className="insight-grid">
-          {(featuredInsights.length ? featuredInsights : episodes.slice(0, 3)).map((episode, index) => (
-            <Link href={`/kol/${episode.kol_id}`} className="insight-card" key={`${episode.kol_id}-${index}`}>
-              <span>{episode.kol_name}</span>
-              <p>{episode.unique_insight || episode.summary.replace(/\s+/g, ' ').trim() || '等待最新節目寫入可萃取觀點。'}</p>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="research-grid">
+      <section className="research-grid signal-workspace" id="signals" aria-label="Daily market decision board">
         <article className="panel panel-large">
           <div className="panel-head">
             <div>
-              <span>完整訊號表</span>
-              <h2>用同一套欄位比較每日投資線索</h2>
+              <span>核心訊號</span>
+              <h2>標的、方向與信心分數集中看</h2>
             </div>
             <small>{signals.length || 0} signals</small>
           </div>
@@ -352,8 +222,31 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           </div>
         </article>
 
-        <aside className="panel">
+        <aside className="panel signal-aside">
           <div className="panel-head">
+            <div>
+              <span>風險與熱度</span>
+              <h2>先排除盲點，再看擁擠標的</h2>
+            </div>
+          </div>
+          <div className="risk-list">
+            <div>
+              <span>反向訊號</span>
+              <strong>{bearishSignal ? readableTicker(bearishSignal.ticker) : '尚無'}</strong>
+              <p>{bearishSignal ? formatSignalThesis(bearishSignal) : '目前未偵測到高信心偏空訊號。'}</p>
+            </div>
+            <div>
+              <span>擁擠標的</span>
+              <strong>{crowdedStock ? crowdedStock.ticker : '尚無'}</strong>
+              <p>{crowdedStock ? `${crowdedStock.mentions} 次提及，方向為 ${sentimentTone[crowdedStock.sentiment].label}。` : '尚無標的熱度資料。'}</p>
+            </div>
+            <div>
+              <span>資料覆蓋</span>
+              <strong>{data.automation.completeness_pct}%</strong>
+              <p>{coverageText}</p>
+            </div>
+          </div>
+          <div className="panel-head compact-head">
             <div>
               <span>提及熱度</span>
               <h2>標的排行</h2>
