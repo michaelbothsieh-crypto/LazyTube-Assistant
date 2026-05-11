@@ -211,18 +211,19 @@ export default function TasteLanding({ data }: TasteLandingProps) {
               <span>名稱</span>
               <span>方向</span>
               <span>信心</span>
-              <span>來源</span>
+              <span>提及</span>
               <span>節奏</span>
             </div>
             {signals.length ? signals.map((signal) => {
               const tone = sentimentTone[signal.direction]
+              const mentionCount = topStocks.find((stock) => stock.ticker === signal.ticker)?.mentions ?? signal.source_count
               return (
                 <Link href="#kols" className="signal-table-row" key={signal.ticker}>
                   <b>{signal.ticker}</b>
                   <span>{signal.name}</span>
                   <i style={{ color: tone.color }}>{tone.label}</i>
                   <strong>{signal.confidence_score}</strong>
-                  <small>{signal.source_count}</small>
+                  <small>{mentionCount}x / {signal.source_count} 源</small>
                   <em>{horizonLabel[signal.horizon] ?? '觀察'}</em>
                 </Link>
               )
@@ -255,25 +256,6 @@ export default function TasteLanding({ data }: TasteLandingProps) {
               <strong>{data.automation.completeness_pct}%</strong>
               <p>{coverageText}</p>
             </div>
-          </div>
-          <div className="panel-head compact-head">
-            <div>
-              <span>提及熱度</span>
-              <h2>標的排行</h2>
-            </div>
-          </div>
-          <div className="rank-list">
-            {topStocks.map((stock, index) => {
-              const tone = sentimentTone[stock.sentiment]
-              return (
-                <div className="rank-row" key={stock.ticker}>
-                  <b>{index + 1}</b>
-                  <span>{stock.ticker}</span>
-                  <small>{stock.name}</small>
-                  <strong style={{ color: tone.color }}>{stock.mentions}x</strong>
-                </div>
-              )
-            })}
           </div>
         </aside>
       </section>

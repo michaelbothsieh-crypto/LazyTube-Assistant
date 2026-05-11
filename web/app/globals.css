@@ -855,7 +855,7 @@ a {
 .signal-table-head,
 .signal-table-row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 86px 72px 56px 62px;
+  grid-template-columns: 92px minmax(0, 1fr) 86px 72px 112px 62px;
   gap: 10px;
   align-items: center;
 }
