@@ -74,48 +74,9 @@ a {
 
 .keyword-mark {
   display: inline;
-  border-radius: 3px;
-  padding: 0 0.12em;
   color: var(--text);
   background: transparent;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  font-weight: 700;
-}
-
-.keyword-mark.ai {
-  color: var(--blue);
-  background: rgba(126, 196, 255, 0.055);
-}
-
-.keyword-mark.chip {
-  color: var(--lime);
-  background: rgba(201, 244, 92, 0.055);
-}
-
-.keyword-mark.security {
-  color: var(--violet);
-  background: rgba(208, 168, 255, 0.055);
-}
-
-.keyword-mark.earnings {
-  color: var(--orange);
-  background: rgba(255, 184, 107, 0.055);
-}
-
-.keyword-mark.risk {
-  color: var(--pink);
-  background: rgba(255, 140, 198, 0.055);
-}
-
-.keyword-mark.watch {
-  color: var(--mint);
-  background: rgba(115, 241, 186, 0.055);
-}
-
-.keyword-mark.macro {
-  color: var(--coral);
-  background: rgba(255, 159, 104, 0.055);
+  font-weight: inherit;
 }
 
 .research-shell {
@@ -156,10 +117,8 @@ a {
   padding: 16px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(201, 244, 92, 0.11), rgba(98, 221, 255, 0.08) 48%, rgba(255, 140, 198, 0.075)),
-    rgba(13, 17, 24, 0.9);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+  background: rgba(13, 17, 24, 0.92);
+  box-shadow: none;
 }
 
 .daily-brief-copy {
@@ -211,10 +170,10 @@ a {
   align-items: center;
   min-height: 24px;
   padding: 0 8px;
-  border: 1px solid rgba(98, 221, 255, 0.34);
+  border: 1px solid rgba(160, 171, 192, 0.28);
   border-radius: 999px;
-  color: var(--cyan);
-  background: rgba(98, 221, 255, 0.08);
+  color: var(--soft);
+  background: rgba(255, 255, 255, 0.035);
   font-size: 0.78rem;
 }
 
@@ -227,28 +186,10 @@ a {
 
 .daily-brief-tickers > div {
   min-width: 0;
-  border: 1px solid rgba(141, 245, 168, 0.24);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 9px;
-  background: rgba(141, 245, 168, 0.055);
-}
-
-.daily-brief-tickers > div:nth-child(2) {
-  border-color: rgba(126, 196, 255, 0.24);
-  background: rgba(126, 196, 255, 0.055);
-}
-
-.daily-brief-tickers > div:nth-child(2) b {
-  color: var(--blue);
-}
-
-.daily-brief-tickers > div:nth-child(3) {
-  border-color: rgba(255, 184, 107, 0.26);
-  background: rgba(255, 184, 107, 0.06);
-}
-
-.daily-brief-tickers > div:nth-child(3) b {
-  color: var(--orange);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .daily-brief-tickers b,
@@ -262,7 +203,7 @@ a {
 }
 
 .daily-brief-tickers b {
-  color: var(--gain);
+  color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
@@ -301,17 +242,17 @@ a {
   gap: 8px;
   min-height: 42px;
   padding: 0 14px;
-  border: 1px solid rgba(201, 244, 92, 0.38);
+  border: 1px solid rgba(160, 171, 192, 0.32);
   border-radius: 8px;
-  background: rgba(201, 244, 92, 0.12);
-  color: var(--lime);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
   font-weight: 800;
   white-space: nowrap;
 }
 
 .daily-brief-open:hover {
-  border-color: rgba(201, 244, 92, 0.68);
-  background: rgba(201, 244, 92, 0.18);
+  border-color: rgba(160, 171, 192, 0.52);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .daily-brief-research {
@@ -329,21 +270,6 @@ a {
   border-radius: 8px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.035);
-}
-
-.daily-brief-research > div:nth-child(1) {
-  border-color: rgba(126, 196, 255, 0.24);
-  background: linear-gradient(135deg, rgba(126, 196, 255, 0.08), rgba(255, 255, 255, 0.025));
-}
-
-.daily-brief-research > div:nth-child(2) {
-  border-color: rgba(255, 184, 107, 0.26);
-  background: linear-gradient(135deg, rgba(255, 184, 107, 0.075), rgba(255, 255, 255, 0.025));
-}
-
-.daily-brief-research > div:nth-child(3) {
-  border-color: rgba(255, 140, 198, 0.26);
-  background: linear-gradient(135deg, rgba(255, 140, 198, 0.075), rgba(255, 255, 255, 0.025));
 }
 
 .daily-brief-research span {
@@ -591,11 +517,11 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(141, 245, 168, 0.34);
+  border: 1px solid rgba(160, 171, 192, 0.28);
   border-radius: 999px;
   padding: 5px 9px;
-  color: var(--gain);
-  background: linear-gradient(135deg, rgba(141, 245, 168, 0.12), rgba(98, 221, 255, 0.07));
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.035);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.82rem;
 }
@@ -879,33 +805,6 @@ a {
   border-radius: 8px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.025);
-}
-
-.risk-list > div:nth-child(1) {
-  border-color: rgba(126, 196, 255, 0.23);
-  background: rgba(126, 196, 255, 0.045);
-}
-
-.risk-list > div:nth-child(1) strong {
-  color: var(--blue);
-}
-
-.risk-list > div:nth-child(2) {
-  border-color: rgba(255, 184, 107, 0.25);
-  background: rgba(255, 184, 107, 0.05);
-}
-
-.risk-list > div:nth-child(2) strong {
-  color: var(--orange);
-}
-
-.risk-list > div:nth-child(3) {
-  border-color: rgba(255, 140, 198, 0.25);
-  background: rgba(255, 140, 198, 0.05);
-}
-
-.risk-list > div:nth-child(3) strong {
-  color: var(--pink);
 }
 
 .risk-list span {
@@ -1234,37 +1133,7 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
-  background:
-    linear-gradient(160deg, rgba(115, 241, 186, 0.045), transparent 54%),
-    rgba(255, 255, 255, 0.025);
-}
-
-.brief-source-card:nth-child(4n + 1) {
-  border-color: rgba(115, 241, 186, 0.22);
-  background:
-    linear-gradient(160deg, rgba(115, 241, 186, 0.055), transparent 54%),
-    rgba(255, 255, 255, 0.025);
-}
-
-.brief-source-card:nth-child(4n + 2) {
-  border-color: rgba(126, 196, 255, 0.22);
-  background:
-    linear-gradient(160deg, rgba(126, 196, 255, 0.055), transparent 54%),
-    rgba(255, 255, 255, 0.025);
-}
-
-.brief-source-card:nth-child(4n + 3) {
-  border-color: rgba(255, 184, 107, 0.22);
-  background:
-    linear-gradient(160deg, rgba(255, 184, 107, 0.055), transparent 54%),
-    rgba(255, 255, 255, 0.025);
-}
-
-.brief-source-card:nth-child(4n) {
-  border-color: rgba(208, 168, 255, 0.22);
-  background:
-    linear-gradient(160deg, rgba(208, 168, 255, 0.055), transparent 54%),
-    rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .brief-source-top {
@@ -1321,11 +1190,11 @@ a {
 }
 
 .brief-source-stocks b {
-  border: 1px solid rgba(126, 215, 255, 0.28);
+  border: 1px solid rgba(160, 171, 192, 0.26);
   border-radius: 5px;
   padding: 2px 6px;
-  color: var(--cyan);
-  background: rgba(126, 215, 255, 0.055);
+  color: var(--soft);
+  background: rgba(255, 255, 255, 0.035);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.72rem;
 }

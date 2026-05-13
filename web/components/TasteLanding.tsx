@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { ConsensusData, DailyBrief, Episode } from '@/types'
 import { Activity, ChevronRight, ExternalLink, Minus, TrendDown, TrendUp, Users } from '@/components/icons'
@@ -24,51 +24,8 @@ const horizonLabel: Record<string, string> = {
 
 const ignoredTickers = new Set(['GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC'])
 
-const keywordRules = [
-  { terms: ['AI', '人工智慧', '生成式', '模型', '算力'], className: 'ai' },
-  { terms: ['半導體', '晶片', '台積電', '輝達', '封裝', '光通訊', '記憶體'], className: 'chip' },
-  { terms: ['資安', '供應鏈攻擊', '零時差', 'CI/CD', '漏洞'], className: 'security' },
-  { terms: ['財報', '營收', '毛利率', '展望', '指引'], className: 'earnings' },
-  { terms: ['估值', '回檔', '追高', '擁擠', '風險', '修正'], className: 'risk' },
-  { terms: ['驗證', '觀察', '追蹤', '確認', '等待'], className: 'watch' },
-  { terms: ['川習會', '關稅', '地緣政治', '政策'], className: 'macro' },
-] as const
-
-const keywordPattern = new RegExp(
-  `(${keywordRules.flatMap((rule) => rule.terms).sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})`,
-  'gi',
-)
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function keywordClass(term: string) {
-  const normalized = term.toLowerCase()
-  const rule = keywordRules.find((item) => item.terms.some((candidate) => candidate.toLowerCase() === normalized))
-  return rule?.className ?? 'topic'
-}
-
-function HighlightText({ text, maxMarks = 4 }: { text: string; maxMarks?: number }) {
-  if (!text) return null
-  const parts: ReactNode[] = []
-  let lastIndex = 0
-  let marks = 0
-  for (const match of text.matchAll(keywordPattern)) {
-    if (marks >= maxMarks) break
-    const value = match[0]
-    const index = match.index ?? 0
-    if (index > lastIndex) parts.push(text.slice(lastIndex, index))
-    parts.push(
-      <mark className={`keyword-mark ${keywordClass(value)}`} key={`${value}-${index}`}>
-        {value}
-      </mark>,
-    )
-    lastIndex = index + value.length
-    marks += 1
-  }
-  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
-  return <>{parts}</>
+function HighlightText({ text }: { text: string; maxMarks?: number }) {
+  return text || null
 }
 
 function formatDateTime(value: string) {
