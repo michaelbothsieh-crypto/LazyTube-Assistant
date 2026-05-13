@@ -155,12 +155,22 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const marketCallValue = hasEffectiveSamples ? directionTone.label : '待資料'
   const marketCallColor = hasEffectiveSamples ? directionTone.color : 'var(--muted)'
   const showDirectionIcon = hasEffectiveSamples && direction !== 'neutral'
+  const coverageText = useMemo(() => {
+    if (!latestRun) return '尚未取得最新自動化執行紀錄'
+    return `${latestRun.sources_success}/${latestRun.sources_total} 個來源完成，寫入 ${latestRun.episodes_written} 集`
+  }, [latestRun])
+  const snapshotUpdateAt = data.daily_brief?.generated_at || data.generated_at
+  const snapshotCoverageText = data.daily_brief
+    ? `每日簡報已整理 ${data.daily_brief.source_count} 個來源、${data.daily_brief.stock_count} 檔標的。`
+    : coverageText
   const sentimentBars = [
     { key: 'bullish', label: '偏多', value: data.consensus.market_sentiment.bullish, color: 'var(--gain)' },
     { key: 'neutral', label: '中性', value: data.consensus.market_sentiment.neutral, color: 'var(--muted)' },
     { key: 'bearish', label: '偏空', value: data.consensus.market_sentiment.bearish, color: 'var(--risk)' },
   ] as const
-  const marketCallDetail = hasEffectiveSamples
+  const marketCallDetail = data.daily_brief
+    ? `${data.daily_brief.source_count} 來源 / ${data.daily_brief.stock_count} 標的`
+    : hasEffectiveSamples
     ? `${data.episodes_analyzed} 集有效樣本 / 共識分數 ${data.consensus.consensus_score}`
     : '等待 Podcast scanner 寫入有效樣本'
   const dailyBriefThesis = data.daily_brief?.thesis || data.daily_brief?.preview
@@ -188,11 +198,6 @@ export default function TasteLanding({ data }: TasteLandingProps) {
       sentiment_distribution: { bullish: 0, neutral: 0, bearish: 0 },
       reason: `${stock.name} 被 ${stock.mentions} 次提及，主導方向為${sentimentTone[stock.sentiment].label}。`,
     }))
-
-  const coverageText = useMemo(() => {
-    if (!latestRun) return '尚未取得最新自動化執行紀錄'
-    return `${latestRun.sources_success}/${latestRun.sources_total} 個來源完成，寫入 ${latestRun.episodes_written} 集`
-  }, [latestRun])
 
   return (
     <main className="research-shell">
@@ -245,19 +250,25 @@ export default function TasteLanding({ data }: TasteLandingProps) {
           </div>
           <div className="snapshot-stats">
             <div>
-              <span>KOL 樣本</span>
-              <strong><Users size={16} />{data.episodes_analyzed} 集</strong>
+              <span>{data.daily_brief ? '簡報來源' : 'KOL 樣本'}</span>
+              <strong>
+                <Users size={16} />
+                {data.daily_brief ? `${data.daily_brief.source_count} 來源` : `${data.episodes_analyzed} 集`}
+              </strong>
             </div>
             <div>
-              <span>掃描覆蓋</span>
-              <strong><Activity size={16} />{data.automation.completeness_pct}%</strong>
+              <span>{data.daily_brief ? '追蹤標的' : '掃描覆蓋'}</span>
+              <strong>
+                <Activity size={16} />
+                {data.daily_brief ? `${data.daily_brief.stock_count} 檔` : `${data.automation.completeness_pct}%`}
+              </strong>
             </div>
             <div>
               <span>更新</span>
-              <strong>{formatDateTime(data.generated_at)}</strong>
+              <strong>{formatDateTime(snapshotUpdateAt)}</strong>
             </div>
           </div>
-          <p>{coverageText}</p>
+          <p>{snapshotCoverageText}</p>
         </aside>
       </section>
 
