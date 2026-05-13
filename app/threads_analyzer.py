@@ -4,6 +4,7 @@ import re
 import urllib.parse
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from html import unescape
 
 import requests
 
@@ -50,6 +51,8 @@ class ThreadsAnalysis:
         reply_text = _summarize_replies(self.reply_lines)
 
         parts = [
+            f"原始網址：{self.url}",
+            "",
             f"發文者：{self.author or '抓不到'}",
             f"按讚數：{self.like_count or '抓不到'}",
             "",
@@ -69,6 +72,8 @@ def is_threads_url(url: str) -> bool:
 def analyze_threads_url(url: str) -> ThreadsAnalysis:
     normalized_url = _normalize_threads_url(url)
     media = _fetch_first_media(normalized_url)
+    if not media.video_url:
+        media = _merge_media(media, _fetch_threadster_media(normalized_url))
     raw_text, source = _fetch_threads_text(normalized_url)
     metadata = _extract_metadata(raw_text)
     lines = _content_lines(raw_text)
@@ -197,6 +202,54 @@ def _fetch_first_media(url: str) -> _ThreadsMedia:
         return _extract_first_media(response.text)
     except Exception:
         return _ThreadsMedia()
+
+
+def _merge_media(primary: _ThreadsMedia, fallback: _ThreadsMedia) -> _ThreadsMedia:
+    return _ThreadsMedia(
+        image_url=primary.image_url or fallback.image_url,
+        video_url=primary.video_url or fallback.video_url,
+    )
+
+
+def _fetch_threadster_media(url: str) -> _ThreadsMedia:
+    """Use Threadster as a best-effort fallback for public Threads video posts."""
+    try:
+        session = requests.Session()
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            ),
+            "Referer": "https://threadster.app/",
+            "Origin": "https://threadster.app",
+        }
+        session.get("https://threadster.app/", headers={"User-Agent": headers["User-Agent"]}, timeout=10)
+        csrf_token = session.cookies.get("_csrf", "")
+        if csrf_token:
+            headers["x-csrf-token"] = csrf_token
+        response = session.post(
+            "https://threadster.app/download",
+            data={"url": url},
+            headers=headers,
+            timeout=30,
+        )
+        if response.status_code != 200:
+            return _ThreadsMedia()
+        return _extract_threadster_media(response.text)
+    except Exception:
+        return _ThreadsMedia()
+
+
+def _extract_threadster_media(html: str) -> _ThreadsMedia:
+    video_url = _first_url(html, r"https://downloads\.acxcdn\.com/threadster/video\?token=[^\"'\s<]+")
+    image_url = _first_url(html, r"https://downloads\.acxcdn\.com/threadster/image\?token=[^\"'\s<]+")
+    return _ThreadsMedia(image_url=image_url, video_url=video_url)
+
+
+def _first_url(text: str, pattern: str) -> str:
+    match = re.search(pattern, text or "")
+    return unescape(match.group(0)) if match else ""
 
 
 def _fetch_first_image_url(url: str) -> str:

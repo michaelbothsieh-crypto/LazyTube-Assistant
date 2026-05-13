@@ -4,6 +4,7 @@ from app.threads_analyzer import (
     _extract_metadata,
     _extract_first_image_url,
     _extract_first_media,
+    _extract_threadster_media,
     _split_post_and_replies,
     _summarize_replies,
     is_threads_url,
@@ -97,7 +98,7 @@ def test_summarize_replies_reports_tone_and_samples():
     assert "同意這個看法" in summary
 
 
-def test_format_omits_emoji_and_original_url():
+def test_format_includes_original_url_and_omits_emoji():
     message = ThreadsAnalysis(
         url="https://www.threads.net/@demo/post/abc",
         post_lines=["你各位猜猜這些鄉親在幹嘛？"],
@@ -110,7 +111,7 @@ def test_format_omits_emoji_and_original_url():
 
     assert "Threads 快速解析" not in message
     assert "來源：worker" not in message
-    assert "https://www.threads.net" not in message
+    assert "原始網址：https://www.threads.net/@demo/post/abc" in message
     assert "⚡" not in message
     assert "🔗" not in message
     assert "🧵" not in message
@@ -138,3 +139,15 @@ def test_extract_first_media_supports_video_meta_tags():
 
     assert media.image_url == "https://cdn.example.com/first.jpg"
     assert media.video_url == "https://cdn.example.com/first.mp4"
+
+
+def test_extract_threadster_media_reads_download_links():
+    html = """
+    <img src="https://downloads.acxcdn.com/threadster/image?token=image-token&amp;x=1">
+    <a href="https://downloads.acxcdn.com/threadster/video?token=video-token&amp;y=2">Download</a>
+    """
+
+    media = _extract_threadster_media(html)
+
+    assert media.image_url == "https://downloads.acxcdn.com/threadster/image?token=image-token&x=1"
+    assert media.video_url == "https://downloads.acxcdn.com/threadster/video?token=video-token&y=2"
