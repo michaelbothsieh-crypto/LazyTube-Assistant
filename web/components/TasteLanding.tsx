@@ -207,20 +207,22 @@ export default function TasteLanding({ data }: TasteLandingProps) {
 
       {data.daily_brief && <DailyBriefBanner brief={data.daily_brief} />}
 
-      <section className="overview-section" id="automation">
-        <article className="overview-copy">
-          <p className="eyebrow">Daily decision brief</p>
-          <h1>今日 KOL 語言共識：{directionTone.label}</h1>
-          <p>
-            {boardThesis}
-          </p>
-          <div className="market-pulse" aria-label="Market pulse">
-            <span>今日脈搏</span>
-            {topStocks.slice(0, 5).map((stock) => (
-              <b key={stock.ticker}>{stock.ticker}<small>{stock.mentions}x</small></b>
-            ))}
-          </div>
-        </article>
+      <section className={`overview-section ${data.daily_brief ? 'overview-compact' : ''}`} id="automation">
+        {!data.daily_brief && (
+          <article className="overview-copy">
+            <p className="eyebrow">Daily decision brief</p>
+            <h1>今日 KOL 語言共識：{directionTone.label}</h1>
+            <p>
+              {boardThesis}
+            </p>
+            <div className="market-pulse" aria-label="Market pulse">
+              <span>今日脈搏</span>
+              {topStocks.slice(0, 5).map((stock) => (
+                <b key={stock.ticker}>{stock.ticker}<small>{stock.mentions}x</small></b>
+              ))}
+            </div>
+          </article>
+        )}
         <aside className="market-snapshot" aria-label="Market overview">
           <div className="snapshot-head">
             <span>市場快照</span>
@@ -320,7 +322,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
               <p>{dailyRiskFlags[0] || coverageText}</p>
             </div>
           </div>
-          {dailyTickerCards.length > 0 && (
+          {!data.daily_brief && dailyTickerCards.length > 0 && (
             <div className="ticker-intel-list">
               {dailyTickerCards.slice(0, 4).map((card) => (
                 <div key={card.ticker}>
