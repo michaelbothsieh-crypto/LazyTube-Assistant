@@ -187,6 +187,10 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const dailyRiskFlags = data.daily_brief?.risk_flags?.length
     ? data.daily_brief.risk_flags
     : [bearishSignal ? formatSignalThesis(bearishSignal) : '目前未偵測到高信心偏空訊號。']
+  const fallbackRiskHeadline = data.daily_brief ? '需驗證' : `${data.automation.completeness_pct}%`
+  const riskHeadline = bearishSignal
+    ? readableTicker(bearishSignal.ticker)
+    : fallbackRiskHeadline
   const dailyTickerCards = data.daily_brief?.ticker_cards?.length
     ? data.daily_brief.ticker_cards
     : topStocks.slice(0, 3).map((stock) => ({
@@ -329,7 +333,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
             </div>
             <div>
               <span>風險</span>
-              <strong>{bearishSignal ? readableTicker(bearishSignal.ticker) : `${data.automation.completeness_pct}%`}</strong>
+              <strong>{riskHeadline}</strong>
               <p>{dailyRiskFlags[0] || coverageText}</p>
             </div>
           </div>
