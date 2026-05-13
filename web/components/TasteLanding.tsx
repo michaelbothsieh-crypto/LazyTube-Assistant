@@ -144,6 +144,9 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const signals = data.signals.filter((signal) => !ignoredTickers.has(signal.ticker)).slice(0, 8)
   const episodes = data.episodes.slice(0, 16)
   const filteredEpisodes = filter === 'all' ? episodes : episodes.filter((episode) => episode.sentiment === filter)
+  const briefSources = data.daily_brief?.source_digest ?? []
+  const showBriefSources = briefSources.length > 0
+  const showSignalTable = signals.length > 0 || !data.daily_brief
   const direction = dominantSentiment(data)
   const directionTone = sentimentTone[direction]
   const DirectionIcon = directionTone.Icon
@@ -277,47 +280,49 @@ export default function TasteLanding({ data }: TasteLandingProps) {
       </section>
 
       <section className="research-grid signal-workspace" id="signals" aria-label="Daily market decision board">
-        <article className="panel panel-large">
-          <div className="panel-head">
-            <div>
-              <span>核心訊號</span>
-              <h2>標的、方向與信心分數集中看</h2>
+        {showSignalTable && (
+          <article className="panel panel-large">
+            <div className="panel-head">
+              <div>
+                <span>核心訊號</span>
+                <h2>標的、方向與信心分數集中看</h2>
+              </div>
+              <small>{signals.length || 0} signals</small>
             </div>
-            <small>{signals.length || 0} signals</small>
-          </div>
-          <div className="signal-table">
-            <div className="signal-table-head">
-              <span>代號</span>
-              <span>名稱</span>
-              <span>方向</span>
-              <span>信心</span>
-              <span>提及</span>
-              <span>節奏</span>
+            <div className="signal-table">
+              <div className="signal-table-head">
+                <span>代號</span>
+                <span>名稱</span>
+                <span>方向</span>
+                <span>信心</span>
+                <span>提及</span>
+                <span>節奏</span>
+              </div>
+              {signals.length ? signals.map((signal) => {
+                const tone = sentimentTone[signal.direction]
+                const mentionCount = topStocks.find((stock) => stock.ticker === signal.ticker)?.mentions ?? signal.source_count
+                return (
+                  <Link href="#kols" className="signal-table-row" key={signal.ticker}>
+                    <b>{signal.ticker}</b>
+                    <span>{signal.name}</span>
+                    <i style={{ color: tone.color }}>{tone.label}</i>
+                    <strong>{signal.confidence_score}</strong>
+                    <small>{mentionCount}x / {signal.source_count} 源</small>
+                    <em>{horizonLabel[signal.horizon] ?? '觀察'}</em>
+                  </Link>
+                )
+              }) : (
+                <p className="empty-note">尚無有效訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
+              )}
             </div>
-            {signals.length ? signals.map((signal) => {
-              const tone = sentimentTone[signal.direction]
-              const mentionCount = topStocks.find((stock) => stock.ticker === signal.ticker)?.mentions ?? signal.source_count
-              return (
-                <Link href="#kols" className="signal-table-row" key={signal.ticker}>
-                  <b>{signal.ticker}</b>
-                  <span>{signal.name}</span>
-                  <i style={{ color: tone.color }}>{tone.label}</i>
-                  <strong>{signal.confidence_score}</strong>
-                  <small>{mentionCount}x / {signal.source_count} 源</small>
-                  <em>{horizonLabel[signal.horizon] ?? '觀察'}</em>
-                </Link>
-              )
-            }) : (
-              <p className="empty-note">尚無有效訊號。Podcast scanner 寫入 daily_signals 後會出現在這裡。</p>
-            )}
-          </div>
-        </article>
+          </article>
+        )}
 
         <aside className="panel signal-aside">
           <div className="panel-head">
             <div>
-              <span>風險與熱度</span>
-              <h2>先排除盲點，再看擁擠標的</h2>
+              <span>{data.daily_brief ? '研究框架' : '風險與熱度'}</span>
+              <h2>{data.daily_brief ? '主軸、驗證與反向風險' : '先排除盲點，再看擁擠標的'}</h2>
             </div>
           </div>
           <div className="risk-list">
@@ -354,24 +359,61 @@ export default function TasteLanding({ data }: TasteLandingProps) {
       <section className="panel" id="kols">
         <div className="panel-head">
           <div>
-            <span>Evidence stream</span>
-            <h2>支撐今日判斷的 KOL 語言證據</h2>
+            <span>{showBriefSources ? 'Source digest' : 'Evidence stream'}</span>
+            <h2>{showBriefSources ? '本日簡報採用的來源摘要' : '支撐目前判斷的 KOL 語言證據'}</h2>
           </div>
-          <div className="filter-tabs compact-tabs">
-            {(['all', 'bullish', 'neutral', 'bearish'] as const).map((item) => (
-              <button key={item} type="button" className={filter === item ? 'is-active' : ''} onClick={() => setFilter(item)}>
-                {item === 'all' ? '全部' : sentimentTone[item].label}
-              </button>
+          {!showBriefSources && (
+            <div className="filter-tabs compact-tabs">
+              {(['all', 'bullish', 'neutral', 'bearish'] as const).map((item) => (
+                <button key={item} type="button" className={filter === item ? 'is-active' : ''} onClick={() => setFilter(item)}>
+                  {item === 'all' ? '全部' : sentimentTone[item].label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {showBriefSources ? (
+          <div className="brief-source-grid">
+            {briefSources.map((source, index) => (
+              <BriefSourceCard key={`${source.label}-${source.title}-${index}`} source={source} />
             ))}
           </div>
-        </div>
-        <div className="kol-report-grid">
-          {filteredEpisodes.map((episode, index) => (
-            <EpisodeCard key={`${episode.kol_id}-${episode.title}-${index}`} episode={episode} />
-          ))}
-        </div>
+        ) : (
+          <div className="kol-report-grid">
+            {filteredEpisodes.map((episode, index) => (
+              <EpisodeCard key={`${episode.kol_id}-${episode.title}-${index}`} episode={episode} />
+            ))}
+          </div>
+        )}
       </section>
     </main>
+  )
+}
+
+function BriefSourceCard({ source }: { source: DailyBrief['source_digest'][number] }) {
+  const tone = sentimentTone[source.sentiment]
+  const Icon = tone.Icon
+
+  return (
+    <article className="brief-source-card">
+      <div className="brief-source-top">
+        <div>
+          <strong>{source.label}</strong>
+          <small>{source.published || '日期待同步'}</small>
+        </div>
+        <span style={{ color: tone.color }}>
+          <Icon size={14} />
+          {tone.label}
+        </span>
+      </div>
+      <h3>{source.title}</h3>
+      <p>{source.summary || '此來源已納入每日簡報，等待下一輪摘要補齊。'}</p>
+      <div className="brief-source-stocks">
+        {source.stocks.length ? source.stocks.slice(0, 6).map((ticker) => (
+          <b key={ticker}>{ticker}</b>
+        )) : <b>主題</b>}
+      </div>
+    </article>
   )
 }
 

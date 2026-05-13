@@ -365,8 +365,31 @@ def test_synthesized_report_uses_direction_percentage_for_dominant_sentiment():
     assert "每日投資晨報" in html
     assert "Daily Investment Brief" not in html
     assert "3 來源" in html
+    assert "來源情緒" in html
+    assert "市場溫度" not in html
+    assert "頂部保留" not in html
     assert "min-width: 1040px" in html
     assert "table-layout: auto" in html
+
+
+def test_synthesized_report_filters_non_stock_symbols_from_focus_chips():
+    html = scanner.generate_daily_synthesized_html_report(
+        _valid_synthesized_report(),
+        [
+            {
+                "label": "節目 A",
+                "title": "電力市場觀察",
+                "published": "2026-05-05",
+                "stocks": ["CEG", "PJM", "2000"],
+                "sentiment": "bullish",
+                "summary": "PJM 是電力市場規則，不是股票代號；CEG 才是追蹤標的。",
+            },
+        ],
+    )
+
+    assert "CEG" in html
+    assert 'stock-code">PJM<' not in html
+    assert 'stock-code">2000<' not in html
 
 
 def test_podcast_prompt_uses_transcript_cache_namespace(monkeypatch):

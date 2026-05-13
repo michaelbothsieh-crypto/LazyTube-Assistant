@@ -72,6 +72,14 @@ INVALID_NUMERIC_TICKERS = {
     "2000", "2300", "2500", "3000",
 }
 
+NON_STOCK_SYMBOLS = {
+    "AI", "IT", "US", "TW", "Q1", "Q2", "Q3", "Q4",
+    "EPS", "ETF", "PE", "PB", "EV", "IPO", "RSI", "MA",
+    "CEO", "CFO", "GDP", "CPI", "PCE", "FED", "ECB",
+    "GEO", "CNC", "RFID", "HID", "ASSA", "ABLOY", "NFC",
+    "PJM",
+}
+
 ARTICLE_INCLUDE_KEYWORDS = {
     "ai", "人工智慧", "生成式", "agent", "代理", "openai", "chatgpt",
     "google", "alphabet", "gemini", "microsoft", "微軟", "amazon", "aws",
@@ -206,19 +214,12 @@ def _parse_nlm_analysis(analysis: str) -> tuple[str, list[str], str]:
     同時相容新格式（【個股觀點】＋【市場總結與操作建議】）
     與舊格式（【投資倒數小結】）。
     """
-    skip_tickers = {
-        'AI', 'IT', 'US', 'TW', 'Q1', 'Q2', 'Q3', 'Q4',
-        'EPS', 'ETF', 'PE', 'PB', 'EV', 'IPO', 'RSI', 'MA',
-        'CEO', 'CFO', 'GDP', 'CPI', 'PCE', 'FED', 'ECB',
-        'GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC',
-    }
-
     def is_valid_ticker(ticker: str) -> bool:
         if ticker in INVALID_NUMERIC_TICKERS:
             return False
         if re.match(r'^\d{4}$', ticker):
             return ticker in KNOWN_TW_TICKERS
-        return bool(re.match(r'^[A-Z]{2,5}$', ticker)) and ticker not in skip_tickers
+        return bool(re.match(r'^[A-Z]{2,5}$', ticker)) and ticker not in NON_STOCK_SYMBOLS
 
     stocks: list[str] = []
 
@@ -407,6 +408,8 @@ def _daily_digest_metrics(items: list[dict]) -> tuple[dict[str, int], dict[str, 
         sentiment = item.get("sentiment", "neutral")
         sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
         for stock in item.get("stocks", []):
+            if not _is_report_stock_symbol(stock):
+                continue
             stock_sources.setdefault(stock, [])
             label = item.get("label", "Podcast")
             if label not in stock_sources[stock]:
@@ -442,6 +445,15 @@ def _plain_daily_preview(text: str, max_length: int = 220) -> str:
     return preview[: max_length - 3].rstrip() + "..."
 
 
+def _is_report_stock_symbol(ticker: object) -> bool:
+    stock = str(ticker or "").strip()
+    if stock in INVALID_NUMERIC_TICKERS or stock in NON_STOCK_SYMBOLS:
+        return False
+    if re.match(r"^\d{4}$", stock):
+        return stock in KNOWN_TW_TICKERS
+    return bool(re.match(r"^[A-Z]{2,5}$", stock))
+
+
 def _extract_markdown_section(markdown: str, section_title: str) -> str:
     if not markdown:
         return ""
@@ -475,6 +487,24 @@ def _extract_markdown_bullets(markdown: str, section_title: str, limit: int = 3)
     return bullets
 
 
+def _extract_section_insight(markdown: str, section_title: str, fallback: str, max_length: int = 180) -> str:
+    section = _extract_markdown_section(markdown, section_title)
+    if not section:
+        return _plain_daily_preview(fallback, max_length)
+
+    candidates: list[str] = []
+    for block in re.split(r"\n\s*\n", section):
+        cleaned = re.sub(r"^#+\s*", "", block, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*(?:[-*]|\d+[.、])\s*", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\|", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if cleaned and not cleaned.startswith("標的代號"):
+            candidates.append(cleaned)
+
+    return _plain_daily_preview(candidates[0] if candidates else fallback, max_length)
+
+
 def _extract_market_theme_titles(markdown: str, limit: int = 3) -> list[str]:
     section = _extract_markdown_section(markdown, "市場主軸")
     titles = [
@@ -492,7 +522,7 @@ def _daily_ticker_cards(items: list[dict], limit: int = 6) -> list[dict]:
         summary = _plain_daily_preview(item.get("summary", ""), 110)
         sentiment = str(item.get("sentiment") or "neutral")
         for ticker in item.get("stocks", []):
-            if ticker in INVALID_NUMERIC_TICKERS or (re.match(r"^\d{4}$", str(ticker)) and ticker not in KNOWN_TW_TICKERS):
+            if not _is_report_stock_symbol(ticker):
                 continue
             card = tickers.setdefault(ticker, {
                 "ticker": ticker,
@@ -537,8 +567,7 @@ def _daily_source_digest(items: list[dict], limit: int = 8) -> list[dict]:
             "stocks": [
                 ticker
                 for ticker in item.get("stocks", [])
-                if ticker not in INVALID_NUMERIC_TICKERS
-                and not (re.match(r"^\d{4}$", str(ticker)) and ticker not in KNOWN_TW_TICKERS)
+                if _is_report_stock_symbol(ticker)
             ][:6],
             "summary": _plain_daily_preview(item.get("summary", ""), 120),
         })
@@ -834,6 +863,16 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
             return "偏多", round(bullish_count / total * 100), "偏多來源占比高於偏空"
         return "偏空", round(bearish_count / total * 100), "偏空來源占比高於偏多"
 
+    def source_mix_label() -> str:
+        bullish_count = sentiment_counts.get("bullish", 0)
+        bearish_count = sentiment_counts.get("bearish", 0)
+        neutral_count = sentiment_counts.get("neutral", 0)
+        if total <= 0:
+            return "待資料"
+        if neutral_count >= bullish_count and neutral_count >= bearish_count:
+            return "中性偏高"
+        return "偏多集中" if bullish_count > bearish_count else "偏空升溫"
+
     stock_chips = "\n".join(
         f"""
         <div class="chip {stock_class(stock)}">
@@ -843,18 +882,6 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
         """
         for stock, sources in list(stock_sources.items())[:18]
     ) or '<div class="muted">本輪未抽出明確台美股標的</div>'
-
-    def section_preview(header: str, fallback: str) -> str:
-        pattern = rf"(?:^|\n)##\s*{re.escape(header)}\s*\n([\s\S]*?)(?=\n##\s+|$)"
-        match = re.search(pattern, markdown_report)
-        text = match.group(1).strip() if match else fallback
-        text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
-        text = re.sub(r"^[\-\*\d.、\s]+", "", text, flags=re.MULTILINE)
-        text = re.sub(r"^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$", "", text, flags=re.MULTILINE)
-        text = re.sub(r"\|", " ", text)
-        text = re.sub(r"\s{2,}", " ", text)
-        text = re.sub(r"\s+", " ", text).strip()
-        return text[:150] + ("..." if len(text) > 150 else "")
 
     def keyword_chips(candidates: list[tuple[str, str]], class_name: str, empty: str) -> str:
         chips = [
@@ -867,20 +894,12 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     bullish_pct = round(sentiment_counts.get("bullish", 0) / total * 100) if total else 0
     bearish_pct = round(sentiment_counts.get("bearish", 0) / total * 100) if total else 0
     neutral_pct = round(sentiment_counts.get("neutral", 0) / total * 100) if total else 0
-    market_temperature = (
-        "偏熱"
-        if bullish_pct >= 60
-        else "偏冷"
-        if bearish_pct >= 40
-        else "觀望"
-        if neutral_pct >= 50
-        else "分歧"
-    )
+    source_mix = source_mix_label()
     direction_label, direction_pct, direction_hint = direction_summary()
     risk_level = "中高" if any(word in markdown_report for word in ["槓桿", "泡沫", "通膨", "回檔", "估值"]) else "中"
-    executive_preview = section_preview("執行摘要", "今日主要訊號請見下方完整報告。")
-    operation_preview = section_preview("操作觀察", "後續追蹤指標請見下方操作觀察。")
-    risk_preview = section_preview("風險清單", "主要風險請見下方風險清單。")
+    executive_preview = _extract_section_insight(markdown_report, "執行摘要", "今日主要訊號請見下方完整報告。")
+    operation_preview = _extract_section_insight(markdown_report, "操作觀察", "後續追蹤指標請見下方操作觀察。")
+    risk_preview = _extract_section_insight(markdown_report, "風險清單", "主要風險請見下方風險清單。")
     topic_chips = keyword_chips(
         [
             ("AI", "主題"),
@@ -1100,7 +1119,7 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
     <header>
       <div class="eyebrow">每日投資晨報</div>
       <h1>每日 Podcast 投資統整</h1>
-      <p class="subtitle">跨來源統整。頂部保留今日判讀、主軸雷達、焦點股票與風險雷達；來源日期收斂在底部來源摘要，避免重複資訊干擾閱讀。</p>
+      <p class="subtitle">先讀結論，再看來源。此報告只整理近一天來源中的投資敘事、可驗證事件與反向風險，不補入來源外行情或價格。</p>
       <div class="meta-row">
         <span>產生時間：{esc(generated_at)}</span>
         <span>來源數：{total}</span>
@@ -1125,8 +1144,8 @@ def generate_daily_synthesized_html_report(markdown_report: str, items: list[dic
           </div>
         </div>
         <div class="signal-strip">
-          <div class="signal"><div class="signal-label">市場溫度</div><div class="signal-value">{market_temperature}</div><small>由來源情緒與文字風險判斷</small></div>
-          <div class="signal"><div class="signal-label">主要方向</div><div class="signal-value">{direction_pct}% {direction_label}</div><small>{esc(direction_hint)}</small></div>
+          <div class="signal"><div class="signal-label">來源情緒</div><div class="signal-value">{source_mix}</div><small>依逐篇來源標籤統計，不等同買賣建議</small></div>
+          <div class="signal"><div class="signal-label">情緒占比</div><div class="signal-value">{direction_pct}% {direction_label}</div><small>{esc(direction_hint)}</small></div>
           <div class="signal"><div class="signal-label">風險等級</div><div class="signal-value">{risk_level}</div><small>依風險關鍵詞輔助判斷</small></div>
         </div>
       </div>

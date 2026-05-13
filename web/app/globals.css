@@ -1106,6 +1106,88 @@ a {
   gap: 10px;
 }
 
+.brief-source-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.brief-source-card {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background:
+    linear-gradient(160deg, rgba(115, 241, 186, 0.045), transparent 54%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.brief-source-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.brief-source-top strong,
+.brief-source-top small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-source-top small {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.brief-source-top > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.brief-source-card h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.28;
+}
+
+.brief-source-card p {
+  display: -webkit-box;
+  margin: 0;
+  color: var(--soft);
+  line-height: 1.48;
+  font-size: 0.9rem;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.brief-source-stocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.brief-source-stocks b {
+  border: 1px solid rgba(126, 215, 255, 0.28);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--cyan);
+  background: rgba(126, 215, 255, 0.055);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.72rem;
+}
+
 .kol-report-card {
   min-height: 268px;
   display: flex;
@@ -1344,7 +1426,8 @@ a {
   .summary-strip,
   .pipeline-grid,
   .insight-grid,
-  .kol-report-grid {
+  .kol-report-grid,
+  .brief-source-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1388,7 +1471,8 @@ a {
   .signal-aside,
   .snapshot-stats,
   .ticker-intel-list,
-  .kol-report-grid {
+  .kol-report-grid,
+  .brief-source-grid {
     grid-template-columns: 1fr;
   }
 
