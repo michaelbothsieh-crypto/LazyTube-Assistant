@@ -110,9 +110,9 @@ a {
 
 .daily-brief-banner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.52fr);
-  align-items: center;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
   margin-top: 14px;
   padding: 16px;
   border: 1px solid var(--line-strong);
@@ -179,7 +179,7 @@ a {
 
 .daily-brief-tickers {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 12px;
 }
@@ -248,6 +248,7 @@ a {
   color: var(--text);
   font-weight: 800;
   white-space: nowrap;
+  grid-column: 1 / -1;
 }
 
 .daily-brief-open:hover {
@@ -258,7 +259,7 @@ a {
 .daily-brief-research {
   min-width: 0;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -301,7 +302,7 @@ a {
 
 .overview-section {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(380px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 10px;
   margin-top: 14px;
@@ -327,17 +328,17 @@ a {
 
 .overview-copy {
   min-width: 0;
-  min-height: 260px;
+  min-height: auto;
   display: grid;
   align-content: center;
-  padding: 22px;
+  padding: 18px;
 }
 
 .overview-copy h1 {
   max-width: 920px;
   margin: 0;
-  font-size: clamp(2.15rem, 4.2vw, 4.6rem);
-  line-height: 1;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.08;
   letter-spacing: 0;
 }
 
@@ -351,15 +352,15 @@ a {
 .market-snapshot {
   min-width: 0;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-items: start;
   padding: 16px;
 }
 
 .overview-compact .market-snapshot {
-  grid-template-columns: 220px minmax(0, 1fr) 420px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 }
 
 .snapshot-head span,
@@ -1449,7 +1450,10 @@ a {
   .research-grid,
   .decision-board,
   .daily-brief-banner,
+  .daily-brief-research,
   .overview-section,
+  .market-snapshot,
+  .overview-compact .market-snapshot,
   .research-header,
   .kol-marquee,
   .detail-report-header {

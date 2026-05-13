@@ -183,7 +183,24 @@ async function getLatestDailyBrief(): Promise<DailyBrief | null> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(['GET', DAILY_BRIEF_REDIS_KEY]),
-      next: { revalidate: 300 },
+      cache: 'no-store',
+    })
+    if (!response.ok) return getLatestDailyBriefViaGet(redisUrl, redisToken)
+    const data = await response.json() as { result?: unknown }
+    const raw = typeof data.result === 'string' ? data.result : ''
+    if (!raw) return getLatestDailyBriefViaGet(redisUrl, redisToken)
+    return normalizeDailyBrief(JSON.parse(raw))
+  } catch {
+    return getLatestDailyBriefViaGet(redisUrl, redisToken)
+  }
+}
+
+async function getLatestDailyBriefViaGet(redisUrl: string, redisToken: string): Promise<DailyBrief | null> {
+  try {
+    const baseUrl = redisUrl.replace(/\/$/, '')
+    const response = await fetch(`${baseUrl}/get/${DAILY_BRIEF_REDIS_KEY}`, {
+      headers: { Authorization: `Bearer ${redisToken}` },
+      cache: 'no-store',
     })
     if (!response.ok) return null
     const data = await response.json() as { result?: unknown }
