@@ -74,48 +74,48 @@ a {
 
 .keyword-mark {
   display: inline;
-  border-radius: 5px;
-  padding: 0 0.24em;
+  border-radius: 3px;
+  padding: 0 0.12em;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .keyword-mark.ai {
   color: var(--blue);
-  background: var(--sky-soft);
+  background: rgba(126, 196, 255, 0.055);
 }
 
 .keyword-mark.chip {
   color: var(--lime);
-  background: rgba(201, 244, 92, 0.11);
+  background: rgba(201, 244, 92, 0.055);
 }
 
 .keyword-mark.security {
   color: var(--violet);
-  background: rgba(208, 168, 255, 0.13);
+  background: rgba(208, 168, 255, 0.055);
 }
 
 .keyword-mark.earnings {
   color: var(--orange);
-  background: var(--orange-soft);
+  background: rgba(255, 184, 107, 0.055);
 }
 
 .keyword-mark.risk {
   color: var(--pink);
-  background: var(--pink-soft);
+  background: rgba(255, 140, 198, 0.055);
 }
 
 .keyword-mark.watch {
   color: var(--mint);
-  background: var(--mint-soft);
+  background: rgba(115, 241, 186, 0.055);
 }
 
 .keyword-mark.macro {
   color: var(--coral);
-  background: rgba(255, 159, 104, 0.13);
+  background: rgba(255, 159, 104, 0.055);
 }
 
 .research-shell {
@@ -1552,6 +1552,10 @@ a {
   grid-column: span 12;
 }
 
+.compact-detail-grid .detail-transcript-card {
+  grid-column: span 12;
+}
+
 .compact-detail-grid .detail-stock-card {
   grid-column: span 7;
 }
@@ -1620,6 +1624,10 @@ a {
   }
 
   .market-snapshot {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-compact .market-snapshot {
     grid-template-columns: 1fr;
   }
 
@@ -1954,6 +1962,7 @@ button {
 .stock-card,
 .keyword-card,
 .detail-summary-card,
+.detail-transcript-card,
 .detail-side-card,
 .detail-stock-card,
 .detail-chart-card {
@@ -2457,10 +2466,24 @@ button {
   padding: 24px;
 }
 
+.detail-transcript-card {
+  grid-column: span 12;
+  padding: 24px;
+}
+
 .summary-flow {
   display: grid;
   gap: 12px;
   margin-top: 20px;
+}
+
+.transcript-flow {
+  max-height: 520px;
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  overflow: auto;
+  padding-right: 8px;
 }
 
 .summary-flow p {
@@ -2468,6 +2491,13 @@ button {
   color: var(--soft);
   font-size: clamp(1rem, 1.4vw, 1.2rem);
   line-height: 1.75;
+}
+
+.transcript-flow p {
+  margin: 0;
+  color: var(--soft);
+  font-size: 0.95rem;
+  line-height: 1.68;
 }
 
 .detail-side-card {
@@ -2700,6 +2730,7 @@ button {
   .automation-card,
   .signal-card,
   .detail-summary-card,
+  .detail-transcript-card,
   .detail-side-card {
     grid-column: span 12;
   }

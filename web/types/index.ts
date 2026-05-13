@@ -54,6 +54,8 @@ export interface Episode {
   report_url: string
   unique_insight: string
   site_strength: string
+  transcript: string
+  investment_note: string
 }
 
 export interface ConsensusHistory {

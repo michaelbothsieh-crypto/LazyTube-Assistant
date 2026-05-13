@@ -398,7 +398,10 @@ export const getConsensusHistory = unstable_cache(
 )
 
 function mapEpisodeRow(row: Record<string, unknown>): Episode {
-  const summary = stripNotebookCitations(String(row.summary ?? ''))
+  const rawSummary = String(row.summary ?? '')
+  const transcript = stripNotebookCitations(extractAnalysisSection(rawSummary, '文字紀錄'))
+  const investmentNote = stripNotebookCitations(extractAnalysisSection(rawSummary, '投資倒數小結'))
+  const summary = stripNotebookCitations(rawSummary)
   const stocks = Array.isArray(row.stocks_mentioned) ? row.stocks_mentioned as string[] : []
   const sentiment = row.sentiment as 'bullish' | 'bearish' | 'neutral'
 
@@ -418,7 +421,15 @@ function mapEpisodeRow(row: Record<string, unknown>): Episode {
     report_url: String(row.report_url ?? ''),
     unique_insight: deriveUniqueInsight(summary, stocks),
     site_strength: deriveSiteStrength(row, stocks, sentiment),
+    transcript,
+    investment_note: investmentNote,
   }
+}
+
+function extractAnalysisSection(text: string, title: string): string {
+  const pattern = new RegExp(`【\\s*${title}\\s*】\\s*([\\s\\S]*?)(?=\\n\\s*【|$)`)
+  const match = pattern.exec(text)
+  return match?.[1]?.trim() ?? ''
 }
 
 function stripNotebookCitations(text: string): string {
@@ -543,6 +554,8 @@ function fallbackConsensusData(): ConsensusData {
       ...episode,
       unique_insight: episode.unique_insight || deriveUniqueInsight(episode.summary || '', episode.stocks_mentioned || []),
       site_strength: episode.site_strength || deriveSiteStrength(episode as unknown as Record<string, unknown>, episode.stocks_mentioned || [], episode.sentiment || 'neutral'),
+      transcript: episode.transcript || extractAnalysisSection(episode.summary || '', '文字紀錄'),
+      investment_note: episode.investment_note || extractAnalysisSection(episode.summary || '', '投資倒數小結'),
     })),
     consensus_history: data.consensus_history ?? [],
     signals: data.signals ?? [],
@@ -570,6 +583,8 @@ function fallbackEpisodeByKolId(kolId: string): Episode | null {
     report_url: '',
     unique_insight: summary,
     site_strength: `${kol.kol_name} 已納入來源監控，等待最新可分析內容同步。`,
+    transcript: '',
+    investment_note: '',
   }
 }
 

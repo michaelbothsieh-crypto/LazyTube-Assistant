@@ -49,11 +49,13 @@ function keywordClass(term: string) {
   return rule?.className ?? 'topic'
 }
 
-function HighlightText({ text }: { text: string }) {
+function HighlightText({ text, maxMarks = 4 }: { text: string; maxMarks?: number }) {
   if (!text) return null
   const parts: ReactNode[] = []
   let lastIndex = 0
+  let marks = 0
   for (const match of text.matchAll(keywordPattern)) {
+    if (marks >= maxMarks) break
     const value = match[0]
     const index = match.index ?? 0
     if (index > lastIndex) parts.push(text.slice(lastIndex, index))
@@ -63,6 +65,7 @@ function HighlightText({ text }: { text: string }) {
       </mark>,
     )
     lastIndex = index + value.length
+    marks += 1
   }
   if (lastIndex < text.length) parts.push(text.slice(lastIndex))
   return <>{parts}</>
@@ -136,7 +139,7 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
           <h2>{brief.title}</h2>
           {brief.generated_at && <time>{formatDateTime(brief.generated_at)}</time>}
         </div>
-        <p><HighlightText text={thesis} /></p>
+        <p><HighlightText text={thesis} maxMarks={5} /></p>
         <div className="daily-brief-meta" aria-label="Daily brief metadata">
           {hasMeta && (
             <span>{brief.source_count} 來源 / {brief.stock_count} 標的</span>
@@ -151,7 +154,7 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
               <div key={card.ticker}>
                 <b>{card.ticker}</b>
                 <span>{card.source_count} 源 / {card.mention_count} 次</span>
-                <small><HighlightText text={card.reason} /></small>
+                <small><HighlightText text={card.reason} maxMarks={2} /></small>
               </div>
             ))}
           </div>
@@ -169,16 +172,16 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
       <div className="daily-brief-research">
         <div>
           <span>主軸</span>
-          <strong><HighlightText text={themes[0] || '等待主軸'} /></strong>
-          <small><HighlightText text={themes.slice(1).join(' / ') || '跨來源共識整理'} /></small>
+          <strong><HighlightText text={themes[0] || '等待主軸'} maxMarks={1} /></strong>
+          <small><HighlightText text={themes.slice(1).join(' / ') || '跨來源共識整理'} maxMarks={1} /></small>
         </div>
         <div>
           <span>驗證</span>
-          <strong><HighlightText text={watchpoints[0]} /></strong>
+          <strong><HighlightText text={watchpoints[0]} maxMarks={2} /></strong>
         </div>
         <div>
           <span>風險</span>
-          <strong><HighlightText text={riskFlags[0]} /></strong>
+          <strong><HighlightText text={riskFlags[0]} maxMarks={2} /></strong>
         </div>
         <a className="daily-brief-open" href={brief.report_url} target="_blank" rel="noopener noreferrer">
           完整 HTML
@@ -409,17 +412,17 @@ export default function TasteLanding({ data }: TasteLandingProps) {
             <div>
               <span>主軸</span>
               <strong>{dailyThemes[0] || '尚無'}</strong>
-              <p><HighlightText text={dailyThemes.slice(1).join(' / ') || data.consensus.weekly_theme || '等待更多來源形成主軸。'} /></p>
+              <p><HighlightText text={dailyThemes.slice(1).join(' / ') || data.consensus.weekly_theme || '等待更多來源形成主軸。'} maxMarks={2} /></p>
             </div>
             <div>
               <span>驗證</span>
               <strong>{crowdedStock ? readableTicker(crowdedStock.ticker) : '觀察'}</strong>
-              <p><HighlightText text={dailyWatchpoints[0] || '追蹤標的熱度是否延續到更多來源。'} /></p>
+              <p><HighlightText text={dailyWatchpoints[0] || '追蹤標的熱度是否延續到更多來源。'} maxMarks={2} /></p>
             </div>
             <div>
               <span>風險</span>
               <strong>{riskHeadline}</strong>
-              <p><HighlightText text={dailyRiskFlags[0] || coverageText} /></p>
+              <p><HighlightText text={dailyRiskFlags[0] || coverageText} maxMarks={2} /></p>
             </div>
           </div>
           {!data.daily_brief && dailyTickerCards.length > 0 && (
@@ -428,7 +431,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
                 <div key={card.ticker}>
                   <b>{card.ticker}</b>
                   <span>{card.source_count} 源 / {card.mention_count} 次</span>
-                  <p><HighlightText text={`${card.sources.slice(0, 3).join('、') || '來源待同步'}｜${card.reason}`} /></p>
+                  <p><HighlightText text={`${card.sources.slice(0, 3).join('、') || '來源待同步'}｜${card.reason}`} maxMarks={2} /></p>
                 </div>
               ))}
             </div>
@@ -487,7 +490,7 @@ function BriefSourceCard({ source }: { source: DailyBrief['source_digest'][numbe
         </span>
       </div>
       <h3>{source.title}</h3>
-      <p><HighlightText text={source.summary || '此來源已納入每日簡報，等待下一輪摘要補齊。'} /></p>
+      <p><HighlightText text={source.summary || '此來源已納入每日簡報，等待下一輪摘要補齊。'} maxMarks={2} /></p>
       <div className="brief-source-stocks">
         {source.stocks.length ? source.stocks.slice(0, 6).map((ticker) => (
           <b key={ticker}>{ticker}</b>

@@ -20,13 +20,13 @@ const sentiment = {
 
 const ignoredTickers = new Set(['GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC'])
 
-function splitSummary(summary: string) {
+function splitSummary(summary: string, limit = 18) {
   return summary
     .replace(/\r/g, '\n')
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .slice(0, 18)
+    .slice(0, limit)
 }
 
 export default async function KOLDetailPage({ params }: { params: Promise<{ kol_id: string }> }) {
@@ -53,7 +53,8 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
       kols: [],
     }
   ))
-  const summaryLines = splitSummary(episode.summary)
+  const summaryLines = splitSummary(episode.investment_note || episode.summary)
+  const transcriptLines = splitSummary(episode.transcript, 80)
 
   return (
     <main className="detail-shell overflow-x-hidden w-full max-w-full">
@@ -114,13 +115,27 @@ export default async function KOLDetailPage({ params }: { params: Promise<{ kol_
       <section className="detail-grid-section compact-detail-grid">
         <div className="detail-bento">
           <article className="detail-summary-card">
-            <span className="card-label">完整摘要</span>
+            <span className="card-label">投資小結</span>
             <div className="summary-flow">
               {(summaryLines.length ? summaryLines : [episode.summary || '尚無摘要內容']).map((line, index) => (
                 <p key={`${line}-${index}`}>{line}</p>
               ))}
             </div>
           </article>
+
+          {transcriptLines.length > 0 && (
+            <article className="detail-transcript-card">
+              <div className="detail-card-head">
+                <span className="card-label">文字紀錄</span>
+                <small>{transcriptLines.length} lines</small>
+              </div>
+              <div className="transcript-flow">
+                {transcriptLines.map((line, index) => (
+                  <p key={`${line}-${index}`}>{line}</p>
+                ))}
+              </div>
+            </article>
+          )}
 
           <article className="detail-stock-card">
             <div className="detail-card-head">
