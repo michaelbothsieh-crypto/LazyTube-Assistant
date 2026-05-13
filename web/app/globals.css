@@ -1612,6 +1612,7 @@ a {
   .daily-brief-tickers,
   .signal-aside,
   .snapshot-stats,
+  .overview-compact .snapshot-stats,
   .ticker-intel-list,
   .kol-report-grid,
   .brief-source-grid {

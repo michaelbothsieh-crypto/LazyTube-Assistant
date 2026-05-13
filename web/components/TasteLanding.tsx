@@ -88,6 +88,13 @@ function dominantSentiment(data: ConsensusData) {
   return 'neutral'
 }
 
+function dominantDistribution(distribution: { bullish: number; bearish: number; neutral: number }) {
+  const { bullish, bearish, neutral } = distribution
+  if (bullish >= bearish && bullish >= neutral) return 'bullish'
+  if (bearish >= bullish && bearish >= neutral) return 'bearish'
+  return 'neutral'
+}
+
 function formatSignalThesis(signal: ConsensusData['signals'][number]) {
   const existing = signal.thesis.trim()
   if (existing && !existing.includes('appeared across')) return existing
@@ -191,15 +198,23 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   const briefSources = data.daily_brief?.source_digest ?? []
   const showBriefSources = briefSources.length > 0
   const showSignalTable = signals.length > 0 || !data.daily_brief
-  const direction = dominantSentiment(data)
+  const briefDistribution = data.daily_brief?.sentiment_distribution
+  const briefSentimentTotal = briefDistribution
+    ? briefDistribution.bullish + briefDistribution.neutral + briefDistribution.bearish
+    : 0
+  const direction = briefDistribution && briefSentimentTotal > 0
+    ? dominantDistribution(briefDistribution)
+    : dominantSentiment(data)
   const directionTone = sentimentTone[direction]
   const DirectionIcon = directionTone.Icon
   const latestRun = data.automation.latest_run
   const strongestSignal = signals[0]
   const bearishSignal = signals.find((signal) => signal.direction === 'bearish')
   const crowdedStock = topStocks[0]
-  const hasEffectiveSamples = data.episodes_analyzed > 0
-  const marketCallValue = hasEffectiveSamples ? directionTone.label : '待資料'
+  const hasEffectiveSamples = data.episodes_analyzed > 0 || briefSentimentTotal > 0
+  const marketCallValue = hasEffectiveSamples
+    ? direction === 'neutral' && briefSentimentTotal > 0 ? '中性偏高' : directionTone.label
+    : '待資料'
   const marketCallColor = hasEffectiveSamples ? directionTone.color : 'var(--muted)'
   const showDirectionIcon = hasEffectiveSamples && direction !== 'neutral'
   const coverageText = useMemo(() => {
@@ -211,9 +226,30 @@ export default function TasteLanding({ data }: TasteLandingProps) {
     ? `每日簡報已整理 ${data.daily_brief.source_count} 個來源、${data.daily_brief.stock_count} 檔標的。`
     : coverageText
   const sentimentBars = [
-    { key: 'bullish', label: '偏多', value: data.consensus.market_sentiment.bullish, color: 'var(--gain)' },
-    { key: 'neutral', label: '中性', value: data.consensus.market_sentiment.neutral, color: 'var(--muted)' },
-    { key: 'bearish', label: '偏空', value: data.consensus.market_sentiment.bearish, color: 'var(--risk)' },
+    {
+      key: 'bullish',
+      label: '偏多',
+      value: briefDistribution && briefSentimentTotal
+        ? Math.round((briefDistribution.bullish / briefSentimentTotal) * 100)
+        : data.consensus.market_sentiment.bullish,
+      color: 'var(--gain)',
+    },
+    {
+      key: 'neutral',
+      label: '中性',
+      value: briefDistribution && briefSentimentTotal
+        ? Math.round((briefDistribution.neutral / briefSentimentTotal) * 100)
+        : data.consensus.market_sentiment.neutral,
+      color: 'var(--muted)',
+    },
+    {
+      key: 'bearish',
+      label: '偏空',
+      value: briefDistribution && briefSentimentTotal
+        ? Math.round((briefDistribution.bearish / briefSentimentTotal) * 100)
+        : data.consensus.market_sentiment.bearish,
+      color: 'var(--risk)',
+    },
   ] as const
   const marketCallDetail = data.daily_brief
     ? `${data.daily_brief.source_count} 來源 / ${data.daily_brief.stock_count} 標的`
