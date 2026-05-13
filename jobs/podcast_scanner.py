@@ -327,6 +327,7 @@ def _build_daily_digest_candidate(kol_meta: dict, ep: dict, analysis: str) -> di
         return None
     _, stocks, sentiment = _parse_nlm_analysis(analysis)
     return {
+        "kol_id": kol_meta.get("kol_id") or "",
         "label": kol_meta.get("label") or ep.get("feed_title") or "Podcast",
         "title": ep.get("title") or "未命名集數",
         "published": format_rss_date(ep.get("published", "")),
@@ -561,6 +562,7 @@ def _daily_source_digest(items: list[dict], limit: int = 8) -> list[dict]:
     for item in items[:limit]:
         digest.append({
             "label": str(item.get("label") or "Podcast"),
+            "kol_id": str(item.get("kol_id") or ""),
             "title": str(item.get("title") or "未命名集數"),
             "published": str(item.get("published") or ""),
             "sentiment": str(item.get("sentiment") or "neutral"),
@@ -1312,6 +1314,7 @@ def load_recent_digest_items_from_db(limit: int = 20) -> list[dict]:
                 cur.execute(
                     """
                     SELECT
+                      k.kol_id,
                       k.kol_name,
                       e.title,
                       e.published,
@@ -1333,9 +1336,10 @@ def load_recent_digest_items_from_db(limit: int = 20) -> list[dict]:
         return []
 
     items: list[dict] = []
-    for kol_name, title, published, summary, sentiment, stocks in rows:
+    for kol_id, kol_name, title, published, summary, sentiment, stocks in rows:
         analysis = str(summary or "")
         items.append({
+            "kol_id": kol_id or "",
             "label": kol_name or "Podcast",
             "title": title or "未命名集數",
             "published": published.isoformat() if hasattr(published, "isoformat") else str(published or ""),

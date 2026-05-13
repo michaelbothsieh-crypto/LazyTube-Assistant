@@ -272,6 +272,7 @@ function normalizeDailyBrief(value: unknown): DailyBrief | null {
           ? sentimentValue
           : 'neutral'
         return {
+          kol_id: String(source.kol_id ?? ''),
           label: String(source.label ?? 'Podcast'),
           title: String(source.title ?? '未命名集數'),
           published: String(source.published ?? ''),

@@ -89,6 +89,7 @@ export interface DailyBrief {
     reason: string
   }[]
   source_digest: {
+    kol_id?: string
     label: string
     title: string
     published: string

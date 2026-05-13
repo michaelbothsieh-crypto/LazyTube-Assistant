@@ -79,6 +79,21 @@ function formatOutlook(episode: Episode) {
   return `留意 ${tickers.join(' / ')} 的催化、估值與供應鏈驗證。`
 }
 
+function normalizeMatchText(value: string) {
+  return value.replace(/\s+/g, '').toLowerCase()
+}
+
+function briefSourceHref(source: DailyBrief['source_digest'][number], episodes: Episode[]) {
+  if (source.kol_id) return `/kol/${source.kol_id}`
+  const sourceTitle = normalizeMatchText(source.title)
+  const sourceLabel = normalizeMatchText(source.label)
+  const matched = episodes.find((episode) => {
+    const episodeTitle = normalizeMatchText(episode.title)
+    return episodeTitle === sourceTitle || episodeTitle.includes(sourceTitle) || sourceTitle.includes(episodeTitle)
+  }) ?? episodes.find((episode) => normalizeMatchText(episode.kol_name) === sourceLabel)
+  return matched ? `/kol/${matched.kol_id}` : ''
+}
+
 function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
   const hasMeta = brief.source_count > 0 || brief.stock_count > 0
   const thesis = brief.thesis || brief.preview
@@ -415,7 +430,11 @@ export default function TasteLanding({ data }: TasteLandingProps) {
         {showBriefSources ? (
           <div className="brief-source-grid">
             {briefSources.map((source, index) => (
-              <BriefSourceCard key={`${source.label}-${source.title}-${index}`} source={source} />
+              <BriefSourceCard
+                key={`${source.label}-${source.title}-${index}`}
+                source={source}
+                href={briefSourceHref(source, data.episodes)}
+              />
             ))}
           </div>
         ) : (
@@ -430,12 +449,11 @@ export default function TasteLanding({ data }: TasteLandingProps) {
   )
 }
 
-function BriefSourceCard({ source }: { source: DailyBrief['source_digest'][number] }) {
+function BriefSourceCard({ source, href }: { source: DailyBrief['source_digest'][number]; href: string }) {
   const tone = sentimentTone[source.sentiment]
   const Icon = tone.Icon
-
-  return (
-    <article className="brief-source-card">
+  const content = (
+    <>
       <div className="brief-source-top">
         <div>
           <strong>{source.label}</strong>
@@ -453,6 +471,20 @@ function BriefSourceCard({ source }: { source: DailyBrief['source_digest'][numbe
           <b key={ticker}>{ticker}</b>
         )) : <b>主題</b>}
       </div>
+    </>
+  )
+
+  if (href) {
+    return (
+      <Link href={href} className="brief-source-card">
+        {content}
+      </Link>
+    )
+  }
+
+  return (
+    <article className="brief-source-card">
+      {content}
     </article>
   )
 }
