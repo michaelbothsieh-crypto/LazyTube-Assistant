@@ -20,6 +20,14 @@
   --cyan: #62ddff;
   --coral: #ff9f68;
   --lime: #c9f45c;
+  --blue: #7cc4ff;
+  --pink: #ff8cc6;
+  --mint: #73f1ba;
+  --orange: #ffb86b;
+  --sky-soft: rgba(126, 196, 255, 0.14);
+  --pink-soft: rgba(255, 140, 198, 0.13);
+  --mint-soft: rgba(115, 241, 186, 0.12);
+  --orange-soft: rgba(255, 184, 107, 0.13);
 }
 
 * {
@@ -64,6 +72,52 @@ a {
   text-decoration: none;
 }
 
+.keyword-mark {
+  display: inline;
+  border-radius: 5px;
+  padding: 0 0.24em;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 800;
+}
+
+.keyword-mark.ai {
+  color: var(--blue);
+  background: var(--sky-soft);
+}
+
+.keyword-mark.chip {
+  color: var(--lime);
+  background: rgba(201, 244, 92, 0.11);
+}
+
+.keyword-mark.security {
+  color: var(--violet);
+  background: rgba(208, 168, 255, 0.13);
+}
+
+.keyword-mark.earnings {
+  color: var(--orange);
+  background: var(--orange-soft);
+}
+
+.keyword-mark.risk {
+  color: var(--pink);
+  background: var(--pink-soft);
+}
+
+.keyword-mark.watch {
+  color: var(--mint);
+  background: var(--mint-soft);
+}
+
+.keyword-mark.macro {
+  color: var(--coral);
+  background: rgba(255, 159, 104, 0.13);
+}
+
 .research-shell {
   position: relative;
   z-index: 1;
@@ -103,7 +157,7 @@ a {
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(201, 244, 92, 0.11), rgba(98, 221, 255, 0.08)),
+    linear-gradient(135deg, rgba(201, 244, 92, 0.11), rgba(98, 221, 255, 0.08) 48%, rgba(255, 140, 198, 0.075)),
     rgba(13, 17, 24, 0.9);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
 }
@@ -177,6 +231,24 @@ a {
   border-radius: 8px;
   padding: 9px;
   background: rgba(141, 245, 168, 0.055);
+}
+
+.daily-brief-tickers > div:nth-child(2) {
+  border-color: rgba(126, 196, 255, 0.24);
+  background: rgba(126, 196, 255, 0.055);
+}
+
+.daily-brief-tickers > div:nth-child(2) b {
+  color: var(--blue);
+}
+
+.daily-brief-tickers > div:nth-child(3) {
+  border-color: rgba(255, 184, 107, 0.26);
+  background: rgba(255, 184, 107, 0.06);
+}
+
+.daily-brief-tickers > div:nth-child(3) b {
+  color: var(--orange);
 }
 
 .daily-brief-tickers b,
@@ -257,6 +329,21 @@ a {
   border-radius: 8px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.035);
+}
+
+.daily-brief-research > div:nth-child(1) {
+  border-color: rgba(126, 196, 255, 0.24);
+  background: linear-gradient(135deg, rgba(126, 196, 255, 0.08), rgba(255, 255, 255, 0.025));
+}
+
+.daily-brief-research > div:nth-child(2) {
+  border-color: rgba(255, 184, 107, 0.26);
+  background: linear-gradient(135deg, rgba(255, 184, 107, 0.075), rgba(255, 255, 255, 0.025));
+}
+
+.daily-brief-research > div:nth-child(3) {
+  border-color: rgba(255, 140, 198, 0.26);
+  background: linear-gradient(135deg, rgba(255, 140, 198, 0.075), rgba(255, 255, 255, 0.025));
 }
 
 .daily-brief-research span {
@@ -794,6 +881,33 @@ a {
   background: rgba(255, 255, 255, 0.025);
 }
 
+.risk-list > div:nth-child(1) {
+  border-color: rgba(126, 196, 255, 0.23);
+  background: rgba(126, 196, 255, 0.045);
+}
+
+.risk-list > div:nth-child(1) strong {
+  color: var(--blue);
+}
+
+.risk-list > div:nth-child(2) {
+  border-color: rgba(255, 184, 107, 0.25);
+  background: rgba(255, 184, 107, 0.05);
+}
+
+.risk-list > div:nth-child(2) strong {
+  color: var(--orange);
+}
+
+.risk-list > div:nth-child(3) {
+  border-color: rgba(255, 140, 198, 0.25);
+  background: rgba(255, 140, 198, 0.05);
+}
+
+.risk-list > div:nth-child(3) strong {
+  color: var(--pink);
+}
+
 .risk-list span {
   color: var(--muted);
   font-size: 0.78rem;
@@ -1122,6 +1236,34 @@ a {
   padding: 12px;
   background:
     linear-gradient(160deg, rgba(115, 241, 186, 0.045), transparent 54%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.brief-source-card:nth-child(4n + 1) {
+  border-color: rgba(115, 241, 186, 0.22);
+  background:
+    linear-gradient(160deg, rgba(115, 241, 186, 0.055), transparent 54%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.brief-source-card:nth-child(4n + 2) {
+  border-color: rgba(126, 196, 255, 0.22);
+  background:
+    linear-gradient(160deg, rgba(126, 196, 255, 0.055), transparent 54%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.brief-source-card:nth-child(4n + 3) {
+  border-color: rgba(255, 184, 107, 0.22);
+  background:
+    linear-gradient(160deg, rgba(255, 184, 107, 0.055), transparent 54%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.brief-source-card:nth-child(4n) {
+  border-color: rgba(208, 168, 255, 0.22);
+  background:
+    linear-gradient(160deg, rgba(208, 168, 255, 0.055), transparent 54%),
     rgba(255, 255, 255, 0.025);
 }
 

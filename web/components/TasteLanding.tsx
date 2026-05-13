@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { ConsensusData, DailyBrief, Episode } from '@/types'
 import { Activity, ChevronRight, ExternalLink, Minus, TrendDown, TrendUp, Users } from '@/components/icons'
@@ -23,6 +23,50 @@ const horizonLabel: Record<string, string> = {
 }
 
 const ignoredTickers = new Set(['GEO', 'CNC', 'RFID', 'HID', 'ASSA', 'ABLOY', 'NFC'])
+
+const keywordRules = [
+  { terms: ['AI', '人工智慧', '生成式', '模型', '算力'], className: 'ai' },
+  { terms: ['半導體', '晶片', '台積電', '輝達', '封裝', '光通訊', '記憶體'], className: 'chip' },
+  { terms: ['資安', '供應鏈攻擊', '零時差', 'CI/CD', '漏洞'], className: 'security' },
+  { terms: ['財報', '營收', '毛利率', '展望', '指引'], className: 'earnings' },
+  { terms: ['估值', '回檔', '追高', '擁擠', '風險', '修正'], className: 'risk' },
+  { terms: ['驗證', '觀察', '追蹤', '確認', '等待'], className: 'watch' },
+  { terms: ['川習會', '關稅', '地緣政治', '政策'], className: 'macro' },
+] as const
+
+const keywordPattern = new RegExp(
+  `(${keywordRules.flatMap((rule) => rule.terms).sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})`,
+  'gi',
+)
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function keywordClass(term: string) {
+  const normalized = term.toLowerCase()
+  const rule = keywordRules.find((item) => item.terms.some((candidate) => candidate.toLowerCase() === normalized))
+  return rule?.className ?? 'topic'
+}
+
+function HighlightText({ text }: { text: string }) {
+  if (!text) return null
+  const parts: ReactNode[] = []
+  let lastIndex = 0
+  for (const match of text.matchAll(keywordPattern)) {
+    const value = match[0]
+    const index = match.index ?? 0
+    if (index > lastIndex) parts.push(text.slice(lastIndex, index))
+    parts.push(
+      <mark className={`keyword-mark ${keywordClass(value)}`} key={`${value}-${index}`}>
+        {value}
+      </mark>,
+    )
+    lastIndex = index + value.length
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
+  return <>{parts}</>
+}
 
 function formatDateTime(value: string) {
   const date = new Date(value)
@@ -85,7 +129,7 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
           <h2>{brief.title}</h2>
           {brief.generated_at && <time>{formatDateTime(brief.generated_at)}</time>}
         </div>
-        <p>{thesis}</p>
+        <p><HighlightText text={thesis} /></p>
         <div className="daily-brief-meta" aria-label="Daily brief metadata">
           {hasMeta && (
             <span>{brief.source_count} 來源 / {brief.stock_count} 標的</span>
@@ -100,7 +144,7 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
               <div key={card.ticker}>
                 <b>{card.ticker}</b>
                 <span>{card.source_count} 源 / {card.mention_count} 次</span>
-                <small>{card.reason}</small>
+                <small><HighlightText text={card.reason} /></small>
               </div>
             ))}
           </div>
@@ -118,16 +162,16 @@ function DailyBriefBanner({ brief }: { brief: DailyBrief }) {
       <div className="daily-brief-research">
         <div>
           <span>主軸</span>
-          <strong>{themes[0] || '等待主軸'}</strong>
-          <small>{themes.slice(1).join(' / ') || '跨來源共識整理'}</small>
+          <strong><HighlightText text={themes[0] || '等待主軸'} /></strong>
+          <small><HighlightText text={themes.slice(1).join(' / ') || '跨來源共識整理'} /></small>
         </div>
         <div>
           <span>驗證</span>
-          <strong>{watchpoints[0]}</strong>
+          <strong><HighlightText text={watchpoints[0]} /></strong>
         </div>
         <div>
           <span>風險</span>
-          <strong>{riskFlags[0]}</strong>
+          <strong><HighlightText text={riskFlags[0]} /></strong>
         </div>
         <a className="daily-brief-open" href={brief.report_url} target="_blank" rel="noopener noreferrer">
           完整 HTML
@@ -275,7 +319,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
               <strong>{formatDateTime(snapshotUpdateAt)}</strong>
             </div>
           </div>
-          <p>{snapshotCoverageText}</p>
+          <p><HighlightText text={snapshotCoverageText} /></p>
         </aside>
       </section>
 
@@ -329,17 +373,17 @@ export default function TasteLanding({ data }: TasteLandingProps) {
             <div>
               <span>主軸</span>
               <strong>{dailyThemes[0] || '尚無'}</strong>
-              <p>{dailyThemes.slice(1).join(' / ') || data.consensus.weekly_theme || '等待更多來源形成主軸。'}</p>
+              <p><HighlightText text={dailyThemes.slice(1).join(' / ') || data.consensus.weekly_theme || '等待更多來源形成主軸。'} /></p>
             </div>
             <div>
               <span>驗證</span>
               <strong>{crowdedStock ? readableTicker(crowdedStock.ticker) : '觀察'}</strong>
-              <p>{dailyWatchpoints[0] || '追蹤標的熱度是否延續到更多來源。'}</p>
+              <p><HighlightText text={dailyWatchpoints[0] || '追蹤標的熱度是否延續到更多來源。'} /></p>
             </div>
             <div>
               <span>風險</span>
               <strong>{riskHeadline}</strong>
-              <p>{dailyRiskFlags[0] || coverageText}</p>
+              <p><HighlightText text={dailyRiskFlags[0] || coverageText} /></p>
             </div>
           </div>
           {!data.daily_brief && dailyTickerCards.length > 0 && (
@@ -348,7 +392,7 @@ export default function TasteLanding({ data }: TasteLandingProps) {
                 <div key={card.ticker}>
                   <b>{card.ticker}</b>
                   <span>{card.source_count} 源 / {card.mention_count} 次</span>
-                  <p>{card.sources.slice(0, 3).join('、') || '來源待同步'}｜{card.reason}</p>
+                  <p><HighlightText text={`${card.sources.slice(0, 3).join('、') || '來源待同步'}｜${card.reason}`} /></p>
                 </div>
               ))}
             </div>
@@ -407,7 +451,7 @@ function BriefSourceCard({ source }: { source: DailyBrief['source_digest'][numbe
         </span>
       </div>
       <h3>{source.title}</h3>
-      <p>{source.summary || '此來源已納入每日簡報，等待下一輪摘要補齊。'}</p>
+      <p><HighlightText text={source.summary || '此來源已納入每日簡報，等待下一輪摘要補齊。'} /></p>
       <div className="brief-source-stocks">
         {source.stocks.length ? source.stocks.slice(0, 6).map((ticker) => (
           <b key={ticker}>{ticker}</b>
@@ -439,10 +483,10 @@ function EpisodeCard({ episode }: { episode: Episode }) {
       </div>
       <h3>{episode.title}</h3>
       <div className="insight-pill">獨到見解</div>
-      <p>{compactInsight(episode)}</p>
+      <p><HighlightText text={compactInsight(episode)} /></p>
       <div className="outlook-line">
         <span>技術瞻望</span>
-        <strong>{formatOutlook(episode)}</strong>
+        <strong><HighlightText text={formatOutlook(episode)} /></strong>
       </div>
       <div className="ticker-row">
         {episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).length ? episode.stocks_mentioned.filter((ticker) => !ignoredTickers.has(ticker)).slice(0, 5).map((ticker) => (
