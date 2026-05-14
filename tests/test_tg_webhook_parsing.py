@@ -1,6 +1,5 @@
 import asyncio
 
-import app.threads_analyzer as threads_analyzer
 from api.handlers.tg_webhook import commands_dispatch
 from api.handlers.tg_webhook.parsing import (
     parse_batch_request,
@@ -62,7 +61,7 @@ def test_parse_query_output_strips_numeric_citations():
     assert output == "營收成長，資料中心需求增加，燃料電池受惠。"
 
 
-def test_handle_threads_sends_text_before_media(monkeypatch):
+def test_handle_threads_waits_for_full_analysis(monkeypatch):
     events: list[tuple[str, str]] = []
 
     async def fake_send_message(chat_id: str, text: str):
@@ -70,16 +69,14 @@ def test_handle_threads_sends_text_before_media(monkeypatch):
         return {"ok": True, "result": {"message_id": 99}}
 
     def fake_analyze(url: str, *, include_media: bool = True) -> ThreadsAnalysis:
-        assert include_media is False
+        assert include_media is True
         return ThreadsAnalysis(
             url=url,
             post_lines=["貼文內容"],
             reply_lines=["同意"],
             source="worker",
+            video_url="https://example.com/video.mp4",
         )
-
-    def fake_fetch_media(url: str):
-        return threads_analyzer._ThreadsMedia(video_url="https://example.com/video.mp4")
 
     def fake_send_video(chat_id: str, video_url: str):
         events.append(("video", video_url))
@@ -87,13 +84,13 @@ def test_handle_threads_sends_text_before_media(monkeypatch):
 
     monkeypatch.setattr(commands_dispatch, "send_telegram_message", fake_send_message)
     monkeypatch.setattr(commands_dispatch, "analyze_threads_url", fake_analyze)
-    monkeypatch.setattr(commands_dispatch, "fetch_threads_media", fake_fetch_media)
     monkeypatch.setattr(commands_dispatch.Notifier, "send_video_url", fake_send_video)
     monkeypatch.setattr(commands_dispatch.Notifier, "delete_pending_message", lambda *_args: None)
 
     asyncio.run(commands_dispatch.handle_threads("123", "/threads https://threads.com/@demo/post/abc"))
 
     assert events[0] == ("text", "<b>Threads 解析中</b>")
-    assert events[1][0] == "text"
-    assert "貼文內容" in events[1][1]
-    assert events[2] == ("video", "https://example.com/video.mp4")
+    assert events[1] == ("video", "https://example.com/video.mp4")
+    assert events[2][0] == "text"
+    assert "貼文內容" in events[2][1]
+    assert "影片狀態：已截取影片" in events[2][1]

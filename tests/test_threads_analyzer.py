@@ -197,15 +197,16 @@ def test_format_includes_original_url_and_omits_emoji():
     assert "回覆風向" in message
 
 
-def test_format_can_report_media_pending():
+def test_format_reports_image_status():
     message = ThreadsAnalysis(
         url="https://www.threads.net/@demo/post/abc",
-        post_lines=["貼文內容"],
+        post_lines=["圖片貼文"],
         reply_lines=[],
         source="worker",
-    ).format(media_pending=True)
+        image_url="https://example.com/image.jpg",
+    ).format()
 
-    assert "影片狀態：解析中，若有影片會另傳" in message
+    assert "影片狀態：已截取圖片" in message
 
 
 def test_extract_first_image_url_from_meta_tags():

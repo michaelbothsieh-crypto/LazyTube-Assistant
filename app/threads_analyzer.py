@@ -47,13 +47,15 @@ class ThreadsAnalysis:
     image_url: str = ""
     video_url: str = ""
 
-    def format(self, *, media_pending: bool = False) -> str:
+    def format(self) -> str:
         post_text = "\n".join(_best_content_lines(self.post_lines)).strip()
         reply_text = _summarize_replies(_best_content_lines(self.reply_lines, limit=4))
-        if media_pending:
-            media_status = "解析中，若有影片會另傳"
+        if self.video_url:
+            media_status = "已截取影片"
+        elif self.image_url:
+            media_status = "已截取圖片"
         else:
-            media_status = "已截取影片" if self.video_url else "未截取到影片"
+            media_status = "未截取到媒體"
 
         parts = [
             f"影片狀態：{media_status}",
