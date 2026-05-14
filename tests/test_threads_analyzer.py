@@ -65,6 +65,7 @@ def test_content_lines_removes_login_and_view_noise():
         透過 Threads 暢所欲言
         使用 Instagram 帳號繼續
         登入或註冊 Threads
+        登入或註冊 Threads 查看人們談論的主題，並加入對話。改以用戶名稱登入
         查看人們談論的主題，並加入對話。
         改以用戶名稱登入
         加入 Threads 即可分享想法、探索新鮮事、追蹤志趣相投的人，還有更多等你來發現。

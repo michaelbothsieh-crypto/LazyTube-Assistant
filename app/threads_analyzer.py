@@ -386,6 +386,8 @@ def _is_noise(line: str) -> bool:
         return True
     if line.startswith("加入 Threads 即可"):
         return True
+    if "登入或註冊 Threads" in line and "查看人們談論的主題" in line:
+        return True
     if line.startswith(("Title:", "URL Source:", "Markdown Content:", "![Image", "!Image")):
         return True
     if "播放此影片時發生問題" in line:
