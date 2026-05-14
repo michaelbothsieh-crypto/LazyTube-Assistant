@@ -151,6 +151,41 @@ async def external_dispatch(
                 )
             return JSONResponse(content={"ok": True})
 
+        if command in ["start", "/start"]:
+            from api.handlers.tg_webhook.commands_basic import handle_start
+            await handle_start(str(chat_id))
+            return JSONResponse(content={"ok": True})
+
+        if command in ["status", "/status"]:
+            from api.handlers.tg_webhook.commands_basic import handle_status
+            await handle_status(str(chat_id))
+            return JSONResponse(content={"ok": True})
+
+        if command in ["my_id", "/my_id"]:
+            from api.handlers.tg_webhook.commands_basic import handle_my_id
+            await handle_my_id(str(chat_id), str(data.get("user_id") or chat_id))
+            return JSONResponse(content={"ok": True})
+
+        if command in ["sub", "/sub"]:
+            from api.handlers.tg_webhook.commands_subscriptions import handle_sub
+            await handle_sub(str(chat_id), data.get("text") or f"/sub {url or ''} {prompt_raw or ''}".strip())
+            return JSONResponse(content={"ok": True})
+
+        if command in ["unsub", "/unsub"]:
+            from api.handlers.tg_webhook.commands_subscriptions import handle_unsub
+            await handle_unsub(str(chat_id), data.get("text") or f"/unsub {url or prompt_raw or ''}".strip())
+            return JSONResponse(content={"ok": True})
+
+        if command in ["list", "/list"]:
+            from api.handlers.tg_webhook.commands_subscriptions import handle_list
+            await handle_list(str(chat_id))
+            return JSONResponse(content={"ok": True})
+
+        if command in ["clear", "/clear"]:
+            from api.handlers.tg_webhook.commands_subscriptions import handle_clear
+            await handle_clear(str(chat_id))
+            return JSONResponse(content={"ok": True})
+
         if command == "research":
             from api.utils.github_dispatch import dispatch_research_workflow
             topic = url or prompt_raw
@@ -238,6 +273,16 @@ async def external_dispatch(
                 Notifier.send_text(chat_id, f"✅ 已訂閱：{label}\n{rss_url}")
             else:
                 Notifier.send_text(chat_id, f"⚠️ 已訂閱過：{label}\n{rss_url}")
+            return JSONResponse(content={"ok": True})
+
+        if command in ["unsubpodcast", "/unsubpodcast"]:
+            from api.handlers.tg_webhook.commands_podcast import handle_unsubpodcast
+            await handle_unsubpodcast(str(chat_id), data.get("text") or f"/unsubpodcast {url or prompt_raw or ''}".strip())
+            return JSONResponse(content={"ok": True})
+
+        if command in ["listpodcast", "/listpodcast"]:
+            from api.handlers.tg_webhook.commands_podcast import handle_listpodcast
+            await handle_listpodcast(str(chat_id))
             return JSONResponse(content={"ok": True})
         # ──────────────────────────────────────────────────────────────────
 
