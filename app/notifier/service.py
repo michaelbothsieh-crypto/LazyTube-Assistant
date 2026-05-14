@@ -3,7 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
 from typing import Optional
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +115,36 @@ class Notifier:
             return False
         if is_line_chat(chat_id):
             return cls.send_text(chat_id, caption or "Threads 影片：公開頁面提供影片，但 LINE 需要可公開預覽圖才能直接推送影片。")
-        return cls._tg.send_video_url(chat_id, video_url, caption=caption) if cls._tg else False
+        if not cls._tg:
+            return False
+        if cls._tg.send_video_url(chat_id, video_url, caption=caption):
+            return True
+        return cls._send_downloaded_video(chat_id, video_url, caption=caption)
+
+    @classmethod
+    def _send_downloaded_video(cls, chat_id: str, video_url: str, caption: str | None = None) -> bool:
+        if not cls._tg:
+            return False
+        temp_path = ""
+        try:
+            with requests.get(video_url, stream=True, timeout=45) as response:
+                if response.status_code != 200:
+                    return False
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+                    temp_path = temp_file.name
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            temp_file.write(chunk)
+            return cls._tg.send_video(chat_id, temp_path, caption=caption)
+        except Exception as exc:
+            logger.warning("downloaded video upload failed: %s", exc)
+            return False
+        finally:
+            if temp_path:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     @classmethod
     def delete_pending_message(cls, chat_id: str, message_id: str | None) -> None:

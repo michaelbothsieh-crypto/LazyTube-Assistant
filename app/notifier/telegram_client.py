@@ -29,6 +29,9 @@ class TelegramClient:
     def send_photo(self, chat_id: str, file_path: str, *, caption: str | None = None) -> bool:
         return self._send_file("sendPhoto", "photo", chat_id, file_path, caption=caption)
 
+    def send_video(self, chat_id: str, file_path: str, *, caption: str | None = None) -> bool:
+        return self._send_file("sendVideo", "video", chat_id, file_path, caption=caption)
+
     def send_photo_url(self, chat_id: str, image_url: str, *, caption: str | None = None) -> bool:
         payload = {"chat_id": chat_id, "photo": image_url}
         if caption:

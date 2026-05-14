@@ -58,6 +58,25 @@ def test_send_video_url_calls_telegram_url_upload():
         mock_tg.send_video_url.assert_called_once_with("123", "https://example.com/first.mp4", caption=None)
 
 
+def test_send_video_url_downloads_and_uploads_when_direct_url_fails(tmp_path):
+    mock_tg = _mock_tg()
+    mock_tg.send_video_url.return_value = False
+    mock_tg.send_video.return_value = True
+    response = MagicMock()
+    response.status_code = 200
+    response.iter_content.return_value = [b"video"]
+    response.__enter__.return_value = response
+    response.__exit__.return_value = False
+
+    with patch.object(Notifier, "_tg", mock_tg), \
+         patch("app.notifier.service.is_line_chat", return_value=False), \
+         patch("app.notifier.service.requests.get", return_value=response):
+        assert Notifier.send_video_url("123", "https://example.com/first.mp4")
+
+    mock_tg.send_video_url.assert_called_once_with("123", "https://example.com/first.mp4", caption=None)
+    mock_tg.send_video.assert_called_once()
+
+
 def test_line_client_send_image_url_owns_line_payload():
     response = MagicMock()
     response.status_code = 200

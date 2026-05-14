@@ -45,6 +45,23 @@ def test_content_lines_removes_threads_metadata():
     assert lines == ["你各位猜猜這些鄉親在幹嘛？"]
 
 
+def test_content_lines_removes_login_and_view_noise():
+    lines = _content_lines(
+        """
+        登入
+        串文
+        26 萬次瀏覽
+        這幾天股市投資的操作總結：
+        翻譯
+        9,801
+        1.1 萬
+        © 2026
+        """
+    )
+
+    assert lines == ["這幾天股市投資的操作總結："]
+
+
 def test_content_lines_removes_emoji_from_content():
     lines = _content_lines("這些都是有錢有閒的人，不需要各位操心😂")
 
@@ -107,11 +124,13 @@ def test_format_includes_original_url_and_omits_emoji():
         author="demo",
         like_count="123",
         image_url="https://example.com/image.jpg",
+        video_url="https://example.com/video.mp4",
     ).format()
 
     assert "Threads 快速解析" not in message
     assert "來源：worker" not in message
     assert "原始網址：https://www.threads.net/@demo/post/abc" in message
+    assert "影片狀態：已截取影片" in message
     assert "⚡" not in message
     assert "🔗" not in message
     assert "🧵" not in message

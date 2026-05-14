@@ -47,10 +47,12 @@ class ThreadsAnalysis:
     video_url: str = ""
 
     def format(self) -> str:
-        post_text = "\n".join(self.post_lines).strip()
-        reply_text = _summarize_replies(self.reply_lines)
+        post_text = "\n".join(_best_content_lines(self.post_lines)).strip()
+        reply_text = _summarize_replies(_best_content_lines(self.reply_lines, limit=4))
+        media_status = "已截取影片" if self.video_url else "未截取到影片"
 
         parts = [
+            f"影片狀態：{media_status}",
             f"原始網址：{self.url}",
             "",
             f"發文者：{self.author or '抓不到'}",
@@ -325,17 +327,39 @@ def _clean_line(line: str) -> str:
 def _is_noise(line: str) -> bool:
     if len(line) < 2:
         return True
+    if line in {"登入", "串文", "相關串文", "翻譯", "登入即可查看更多回覆。"}:
+        return True
+    if "使用條款" in line or "隱私政策" in line or "Cookie 政策" in line:
+        return True
+    if line.startswith("©"):
+        return True
     if BOILERPLATE_RE.match(line):
+        return True
+    if "萬次瀏覽" in line or "次瀏覽" in line:
         return True
     if line.startswith(("Image", "Video", "Avatar", "Profile picture")):
         return True
     if METRIC_RE.fullmatch(line):
+        return True
+    if _is_count_token(line):
         return True
     if TIME_RE.fullmatch(line):
         return True
     if _looks_like_handle(line):
         return True
     return False
+
+
+def _best_content_lines(lines: list[str], limit: int = 6) -> list[str]:
+    selected: list[str] = []
+    for line in lines:
+        cleaned = _clean_line(line)
+        if not cleaned or _is_noise(cleaned):
+            continue
+        selected.append(cleaned)
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def _is_count_token(line: str) -> bool:
@@ -365,8 +389,8 @@ def _split_post_and_replies(lines: list[str]) -> tuple[list[str], list[str]]:
         post_candidates = lines[:marker_index]
         reply_candidates = lines[marker_index + 1 :]
     else:
-        post_candidates = lines[: min(5, len(lines))]
-        reply_candidates = lines[min(5, len(lines)) :]
+        post_candidates = lines[:1]
+        reply_candidates = lines[1:]
 
     post_lines = _trim_lines(post_candidates, max_lines=5, max_chars=700)
     reply_lines = _trim_lines(reply_candidates, max_lines=8, max_chars=900)
