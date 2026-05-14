@@ -327,7 +327,23 @@ def _clean_line(line: str) -> str:
 def _is_noise(line: str) -> bool:
     if len(line) < 2:
         return True
-    if line in {"登入", "串文", "相關串文", "翻譯", "登入即可查看更多回覆。"}:
+    if line in {
+        "登入",
+        "串文",
+        "相關串文",
+        "翻譯",
+        "登入即可查看更多回覆。",
+        "回報問題",
+        "透過 Threads 暢所欲言",
+        "使用 Instagram 帳號繼續",
+        "登入或註冊 Threads",
+        "查看人們談論的主題，並加入對話。",
+        "改以用戶名稱登入",
+    }:
+        return True
+    if line.startswith("使用 ") and line.endswith("帳號繼續"):
+        return True
+    if line.startswith("加入 Threads 即可"):
         return True
     if "使用條款" in line or "隱私政策" in line or "Cookie 政策" in line:
         return True
