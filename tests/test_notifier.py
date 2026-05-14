@@ -58,6 +58,15 @@ def test_send_video_url_calls_telegram_url_upload():
         mock_tg.send_video_url.assert_called_once_with("123", "https://example.com/first.mp4", caption=None)
 
 
+def test_telegram_video_url_upload_uses_short_timeout():
+    response = MagicMock()
+    response.status_code = 200
+    with patch("app.notifier.telegram_client.post_json", return_value=response) as mocked_post:
+        assert TelegramClient("token").send_video_url("123", "https://example.com/first.mp4")
+
+    assert mocked_post.call_args.kwargs["timeout"] == 12
+
+
 def test_send_video_url_downloads_and_uploads_when_direct_url_fails(tmp_path):
     mock_tg = _mock_tg()
     mock_tg.send_video_url.return_value = False

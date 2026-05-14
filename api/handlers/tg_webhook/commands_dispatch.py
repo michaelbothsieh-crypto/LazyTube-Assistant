@@ -11,7 +11,7 @@ from api.utils.github_dispatch import (
 )
 from api.utils.telegram import send_telegram_message
 from app.notifier import Notifier
-from app.threads_analyzer import analyze_threads_url
+from app.threads_analyzer import analyze_threads_url, fetch_threads_media
 
 from .parsing import extract_url_and_prompt, parse_batch_request, parse_research_request, parse_slide_request
 from .utils import extract_message_id
@@ -122,17 +122,21 @@ async def handle_threads(chat_id: str, text: str) -> None:
     pending = await send_telegram_message(chat_id, "<b>Threads 解析中</b>")
     message_id = extract_message_id(pending)
     try:
-        analysis = await asyncio.to_thread(analyze_threads_url, url)
-        message = analysis.format()
+        analysis = await asyncio.to_thread(analyze_threads_url, url, include_media=False)
+        message = analysis.format(media_pending=True)
         if not analysis.post_lines:
             message = "無法解析 Threads 內容，可能是私密貼文、需要登入，或頁面暫時擋爬。"
-        if analysis.video_url:
-            await asyncio.to_thread(Notifier.send_video_url, chat_id, analysis.video_url)
-        elif analysis.image_url:
-            await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
         await send_telegram_message(chat_id, message)
-    finally:
         Notifier.delete_pending_message(chat_id, message_id)
+        message_id = None
+        media = await asyncio.to_thread(fetch_threads_media, url)
+        if media.video_url:
+            await asyncio.to_thread(Notifier.send_video_url, chat_id, media.video_url)
+        elif media.image_url:
+            await asyncio.to_thread(Notifier.send_photo_url, chat_id, media.image_url)
+    finally:
+        if message_id:
+            Notifier.delete_pending_message(chat_id, message_id)
 
 
 async def _handle_artifact(chat_id: str, text: str, command_name: str, artifact_type: str) -> None:

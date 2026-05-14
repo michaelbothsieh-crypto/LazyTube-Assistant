@@ -1,3 +1,7 @@
+import asyncio
+
+import app.threads_analyzer as threads_analyzer
+from api.handlers.tg_webhook import commands_dispatch
 from api.handlers.tg_webhook.parsing import (
     parse_batch_request,
     parse_research_request,
@@ -7,6 +11,7 @@ from api.handlers.tg_webhook.parsing import (
 from api.handlers.tg_webhook.validation import normalize_command_text, validate_url
 from api.handlers.tg_webhook.router import COMMAND_HANDLERS
 from app.notebook.parsing import parse_query_output
+from app.threads_analyzer import ThreadsAnalysis
 
 
 def test_normalize_command_text_removes_bot_suffix():
@@ -55,3 +60,40 @@ def test_parse_query_output_strips_numeric_citations():
     assert "[2, 3]" not in output
     assert "[4-6]" not in output
     assert output == "營收成長，資料中心需求增加，燃料電池受惠。"
+
+
+def test_handle_threads_sends_text_before_media(monkeypatch):
+    events: list[tuple[str, str]] = []
+
+    async def fake_send_message(chat_id: str, text: str):
+        events.append(("text", text))
+        return {"ok": True, "result": {"message_id": 99}}
+
+    def fake_analyze(url: str, *, include_media: bool = True) -> ThreadsAnalysis:
+        assert include_media is False
+        return ThreadsAnalysis(
+            url=url,
+            post_lines=["貼文內容"],
+            reply_lines=["同意"],
+            source="worker",
+        )
+
+    def fake_fetch_media(url: str):
+        return threads_analyzer._ThreadsMedia(video_url="https://example.com/video.mp4")
+
+    def fake_send_video(chat_id: str, video_url: str):
+        events.append(("video", video_url))
+        return True
+
+    monkeypatch.setattr(commands_dispatch, "send_telegram_message", fake_send_message)
+    monkeypatch.setattr(commands_dispatch, "analyze_threads_url", fake_analyze)
+    monkeypatch.setattr(commands_dispatch, "fetch_threads_media", fake_fetch_media)
+    monkeypatch.setattr(commands_dispatch.Notifier, "send_video_url", fake_send_video)
+    monkeypatch.setattr(commands_dispatch.Notifier, "delete_pending_message", lambda *_args: None)
+
+    asyncio.run(commands_dispatch.handle_threads("123", "/threads https://threads.com/@demo/post/abc"))
+
+    assert events[0] == ("text", "<b>Threads 解析中</b>")
+    assert events[1][0] == "text"
+    assert "貼文內容" in events[1][1]
+    assert events[2] == ("video", "https://example.com/video.mp4")

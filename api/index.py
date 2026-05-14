@@ -171,14 +171,15 @@ async def external_dispatch(
                 )
             import asyncio
 
-            from app.threads_analyzer import analyze_threads_url
+            from app.threads_analyzer import analyze_threads_url, fetch_threads_media
 
-            analysis = await asyncio.to_thread(analyze_threads_url, url)
-            if analysis.video_url:
-                await asyncio.to_thread(Notifier.send_video_url, chat_id, analysis.video_url)
-            elif analysis.image_url:
-                await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
-            Notifier.send_text(chat_id, analysis.format())
+            analysis = await asyncio.to_thread(analyze_threads_url, url, include_media=False)
+            Notifier.send_text(chat_id, analysis.format(media_pending=True))
+            media = await asyncio.to_thread(fetch_threads_media, url)
+            if media.video_url:
+                await asyncio.to_thread(Notifier.send_video_url, chat_id, media.video_url)
+            elif media.image_url:
+                await asyncio.to_thread(Notifier.send_photo_url, chat_id, media.image_url)
             return JSONResponse(content={"ok": True})
 
         # ── Podcast 指令（TG / LINE 通用）──────────────────────────────────

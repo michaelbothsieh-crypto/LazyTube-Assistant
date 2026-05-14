@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from html import unescape
@@ -46,10 +47,13 @@ class ThreadsAnalysis:
     image_url: str = ""
     video_url: str = ""
 
-    def format(self) -> str:
+    def format(self, *, media_pending: bool = False) -> str:
         post_text = "\n".join(_best_content_lines(self.post_lines)).strip()
         reply_text = _summarize_replies(_best_content_lines(self.reply_lines, limit=4))
-        media_status = "已截取影片" if self.video_url else "未截取到影片"
+        if media_pending:
+            media_status = "解析中，若有影片會另傳"
+        else:
+            media_status = "已截取影片" if self.video_url else "未截取到影片"
 
         parts = [
             f"影片狀態：{media_status}",
@@ -71,17 +75,30 @@ def is_threads_url(url: str) -> bool:
     return bool(THREADS_HOST_RE.match((url or "").strip()))
 
 
-def analyze_threads_url(url: str) -> ThreadsAnalysis:
+def analyze_threads_url(url: str, *, include_media: bool = True) -> ThreadsAnalysis:
     normalized_url = _normalize_threads_url(url)
-    media = _fetch_first_media(normalized_url)
-    if not media.video_url:
-        media = _merge_media(media, _fetch_threadster_media(normalized_url))
-    raw_text, source = _fetch_threads_text(normalized_url)
+    if not include_media:
+        raw_text, source = _fetch_threads_text(normalized_url)
+        return _build_threads_analysis(normalized_url, raw_text, source, _ThreadsMedia())
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        media_future = executor.submit(_fetch_threads_media, normalized_url)
+        text_future = executor.submit(_fetch_threads_text, normalized_url)
+        raw_text, source = text_future.result()
+        media = media_future.result()
+    return _build_threads_analysis(normalized_url, raw_text, source, media)
+
+
+def fetch_threads_media(url: str) -> _ThreadsMedia:
+    return _fetch_threads_media(_normalize_threads_url(url))
+
+
+def _build_threads_analysis(url: str, raw_text: str, source: str, media: _ThreadsMedia) -> ThreadsAnalysis:
     metadata = _extract_metadata(raw_text)
     lines = _content_lines(raw_text)
     post_lines, reply_lines = _split_post_and_replies(lines)
     return ThreadsAnalysis(
-        url=normalized_url,
+        url=url,
         post_lines=post_lines,
         reply_lines=reply_lines,
         source=source,
@@ -90,6 +107,13 @@ def analyze_threads_url(url: str) -> ThreadsAnalysis:
         image_url=media.image_url,
         video_url=media.video_url,
     )
+
+
+def _fetch_threads_media(normalized_url: str) -> _ThreadsMedia:
+    media = _fetch_first_media(normalized_url)
+    if not media.video_url:
+        media = _merge_media(media, _fetch_threadster_media(normalized_url))
+    return media
 
 
 def _normalize_threads_url(url: str) -> str:
@@ -101,15 +125,20 @@ def _normalize_threads_url(url: str) -> str:
 
 def _fetch_threads_text(url: str) -> tuple[str, str]:
     encoded_url = urllib.parse.quote(url, safe="")
-    worker_text = _fetch_worker_text(encoded_url)
-    if worker_text:
-        return worker_text, "worker"
-
-    jina_text = _fetch_jina_text(encoded_url)
-    if jina_text:
-        return jina_text, "jina"
-
-    return "", ""
+    executor = ThreadPoolExecutor(max_workers=2)
+    futures = {
+        executor.submit(_fetch_worker_text, encoded_url): "worker",
+        executor.submit(_fetch_jina_text, encoded_url): "jina",
+    }
+    try:
+        for future in as_completed(futures):
+            source = futures[future]
+            text = future.result()
+            if text:
+                return text, source
+        return "", ""
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _fetch_worker_text(encoded_url: str) -> str:
@@ -123,7 +152,8 @@ def _fetch_worker_text(encoded_url: str) -> str:
         payload = response.json()
         if not payload.get("success"):
             return ""
-        return clean_content(str(payload.get("content") or ""))
+        content = clean_content(str(payload.get("content") or ""))
+        return "" if _looks_like_error_page(content) else content
     except Exception:
         return ""
 
@@ -133,9 +163,19 @@ def _fetch_jina_text(encoded_url: str) -> str:
         response = requests.get(f"https://r.jina.ai/{encoded_url}", timeout=20)
         if response.status_code != 200:
             return ""
-        return clean_content(response.text)
+        content = clean_content(response.text)
+        return "" if _looks_like_error_page(content) else content
     except Exception:
         return ""
+
+
+def _looks_like_error_page(text: str) -> bool:
+    lowered = (text or "").lower()
+    return (
+        "http error 429" in lowered
+        or "this page isn" in lowered and "working" in lowered
+        or "contact the site owner" in lowered
+    )
 
 
 @dataclass(slots=True)
@@ -321,7 +361,7 @@ def _clean_line(line: str) -> str:
     line = re.sub(r"https?://\S+", "", line)
     line = EMOJI_RE.sub("", line)
     line = re.sub(r"\s+", " ", line)
-    return line.strip(" -*•\t")
+    return line.strip(" # -*•\t")
 
 
 def _is_noise(line: str) -> bool:
@@ -339,11 +379,18 @@ def _is_noise(line: str) -> bool:
         "登入或註冊 Threads",
         "查看人們談論的主題，並加入對話。",
         "改以用戶名稱登入",
+        "瞭解詳情",
     }:
         return True
     if line.startswith("使用 ") and line.endswith("帳號繼續"):
         return True
     if line.startswith("加入 Threads 即可"):
+        return True
+    if line.startswith(("Title:", "URL Source:", "Markdown Content:", "![Image", "!Image")):
+        return True
+    if "播放此影片時發生問題" in line:
+        return True
+    if line in {"[](", "[]"}:
         return True
     if "使用條款" in line or "隱私政策" in line or "Cookie 政策" in line:
         return True
