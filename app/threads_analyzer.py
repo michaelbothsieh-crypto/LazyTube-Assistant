@@ -72,6 +72,18 @@ class ThreadsAnalysis:
         ]
         return "\n".join(parts).strip()
 
+    def with_media_delivery_note(self, *, max_length: int = 3600) -> str:
+        message = self.format()
+        media_url = self.video_url or self.image_url
+        if not media_url:
+            return message
+
+        note = "\n\n媒體傳送：Telegram 直傳逾時或失敗，請開原始網址查看。"
+        link_note = f"\n媒體下載連結：{media_url}"
+        if len(message) + len(note) + len(link_note) <= max_length:
+            return f"{message}{note}{link_note}"
+        return f"{message}{note}"
+
 
 def is_threads_url(url: str) -> bool:
     return bool(THREADS_HOST_RE.match((url or "").strip()))
@@ -382,6 +394,7 @@ def _is_noise(line: str) -> bool:
         "查看人們談論的主題，並加入對話。",
         "改以用戶名稱登入",
         "瞭解詳情",
+        "Learn more",
     }:
         return True
     if line.startswith("使用 ") and line.endswith("帳號繼續"):
@@ -392,7 +405,7 @@ def _is_noise(line: str) -> bool:
         return True
     if line.startswith(("Title:", "URL Source:", "Markdown Content:", "![Image", "!Image")):
         return True
-    if "播放此影片時發生問題" in line:
+    if "播放此影片時發生問題" in line or "trouble playing this video" in line:
         return True
     if line in {"[](", "[]"}:
         return True
@@ -403,6 +416,8 @@ def _is_noise(line: str) -> bool:
     if BOILERPLATE_RE.match(line):
         return True
     if "萬次瀏覽" in line or "次瀏覽" in line:
+        return True
+    if re.fullmatch(r"Thread\s+\d+(?:[,.]\d+)?\s*[kmb萬億]?\s+views?", line, re.IGNORECASE):
         return True
     if line.startswith(("Image", "Video", "Avatar", "Profile picture")):
         return True

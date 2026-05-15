@@ -114,6 +114,37 @@ def test_handle_threads_waits_for_full_analysis(monkeypatch):
     assert "影片狀態：已截取影片" in events[2][1]
 
 
+def test_handle_threads_includes_media_link_when_upload_fails(monkeypatch):
+    events: list[tuple[str, str]] = []
+
+    async def fake_send_message(chat_id: str, text: str):
+        events.append(("text", text))
+        return {"ok": True, "result": {"message_id": 99}}
+
+    def fake_analyze(url: str, *, include_media: bool = True) -> ThreadsAnalysis:
+        return ThreadsAnalysis(
+            url=url,
+            post_lines=["貼文內容"],
+            reply_lines=[],
+            source="worker",
+            video_url="https://example.com/video.mp4",
+        )
+
+    def fake_send_video(chat_id: str, video_url: str, *, allow_download_fallback: bool = True):
+        assert allow_download_fallback is False
+        return False
+
+    monkeypatch.setattr(commands_dispatch, "send_telegram_message", fake_send_message)
+    monkeypatch.setattr(commands_dispatch, "analyze_threads_url", fake_analyze)
+    monkeypatch.setattr(commands_dispatch.Notifier, "send_video_url", fake_send_video)
+    monkeypatch.setattr(commands_dispatch.Notifier, "delete_pending_message", lambda *_args: None)
+
+    asyncio.run(commands_dispatch.handle_threads("123", "/threads https://threads.com/@demo/post/abc"))
+
+    assert "媒體傳送：Telegram 直傳逾時或失敗" in events[-1][1]
+    assert "媒體下載連結：https://example.com/video.mp4" in events[-1][1]
+
+
 def test_handle_threads_rejects_multiple_urls(monkeypatch):
     events: list[str] = []
 

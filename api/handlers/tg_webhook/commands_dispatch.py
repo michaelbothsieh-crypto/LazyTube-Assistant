@@ -135,7 +135,7 @@ async def handle_threads(chat_id: str, text: str) -> None:
         elif analysis.image_url:
             media_sent = await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
         if (analysis.video_url or analysis.image_url) and not media_sent:
-            message = f"{message}\n\n媒體傳送：Telegram 直傳逾時或失敗，請開原始網址查看。"
+            message = analysis.with_media_delivery_note()
         await send_telegram_message(chat_id, message)
     finally:
         if message_id:

@@ -84,7 +84,10 @@ def test_content_lines_removes_jina_markdown_wrapper():
         # 這幾天股市投資的操作總結：
         ![Image 1: stbisu的大頭貼照](
         很抱歉，播放此影片時發生問題。
+        Sorry, we're having trouble playing this video.
         瞭解詳情
+        Learn more
+        Thread 429K views
         [](
         """
     )
@@ -207,6 +210,32 @@ def test_format_reports_image_status():
     ).format()
 
     assert "影片狀態：已截取圖片" in message
+
+
+def test_media_delivery_note_includes_link_when_short_enough():
+    message = ThreadsAnalysis(
+        url="https://www.threads.net/@demo/post/abc",
+        post_lines=["影片貼文"],
+        reply_lines=[],
+        source="worker",
+        video_url="https://example.com/video.mp4",
+    ).with_media_delivery_note()
+
+    assert "媒體傳送：Telegram 直傳逾時或失敗" in message
+    assert "媒體下載連結：https://example.com/video.mp4" in message
+
+
+def test_media_delivery_note_omits_link_when_too_long():
+    message = ThreadsAnalysis(
+        url="https://www.threads.net/@demo/post/abc",
+        post_lines=["影片貼文"],
+        reply_lines=[],
+        source="worker",
+        video_url=f"https://example.com/{'x' * 100}",
+    ).with_media_delivery_note(max_length=120)
+
+    assert "媒體傳送：Telegram 直傳逾時或失敗" in message
+    assert "媒體下載連結：" not in message
 
 
 def test_extract_first_image_url_from_meta_tags():
