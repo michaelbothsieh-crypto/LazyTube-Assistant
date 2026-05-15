@@ -6,6 +6,7 @@ from api.handlers.tg_webhook.parsing import (
     parse_research_request,
     parse_slide_request,
     parse_subscription_request,
+    parse_threads_urls,
 )
 from api.handlers.tg_webhook.validation import normalize_command_text, validate_url
 from api.handlers.tg_webhook.router import COMMAND_HANDLERS
@@ -38,6 +39,22 @@ def test_parse_batch_request_extracts_urls_and_prompt():
     urls, prompt = parse_batch_request("/batch https://a.com, https://b.com compare them")
     assert urls == ["https://a.com", "https://b.com"]
     assert "compare them" in prompt
+
+
+def test_parse_threads_urls_strips_trailing_punctuation():
+    urls = parse_threads_urls(
+        "/threads https://www.threads.com/@taiwan_ant/post/DYTeJHyk_R2?xmt=abc, 然後"
+    )
+
+    assert urls == ["https://www.threads.com/@taiwan_ant/post/DYTeJHyk_R2?xmt=abc"]
+
+
+def test_parse_threads_urls_detects_multiple_urls():
+    urls = parse_threads_urls(
+        "/threads https://threads.com/@a/post/1 https://www.threads.com/@b/post/2"
+    )
+
+    assert urls == ["https://threads.com/@a/post/1", "https://www.threads.com/@b/post/2"]
 
 
 def test_parse_research_request_reads_mode():
@@ -78,7 +95,8 @@ def test_handle_threads_waits_for_full_analysis(monkeypatch):
             video_url="https://example.com/video.mp4",
         )
 
-    def fake_send_video(chat_id: str, video_url: str):
+    def fake_send_video(chat_id: str, video_url: str, *, allow_download_fallback: bool = True):
+        assert allow_download_fallback is False
         events.append(("video", video_url))
         return True
 
@@ -94,3 +112,22 @@ def test_handle_threads_waits_for_full_analysis(monkeypatch):
     assert events[2][0] == "text"
     assert "貼文內容" in events[2][1]
     assert "影片狀態：已截取影片" in events[2][1]
+
+
+def test_handle_threads_rejects_multiple_urls(monkeypatch):
+    events: list[str] = []
+
+    async def fake_send_message(chat_id: str, text: str):
+        events.append(text)
+        return {"ok": True, "result": {"message_id": 99}}
+
+    monkeypatch.setattr(commands_dispatch, "send_telegram_message", fake_send_message)
+
+    asyncio.run(
+        commands_dispatch.handle_threads(
+            "123",
+            "/threads https://threads.com/@a/post/1 https://threads.com/@b/post/2",
+        )
+    )
+
+    assert events == ["一次只支援解析 1 個 Threads URL，請把多個貼文分開送。"]

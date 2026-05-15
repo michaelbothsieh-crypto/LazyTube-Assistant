@@ -13,7 +13,7 @@ from api.utils.telegram import send_telegram_message
 from app.notifier import Notifier
 from app.threads_analyzer import analyze_threads_url
 
-from .parsing import extract_url_and_prompt, parse_batch_request, parse_research_request, parse_slide_request
+from .parsing import extract_url_and_prompt, parse_batch_request, parse_research_request, parse_slide_request, parse_threads_urls
 from .utils import extract_message_id
 from .validation import validate_url
 
@@ -105,12 +105,15 @@ async def handle_research(chat_id: str, text: str) -> None:
 
 
 async def handle_threads(chat_id: str, text: str) -> None:
-    parts = text.split(maxsplit=1)
-    if len(parts) < 2:
+    urls = parse_threads_urls(text)
+    if not urls:
         await send_telegram_message(chat_id, "用法：<code>/threads &lt;Threads貼文URL&gt;</code>")
         return
+    if len(urls) > 1:
+        await send_telegram_message(chat_id, "一次只支援解析 1 個 Threads URL，請把多個貼文分開送。")
+        return
 
-    url = parts[1].strip()
+    url = urls[0]
     error = validate_url(url)
     if error:
         await send_telegram_message(chat_id, error)
@@ -126,10 +129,13 @@ async def handle_threads(chat_id: str, text: str) -> None:
         message = analysis.format()
         if not analysis.post_lines:
             message = "無法解析 Threads 內容，可能是私密貼文、需要登入，或頁面暫時擋爬。"
+        media_sent = True
         if analysis.video_url:
-            await asyncio.to_thread(Notifier.send_video_url, chat_id, analysis.video_url)
+            media_sent = await asyncio.to_thread(Notifier.send_video_url, chat_id, analysis.video_url, allow_download_fallback=False)
         elif analysis.image_url:
-            await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
+            media_sent = await asyncio.to_thread(Notifier.send_photo_url, chat_id, analysis.image_url)
+        if (analysis.video_url or analysis.image_url) and not media_sent:
+            message = f"{message}\n\n媒體傳送：Telegram 直傳逾時或失敗，請開原始網址查看。"
         await send_telegram_message(chat_id, message)
     finally:
         if message_id:

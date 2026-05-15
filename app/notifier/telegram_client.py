@@ -47,7 +47,7 @@ class TelegramClient:
         if caption:
             payload["caption"] = caption
         try:
-            response = post_json(self._bot_url("sendVideo"), payload=payload, timeout=12)
+            response = post_json(self._bot_url("sendVideo"), payload=payload, timeout=5)
             return response.status_code == 200
         except Exception:
             return False

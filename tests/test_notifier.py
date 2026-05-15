@@ -64,7 +64,22 @@ def test_telegram_video_url_upload_uses_short_timeout():
     with patch("app.notifier.telegram_client.post_json", return_value=response) as mocked_post:
         assert TelegramClient("token").send_video_url("123", "https://example.com/first.mp4")
 
-    assert mocked_post.call_args.kwargs["timeout"] == 12
+    assert mocked_post.call_args.kwargs["timeout"] == 5
+
+
+def test_send_video_url_can_skip_download_fallback():
+    mock_tg = _mock_tg()
+    mock_tg.send_video_url.return_value = False
+    with patch.object(Notifier, "_tg", mock_tg), \
+         patch("app.notifier.service.is_line_chat", return_value=False), \
+         patch("app.notifier.service.Notifier._send_downloaded_video") as mocked_download:
+        assert not Notifier.send_video_url(
+            "123",
+            "https://example.com/first.mp4",
+            allow_download_fallback=False,
+        )
+
+    mocked_download.assert_not_called()
 
 
 def test_send_video_url_downloads_and_uploads_when_direct_url_fails(tmp_path):

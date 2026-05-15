@@ -65,6 +65,14 @@ def parse_batch_request(text: str) -> tuple[list[str], str]:
     return urls, get_nlm_prompt(prompt_source)[:Config.MAX_PROMPT_LENGTH]
 
 
+def parse_threads_urls(text: str) -> list[str]:
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        return []
+    urls = re.findall(r"https?://(?:www\.)?threads\.(?:net|com)/[^\s,，]+", parts[1])
+    return [url.rstrip(".,，。;；)") for url in urls]
+
+
 def parse_research_request(text: str) -> tuple[str | None, str]:
     parts = text.split(maxsplit=1)
     if len(parts) < 2:

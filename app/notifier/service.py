@@ -109,7 +109,14 @@ class Notifier:
         return cls._tg.send_photo_url(chat_id, image_url, caption=caption) if cls._tg else False
 
     @classmethod
-    def send_video_url(cls, target_chat_id: str, video_url: str, caption: str | None = None) -> bool:
+    def send_video_url(
+        cls,
+        target_chat_id: str,
+        video_url: str,
+        caption: str | None = None,
+        *,
+        allow_download_fallback: bool = True,
+    ) -> bool:
         chat_id = target_chat_id or Config.TG_CHAT_ID
         if not chat_id or not video_url:
             return False
@@ -119,6 +126,8 @@ class Notifier:
             return False
         if cls._tg.send_video_url(chat_id, video_url, caption=caption):
             return True
+        if not allow_download_fallback:
+            return False
         return cls._send_downloaded_video(chat_id, video_url, caption=caption)
 
     @classmethod
